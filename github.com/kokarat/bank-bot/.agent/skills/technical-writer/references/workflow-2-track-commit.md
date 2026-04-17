@@ -197,6 +197,7 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] Branch pushed, PR opened; **not merged**.
 - [ ] Retrospective written (session-level, not per-commit).
 - [ ] `arra_handoff` entry with PR pointer.
+- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 
 ---
 

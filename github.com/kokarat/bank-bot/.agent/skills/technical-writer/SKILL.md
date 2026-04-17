@@ -152,12 +152,17 @@ Ignoring this step is how threads become zombies.
 
 ## Memory discipline (as required by `.agent/AGENTS.md`)
 
-Before I write, I run:
+### Session-start checks (before any write)
 
 ```
 arra_search query="<topic> technical-writer <repo-scope>" type=all limit=10
-arra_reflect   # grounding
+arra_reflect                                   # grounding
+arra_threads status="answered" limit=10        # consume oracle answers (§"Asking Oracle")
+arra_threads status="pending" limit=10         # check threads I left open
+bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter
 ```
+
+Expected audit output: `✅ no double-wrap` + `✅ every indexed doc has a title:`. If `❌` or `⚠️` appears → a previous session left broken vault files. **Fix before writing new ones** — mixing new writes with legacy breakage makes future debugging impossible.
 
 While I work, as soon as I confirm a durable fact from code, I call `arra_learn` with **the mandatory 3-layer tag set** plus feature tags:
 

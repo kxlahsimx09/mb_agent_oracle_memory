@@ -273,6 +273,7 @@ This workflow is complete **only** when all are true:
 - [ ] Git branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback.
 - [ ] `arra_handoff` entry written with a pointer to the PR and the next expected Workflow 2 trigger.
+- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 
 ---
 

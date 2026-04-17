@@ -306,6 +306,14 @@ Important / 🟢 Nice-to-have.
 
 ## Step 7 — Commit + PR
 
+Before committing, verify no broken frontmatter was introduced this session:
+
+```bash
+bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter
+# expect: ✅ no double-wrap + ✅ every indexed doc has a title:
+# if ❌ or ⚠️ — fix via /tmp/fix-frontmatter.py before proceeding
+```
+
 On branch `feat/tester-validate-<date-GMT7>`:
 
 ```bash

@@ -346,6 +346,7 @@ Table of `[UNVERIFIED]` markers with reason.
 - [ ] Git branch pushed; PR opened; **not merged**.
 - [ ] Retrospective under `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/…`, AI Diary + Honest Feedback present.
 - [ ] `arra_handoff` entry with PR pointer and next unanswered question.
+- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 
 ---
 

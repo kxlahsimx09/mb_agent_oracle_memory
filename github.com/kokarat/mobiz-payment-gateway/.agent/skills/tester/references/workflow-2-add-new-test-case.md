@@ -235,6 +235,13 @@ source: <controller/service file>:L<line>@<commit> + integration-tests/test-<nam
 
 ## Step 9 — Commit + PR
 
+Before committing, verify no broken frontmatter was introduced this session:
+
+```bash
+bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter
+# expect: ✅ no double-wrap + ✅ every indexed doc has a title:
+```
+
 Branch convention: `feat/tester-test-<domain>-<variant>`.
 
 ```bash

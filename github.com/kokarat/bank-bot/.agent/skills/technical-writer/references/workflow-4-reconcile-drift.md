@@ -352,6 +352,7 @@ This workflow is complete **only** when all are true:
 - [ ] Git branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback.
 - [ ] `arra_handoff` entry for the PR with the total counts by class and any residual items the human should know about.
+- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 
 `docs/.baseline` is **not** bumped by this workflow — reconciling drift does not re-verify the whole system. A baseline bump is Workflow 1's job.
 

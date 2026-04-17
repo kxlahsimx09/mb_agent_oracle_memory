@@ -324,6 +324,13 @@ MISSING-IN-MOCK | SHAPE-DRIFT | SELECTOR-DRIFT | TIMING-DRIFT
 
 ## Step 8 — PR (proposals only, no server.js edits)
 
+Before committing, verify no broken frontmatter was introduced this session:
+
+```bash
+bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter
+# expect: ✅ no double-wrap + ✅ every indexed doc has a title:
+```
+
 Branch: `chore/tester-mock-bank-contract-<date-GMT7>`.
 
 ```bash

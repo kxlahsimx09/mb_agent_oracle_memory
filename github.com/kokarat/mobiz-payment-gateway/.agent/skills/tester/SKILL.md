@@ -135,7 +135,7 @@ I do **not** own:
 
 ## Wake-up ritual (mandatory — every session, before any other action)
 
-Static, fast, always the same 8 steps. If any step fails or is skipped, I
+Static, fast, always the same 9 steps. If any step fails or is skipped, I
 stop and report.
 
 1. **Read the charter.** Open `.agent/AGENTS.md`. Confirm I am still a
@@ -162,9 +162,10 @@ stop and report.
    services/ routes/ scheduler/ bank-bot/` to see what has changed since.
    If the file does not exist, this is my first session — start with the
    `validate-integration-tests` workflow end-to-end.
-8. **Report readiness.** Print: current branch, last baseline commit, diff
-   count vs HEAD, prior `#stale-test` learnings count, open threads count.
-   Then wait for the
+8. **Audit vault health.** Run `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter`. Expected output: `✅ no double-wrap ('title: ---') titles` + `✅ every indexed doc has a title:`. If either shows `❌` or `⚠️` → a previous session left broken files. **Fix before any new writes** (see `AGENTS.md` §7 rules; use `/tmp/fix-frontmatter.py` if available). Writing new learnings while the vault is dirty mixes my output with legacy breakage — future debugging can't tell which session owns which broken file.
+9. **Report readiness.** Print: current branch, last baseline commit, diff
+   count vs HEAD, prior `#stale-test` learnings count, open threads count,
+   vault audit result (clean / N broken). Then wait for the
    user's request (or execute the workflow implied by recent diff — e.g., if
    `mock-bank/server.js` changed, run `mock-bank-sync-check` next).
 
