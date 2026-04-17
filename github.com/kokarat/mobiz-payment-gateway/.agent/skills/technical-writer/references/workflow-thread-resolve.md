@@ -17,14 +17,18 @@ This procedure turns "answered thread" from a **passive signal** into **blocking
 
 ## Scoping rule — "my threads" is doc-anchored, not title-anchored
 
-A thread is **mine** (this instance's responsibility) if and only if a doc I own currently contains a `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker referencing its id.
+A thread is **mine** (this instance's responsibility) if and only if a doc I own currently contains a recognised marker referencing its id. The recognised marker family is:
+
+- `[AWAITING_THREAD:<id>]` — generic "I asked a question about this claim" (W1/W2/W4/W8).
+- `[RATIFICATION_PENDING:<id>]` — "I reverse-engineered this flow; human must ratify" (W8, and downgrades triggered by W9 class F).
+- `[UNDOCUMENTED-STEP:<id>]` — "W9 noticed a new actor-crossing in code the flow doesn't cover; human must decide new-step vs internal-helper" (W9 only).
 
 Title prefixes (`flow:<slug>`, `drift:<area>`) are **hints for humans**, not scoping. They collide across agents and survive renames. Doc anchors are load-bearing; titles are not.
 
 Implication for every `arra_thread()` call inside a workflow:
 
 - You **must** immediately insert the paired marker into the doc being produced in the same PR. A thread with no doc anchor is a workflow bug, not a thread.
-- When you resolve a thread, you either update the marker in place (`[AWAITING_THREAD:<id>]` → `// verified-via-thread:<id>`) or strip it (ratification marker) in the same commit that closes the thread. Marker removal and `status="closed"` happen together.
+- When you resolve a thread, you either update the marker in place (`[AWAITING_THREAD:<id>]` → `// verified-via-thread:<id>`), strip it (`[RATIFICATION_PENDING]` in header → add `// ratified-via-thread:<id>` on its own line), or transform it based on the human's answer (`[UNDOCUMENTED-STEP]` → either becomes a real step via spawned W8 revision, or is deleted with a `#undocumented-step-benign` learning if the human says "internal helper"), **in the same commit** that closes the thread. Marker removal/transformation and `status="closed"` happen together.
 
 ---
 
@@ -60,12 +64,14 @@ Files **not** in pg-writer's territory (skip):
 ### Pass 1 — Doc-anchored (primary, authoritative)
 
 ```bash
-grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]' \
+grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED_STEP|UNDOCUMENTED-STEP):([A-Za-z0-9_-]+)\]' \
   docs/current-system.md docs/data-model.md docs/schedulers.md \
   docs/bank-bot.md docs/flows docs/runbooks docs/releases \
   docs/migration-notes.md docs/adr README.md CLAUDE.md \
   2>/dev/null | sort -u
 ```
+
+(The regex accepts both `UNDOCUMENTED-STEP` and `UNDOCUMENTED_STEP` for forward-compatibility with earlier drafts of W9; normalise new markers to the hyphen form.)
 
 Expected output per line: `<file>:<line>:[<MARKER>:<id>]`.
 
@@ -104,6 +110,8 @@ For each unique `<id>`:
    | `[AWAITING_THREAD:<id>]` inline on a claim | (marker removed) | `// verified-via-thread:<id>` |
    | `[AWAITING_THREAD:<id>]` standalone (e.g., under "Open questions") | entry moved to "Resolved questions" or deleted if trivial | `// verified-via-thread:<id>` next to the ratified statement |
    | `[RATIFICATION_PENDING:<id>]` in doc header | (marker removed) | header gains `// ratified-via-thread:<id>` on its own line |
+   | `[UNDOCUMENTED-STEP:<id>]` — human answered "yes, real step" | (marker removed; spawn W8 revision handoff) | leave a `// pending-w8-revision-from-thread:<id>` note in §Implementation pointers until W8 runs |
+   | `[UNDOCUMENTED-STEP:<id>]` — human answered "no, internal helper" | (marker removed, entry deleted) | file `arra_learn` tagged `#undocumented-step-benign + flow:<slug> + thread:<id>` so the scan doesn't re-flag next pass |
 
    If the doc section was tentatively written while the thread was open and the answer changed the semantics, rewrite the section. The thread answer is now the load-bearing claim — cite it with `// verified-via-thread:<id>`.
 
@@ -159,7 +167,7 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 
 ## When to invoke this procedure
 
-1. **Step 0 of every main workflow** (W1, W2, W4, W8). Mandatory. "No answered threads in territory" is a Step 0 gate — Step 1 does not start until Pass 1 = 0 and Pass 2 orphan list = 0.
+1. **Step 0 of every main workflow** (W1, W2, W4, W8, W9). Mandatory. "No answered threads in territory" is a Step 0 gate — Step 1 does not start until Pass 1 = 0 and Pass 2 orphan list = 0.
 2. **Mid-pass, opportunistically** — when you encounter a marker while reading a doc, check its status inline rather than deferring.
 3. **During session wake-up ritual** — SKILL.md §Session-start checks already calls `arra_threads(status="answered")`. If count > 0, treat the session as being in thread-resolution mode: finish Pass 1 before opening any workflow.
 
@@ -178,3 +186,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 ## Change log
 
 - 2026-04-17 — Initial version. Doc-anchored scoping (grep-based). Pass 1 + Pass 2 structure. 4-step resolution block. Cross-repo known-gap documented. Created alongside the "thread resolution is blocking" rule in SKILL.md and Step 0 adoption in W1/W2/W4/W8.
+- 2026-04-17 (later) — Extended the recognised-marker family to include `[UNDOCUMENTED-STEP:<id>]` (introduced by W9). Pass 1 grep regex widened. Resolution table gained two rows for the UNDOCUMENTED-STEP lifecycle (human says "real step" → spawn W8 revision; human says "internal helper" → file `#undocumented-step-benign` learning so the next W9 scan doesn't re-flag). Step 0 now applies to W9 passes as well.

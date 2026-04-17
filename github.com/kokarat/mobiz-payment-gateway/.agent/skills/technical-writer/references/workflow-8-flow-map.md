@@ -31,6 +31,7 @@ Do **not** run:
 
 - [ ] `git status --porcelain` empty.
 - [ ] `docs/.baseline` exists and is parsable (W1 must have run).
+- [ ] If `docs/flows/.baseline` exists, it is parsable (informational — tells you when the whole flow portfolio was last verified by W9). If absent, this W8 pass will create it in Step 9a.
 - [ ] Oracle reachable (thread authoring required for reverse-engineered flows).
 - [ ] At least **40 min** if reverse-engineering, **20 min** if transcribing from a ratified ADR/thread.
 - [ ] You can name the flow in one sentence. If you cannot, the scope is too broad — split first.
@@ -297,6 +298,26 @@ arra_supersede(
 )
 ```
 
+### Step 9a — Initialize `docs/flows/.baseline` (1 min, first-run only)
+
+W9 (track commits against flows) reads `docs/flows/.baseline` to determine what commit range to scan. W8 seeds this file **once**, on the very first W8 run in the repo; subsequent W8 runs do not touch it — W9 is the sole writer of baseline bumps thereafter.
+
+```
+# Only if docs/flows/.baseline does NOT already exist:
+CURRENT_HEAD=$(git rev-parse HEAD)
+ISO_DATE=$(TZ=Asia/Bangkok date -Iseconds)
+cat > docs/flows/.baseline <<EOF
+flows-baseline: ${CURRENT_HEAD}
+last-verified-at: ${ISO_DATE}
+EOF
+```
+
+If the file already exists, leave it alone. W9 will advance it on its next fast-fix pass.
+
+Semantic of the baseline: *"as of this commit, all flow docs' `// impl:` pointers have been either verified by a W9 pass or freshly authored by a W8 pass — no unprocessed commit range stands between this commit and HEAD."* On initialization (first W8), the flow portfolio has exactly one flow, its pointers were just written at HEAD, so "no unprocessed range" is trivially true.
+
+**Do not bump on W8 revisions.** A revision refreshes *one* flow's pointers to HEAD while other flows may still be at older commits; the global `.baseline` would lie if it advanced. W9 is the only workflow that can honestly bump `.baseline` because W9 is the only workflow that verifies the whole portfolio against a commit range.
+
 ### Step 10 — Commit + PR (3 min)
 
 Branch: `docs/flow-<slug>`.
@@ -373,6 +394,7 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep, including `[RATIFICATION_PENDING]`) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero unfiled orphans. Any ratification thread whose answer was judged insufficient stays open with a follow-up message — not closed prematurely.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass (both question threads and the mandatory ratification thread for reverse-engineered flows) inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md` in the same PR. Orphan thread count = 0. Count check: `grep -cE '\[(AWAITING_THREAD|RATIFICATION_PENDING):' docs/flows/<slug>.md` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.
+- [ ] `docs/flows/.baseline` exists with the two-line format (`flows-baseline: <hash>` + `last-verified-at: <ISO date>`). On the very first W8 pass in this repo, Step 9a created it at current HEAD. On subsequent W8 passes, the file is unchanged — W9 is the sole writer of baseline bumps.
 
 ---
 
@@ -412,3 +434,4 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 
 - 2026-04-17 — Initial version. Scoped to `pg-writer-oracle` only (mobiz-payment-gateway pilot); bot-writer does not have W8 yet. Mermaid-only diagrams. Hybrid authorship per human decision: strict transcription required for **new** flows (tier S1/S2 claim mandatory); reverse-engineering allowed for **existing** flows but gated by a `[RATIFICATION_PENDING]` thread. `queryType="pattern"` for the W8 root trace. Per-step children for `[UNIMPLEMENTED]`/`[DRIFT]` (like W1). Claim-strength label in the doc header so downstream agents route by trust level.
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)**. Motivation observed during the first W8 run: agent opened a thread, human answered, next session didn't consume the answer — and the thread never closed. Fix: doc-anchored Pass 1 + orphan-scan Pass 2 (see `workflow-thread-resolve.md`). Ratification-thread answers get a stricter test — a neutral "looks good" is insufficient; the human must engage with the spec. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired marker (anchor discipline).
+- 2026-04-17 (later) — Added **Step 9a (Initialize `docs/flows/.baseline`)** so W9 (track commits against flows) has a commit-range anchor to scan from. W8 is the seeder-of-last-resort — it creates the file on the very first W8 pass in a repo, then never touches it again. W9 is the sole writer of baseline bumps (revisions by W8 don't verify the whole portfolio; only W9 does). DoD added: baseline file must exist with the two-line format.

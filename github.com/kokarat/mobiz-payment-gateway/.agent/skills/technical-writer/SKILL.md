@@ -92,6 +92,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 6. Produce a runbook | An incident taught us something, or a new ops surface appears | `references/workflow-6-runbook.md` |
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
 | 8. Flow Map (behavior + sequence diagram) | Human asks, PR has `spec:`/`feat(flow):` claim, W1/W2 surfaces an undocumented flow, or monthly endpoint audit flags a gap | `references/workflow-8-flow-map.md` |
+| 9. Track commits against flow map | A PR lands / daily cron — alongside W2, intent-level counterpart that refreshes `// impl:` pointers and detects flow drift | `references/workflow-9-track-flows.md` |
 | — Thread resolution (sub-procedure) | Step 0 of every main workflow; also on-demand when the wake-up ritual shows answered threads | `references/workflow-thread-resolve.md` |
 
 ## Vault path (the #1 trap)
