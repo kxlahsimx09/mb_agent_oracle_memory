@@ -1,4 +1,5 @@
 ---
+title: drift — swagger_simple.json is a month stale and misses ~7 route groups
 name: drift — swagger_simple.json is a month stale and misses ~7 route groups
 description: Swagger last modified 2026-03-16; no paths for telegram, 2fa, bank-accounts, direct-transfer, activity-log, callback-log, app-settings/maintenance. HEAD has 39 route files; swagger has 141 path keys.
 type: learning

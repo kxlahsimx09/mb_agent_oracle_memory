@@ -1,4 +1,5 @@
 ---
+title: Telegram direct-transfer templates — escapeMD for underscore/asterisk/backtick/bracket in dynamic fields
 name: Telegram direct-transfer templates — escapeMD for underscore/asterisk/backtick/bracket in dynamic fields
 description: As of bd10835 (2026-04-16, PR #162), services/telegramNotify.go applies escapeMD to every dynamic field in the four direct-transfer notification templates. Username "AMPAYCS1_BAS" tripped Telegram's legacy Markdown italic parser. sendMessage also now logs non-200 response bodies.
 type: learning

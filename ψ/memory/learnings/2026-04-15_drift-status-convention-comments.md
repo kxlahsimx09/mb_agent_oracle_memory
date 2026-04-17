@@ -1,4 +1,5 @@
 ---
+title: drift — model comments contradict runtime status convention
 name: drift — model comments contradict runtime status convention
 description: Wallet/Client/MDRProfile model files comment "0=active, 1=inactive" while runtime enforces the opposite (1=active). CLAUDE.md §Status Codes Convention matches runtime.
 type: learning

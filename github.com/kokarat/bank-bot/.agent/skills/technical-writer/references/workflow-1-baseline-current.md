@@ -169,17 +169,55 @@ last-verified-at:        <ISO 8601 date in GMT+7>
 
 ### Step 9 — Log learnings (10 min)
 
-For every durable fact discovered that is not already in the vault, write an `arra_learn` with the 3-layer tag set from `.agent/AGENTS.md` §7a:
+For every durable fact discovered that is not already in the vault, write an `arra_learn`. Two **binding** rules — violating either produces broken titles in Studio:
+
+### Rule 1 — `arra_learn(pattern=…)` takes raw markdown, **not** a pre-wrapped document
+
+```
+✅ GOOD (passes plain text as pattern):
+  arra_learn(
+    pattern="drift — KTB transfer flow is fully implemented.\n\nEvidence at 95dbb70:\n- banks/ktb/transfer.js ...",
+    concepts=["technical-writer", "repo:bank-bot", "current", "ktb", "transfer", "drift"],
+    project="github.com/kokarat/bank-bot",
+    source="docs/current-system.md §8 DRIFT-11 @ 95dbb70"
+  )
+
+❌ BAD (embeds its own frontmatter — tool double-wraps, title becomes literal "---"):
+  arra_learn(
+    pattern="---\nname: drift — KTB transfer flow ...\ndescription: CLAUDE.md claims ...\ntype: learning\n---\n\n## Evidence at 95dbb70\n- banks/ktb/...",
+    ...
+  )
+```
+
+The tool auto-generates the `title:` (from the first line of pattern) + `tags:` + `created:` + `source:` + `project:` frontmatter. Passing your own `---\n...\n---` block makes the outer title literally `"---"` and buries your real title in the body.
+
+If you prefer direct file write (AGENTS.md §7 option 2), use the template in Rule 2.
+
+### Rule 2 — direct file-write frontmatter template (when you skip the MCP tool)
 
 ```yaml
-tags:
-  - technical-writer                   # role
-  - repo:bank-bot                      # repo scope
-  - current                            # system phase
-  - <bank: scb|ktb|kbank|bbl>          # feature (when bank-specific)
-  - <topic: selector|otp|login|…>      # feature (recommended)
-  - <special: drift|decision|handoff>  # only if applicable
+---
+title: <one-line human-readable title — this is what Studio displays>
+tags: [technical-writer, repo:bank-bot, current, <bank>, <topic>, <special>]
+created: <YYYY-MM-DD>
+source: <file:line@commit or "Oracle Learn" or conversation source>
+project: github.com/kokarat/bank-bot
+---
+
+# <same as title>
+
+<body paragraphs>
 ```
+
+**Always use `title:` — never `name:` + `description:`.** Studio's document-list UI indexes the `title:` field; `name:` is reserved for `SKILL.md` skill identity (different semantic). Retros and learnings with `name:` but no `title:` render as blank rows in Studio until manually fixed.
+
+### Tag layers (mandatory 3-layer)
+
+- role — `technical-writer`
+- repo scope — `repo:bank-bot`
+- system phase — `current`
+- feature tags (recommended) — `<bank: scb|ktb|kbank|bbl>`, `<topic: selector|otp|login|...>`
+- special tags (only if applicable) — `drift`, `decision`, `handoff`
 
 Typical baseline learnings for bank-bot:
 

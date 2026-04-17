@@ -1,4 +1,5 @@
 ---
+title: pullout refill amount is randomized in [MinAmount, upper] — no more identical repeat statements
 name: pullout refill amount is randomized in [MinAmount, upper] — no more identical repeat statements
 description: As of 0a30548 (2026-04-16, PR #163), pulloutDemand.EvaluatePulloutRefill picks a random integer baht in [task.MinAmount, min(need, source.Balance, task.MaxAmount)] instead of pinning to the exact upper bound. Prevents repeat-amount statements that look like a fraud pattern.
 type: learning

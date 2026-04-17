@@ -1,4 +1,5 @@
 ---
+title: drift — client-facing payout cancel route is disabled
 name: drift — client-facing payout cancel route is disabled
 description: routes/payoutRequest.go comments out POST /payout/:txnId/cancel with note "system handles cancellation automatically (maintenance window, processing timeout, etc)". CLAUDE.md still documents this endpoint.
 type: learning

@@ -1,4 +1,5 @@
 ---
+title: KTB deposit routing — exclude intra-bank candidates via SelectBankForDeposit(excludeBankCode)
 name: KTB deposit routing — exclude intra-bank candidates via SelectBankForDeposit(excludeBankCode)
 description: As of 4720f20 (2026-04-16), SelectBankForDeposit accepts an excludeBankCode parameter. DepositRequestController sets it to "ktb" when the request's bankCode is KTB — intra-bank KTB→KTB transfers disable the recipient-name field and break statement reconciliation.
 type: learning

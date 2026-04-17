@@ -142,7 +142,32 @@ Memory lives in `<ghq>/kxlahsimx09/mb_agent_oracle_memory/ψ/memory/` (the centr
 
 **Every memory write must carry:** `title`, `tags` (3-layer — see §7a), `related`, `source` (file + commit hash), `created` (GMT+7 ISO date).
 
-**How to make the write.** `arra_learn`'s `pattern` argument is body-only; the tool auto-generates frontmatter. Do **not** embed a `---` block inside `pattern`. Use either `arra_learn(pattern, concepts, project, source)` or write the file directly under `ψ/memory/learnings/YYYY-MM-DD_slug.md` with a single YAML frontmatter block carrying the 3-layer tags.
+**How to make the write.** Two **binding** rules — violating either breaks titles in Studio:
+
+**Rule 1 — `arra_learn(pattern=…)` takes plain markdown, NOT a pre-wrapped document.**
+```
+❌ BAD:  arra_learn(pattern="---\nname: X\n...---\n\n## Evidence\n...", ...)   ← double-wrap; outer title = literal "---"
+✅ GOOD: arra_learn(pattern="X\n\nEvidence:\n- ...", concepts=[...], project=..., source=...)
+```
+
+**Rule 2 — direct file-write uses `title:`, NOT `name:` + `description:`.**
+```
+✅ GOOD:
+---
+title: drift — KTB transfer flow is batch-capable
+tags: [technical-writer, repo:bank-bot, current, ktb, transfer, drift]
+created: 2026-04-17
+source: banks/ktb/transfer.js@95dbb70
+project: github.com/kokarat/bank-bot
+---
+```
+`name:` is reserved for SKILL.md skill identity. Files with `name:` but no `title:` render as blank rows in Studio.
+
+**Self-check before committing:**
+```bash
+grep -rE "^title:\s*---\s*$" ~/.arra-oracle-v2/ψ/memory/        # should be empty
+grep -rL "^title:" ~/.arra-oracle-v2/ψ/memory/learnings/       # should be empty
+```
 
 ---
 

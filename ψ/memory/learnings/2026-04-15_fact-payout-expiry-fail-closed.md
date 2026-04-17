@@ -1,4 +1,5 @@
 ---
+title: fact — PayoutExpiryScheduler fails closed on app_settings read error
 name: fact — PayoutExpiryScheduler fails closed on app_settings read error
 description: If reading payout_auto_cancel_enabled from app_settings errors, the scheduler skips the tick rather than defaulting to enabled — prevents a briefly-unavailable DB from re-enabling auto-cancel that an operator has turned off.
 type: learning

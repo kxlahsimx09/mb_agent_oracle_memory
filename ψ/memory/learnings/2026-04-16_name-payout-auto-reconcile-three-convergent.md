@@ -1,4 +1,5 @@
 ---
+title: payout auto-reconcile — three convergent paths on one helper
 name: payout auto-reconcile — three convergent paths on one helper
 description: Failed payouts that actually transferred now flip back to completed via services.ReconcileFailedPayoutToCompleted. Three callers converge on the helper (matcher, post-MarkFailed goroutine, admin endpoint); idempotency handled by ErrPayoutAlreadyReconciled.
 type: learning

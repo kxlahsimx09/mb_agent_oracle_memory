@@ -1,4 +1,5 @@
 ---
+title: bank_statement list filter must use signed amount — credit/debit fields are 0 today
 name: bank_statement list filter must use signed amount — credit/debit fields are 0 today
 description: As of deebd65 (2026-04-16, PR #166), /bank-statements list filters on signed amount via $or:[{amount:v},{amount:-v}] for exact and $expr:$abs for range. Bot writes 0 to credit_amount/debit_amount — old filter dropped 418/761 rows for a 200-amount search.
 type: learning

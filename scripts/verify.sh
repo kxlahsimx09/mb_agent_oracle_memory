@@ -80,6 +80,45 @@ echo -n "  retros:    "; find "$CENTRAL/ψ/memory/retrospectives" -name "*.md" 2
 echo -n "  handoffs:  "; find "$CENTRAL/ψ/inbox/handoff" -name "*.md" 2>/dev/null | wc -l | tr -d ' '
 
 echo ""
+echo "=== frontmatter health check (indexed content only) ==="
+# indexer scans ψ/memory/{learnings,retrospectives,resonance}/ at REPO_ROOT
+# and per-project at <central>/github.com/.../ψ/memory/... . Everything else
+# (SKILL.md, AGENTS.md, workflow refs, handoffs) is config, not indexed content.
+INDEXED_DIRS=()
+for d in learnings retrospectives resonance; do
+  INDEXED_DIRS+=("$CENTRAL/ψ/memory/$d")
+  while IFS= read -r p; do INDEXED_DIRS+=("$p"); done < <(find "$CENTRAL/github.com" -type d -name "$d" 2>/dev/null)
+done
+
+broken_title=""
+missing_title=""
+for d in "${INDEXED_DIRS[@]}"; do
+  [ -d "$d" ] || continue
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    if head -20 "$f" 2>/dev/null | grep -qE "^title:\s*---\s*$"; then
+      broken_title="$broken_title$f"$'\n'
+    elif ! head -20 "$f" 2>/dev/null | grep -q "^title:"; then
+      missing_title="$missing_title$f"$'\n'
+    fi
+  done < <(find "$d" -name "*.md" 2>/dev/null)
+done
+
+if [ -n "$broken_title" ]; then
+  echo "  ❌ files with 'title: ---' (arra_learn double-wrap bug):"
+  echo "$broken_title" | grep -v '^$' | sed 's|^|    |'
+else
+  echo "  ✅ no double-wrap ('title: ---') titles in indexed content"
+fi
+
+if [ -n "$missing_title" ]; then
+  echo "  ⚠️  indexed docs missing 'title:' field (legacy 'name:' format):"
+  echo "$missing_title" | grep -v '^$' | sed 's|^|    |'
+else
+  echo "  ✅ every indexed doc has a title:"
+fi
+
+echo ""
 echo "=== ghost check (DB rows with no file) ==="
 if [ -f "$ORACLE_DB" ]; then
   ghosts=$(sqlite3 "$ORACLE_DB" "SELECT DISTINCT source_file FROM oracle_documents ORDER BY source_file;" | while read f; do

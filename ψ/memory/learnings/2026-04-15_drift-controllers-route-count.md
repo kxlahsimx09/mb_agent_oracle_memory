@@ -1,4 +1,5 @@
 ---
+title: drift — controller/route count far exceeds CLAUDE.md's listed set
 name: drift — controller/route count far exceeds CLAUDE.md's listed set
 description: HEAD has 41 controllers and 39 route files. CLAUDE.md §Project Structure lists ~26 controllers. Feature-complete deltas include ActivityLog, AppSettings, BankAccount, Bank (master list), CallbackLog, ClientAPI, DirectTransfer, MDRShared, Pool, PullOutLogs, PullOutTask, Resource, Telegram{,Config,BroadcastMessage}, TwoFactor.
 type: learning

@@ -1,4 +1,5 @@
 ---
+title: DirectTransfer approve path — enqueue before status flip, reject self-transfer at create
 name: DirectTransfer approve path — enqueue before status flip, reject self-transfer at create
 description: As of c5d89cf (2026-04-16, PR #170), CreateDirectTransfer rejects self-transfers (dest == source bank+account) at 400, and ApproveDirectTransfer enqueues synchronously before flipping status to "approved". Enqueue failure leaves the transfer in pending_approval with the real error, no zombie rows.
 type: learning

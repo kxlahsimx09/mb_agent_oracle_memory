@@ -1,4 +1,5 @@
 ---
+title: drift — admin-create/update for deposits and payouts are removed
 name: drift — admin-create/update for deposits and payouts are removed
 description: routes/deposit.go and routes/payout.go have their POST and PUT /:id endpoints commented out ("created via qr-paypout-api" / "created via Node.js API") but CLAUDE.md still documents them.
 type: learning

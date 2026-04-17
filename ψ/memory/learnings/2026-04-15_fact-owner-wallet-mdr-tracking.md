@@ -1,4 +1,5 @@
 ---
+title: fact — wallets.is_owner marks the system-owner wallet for MDR tracking
 name: fact — wallets.is_owner marks the system-owner wallet for MDR tracking
 description: One wallet row carries IsOwner=true; super-admin sets it via PUT /wallets/:id/owner. Everything else in the MDR distribution flow treats this wallet as the residual bucket.
 type: learning

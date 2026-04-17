@@ -1,4 +1,5 @@
 ---
+title: multi-client list filter — client_ids (comma-separated, $in) on /deposits + /payouts
 name: multi-client list filter — client_ids (comma-separated, $in) on /deposits + /payouts
 description: As of eedf215 (2026-04-16, PR #168), GetAllDeposits and GetAllPayouts accept a new client_ids query param. Comma-separated ObjectID list, matched via $in. Legacy single client_id still works — client_ids wins when both supplied. Empty/malformed ids are silently dropped.
 type: learning

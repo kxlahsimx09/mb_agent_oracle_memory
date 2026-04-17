@@ -1,4 +1,5 @@
 ---
+title: drift — Payout bson tags are camelCase while other models use snake_case
 name: drift — Payout bson tags are camelCase while other models use snake_case
 description: models/payout.go:89-91 uses bson:"createdAt" / bson:"updatedAt" (camelCase). Most other models use snake_case. This caused a silent production bug once (payout_expiry.go:126-128 self-documented).
 type: learning

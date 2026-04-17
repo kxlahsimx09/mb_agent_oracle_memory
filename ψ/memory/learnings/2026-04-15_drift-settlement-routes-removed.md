@@ -1,4 +1,5 @@
 ---
+title: drift — settlement UPDATE, DELETE, and CANCEL routes are gone
 name: drift — settlement UPDATE, DELETE, and CANCEL routes are gone
 description: routes/settlement.go explicitly removes UpdateSettlement ("if data is wrong, reject and create new one"), DELETE ("settlements must be kept for audit log"), and has no /cancel route. CLAUDE.md still documents all three.
 type: learning

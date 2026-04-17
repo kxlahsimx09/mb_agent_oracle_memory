@@ -191,16 +191,53 @@ last-verified-at:        <ISO 8601 date in GMT+7, e.g. 2026-04-14T21:30:00+07:00
 
 ### Step 10 — Log learnings (10 min)
 
-For every durable fact you discovered that is not already in the vault, write an `arra_learn` entry with the 3-layer tag convention from `.agent/AGENTS.md` §7a:
+For every durable fact you discovered that is not already in the vault, write an `arra_learn` entry. Two **binding** rules — violating either produces broken titles in Studio:
+
+### Rule 1 — `arra_learn(pattern=…)` takes raw markdown, **not** a pre-wrapped document
+
+```
+✅ GOOD (plain text pattern):
+  arra_learn(
+    pattern="drift — payout bson tags are camelCase while other models are snake_case.\n\nEvidence at ed45b7e:\n- models/payout.go:89-91 ...",
+    concepts=["technical-writer", "repo:mobiz-payment-gateway", "current", "payout", "data-model", "drift"],
+    project="github.com/kokarat/mobiz-payment-gateway",
+    source="models/payout.go:89-91@ed45b7e"
+  )
+
+❌ BAD (embeds its own frontmatter — tool double-wraps; outer title becomes literal "---"):
+  arra_learn(
+    pattern="---\nname: drift — payout bson ...\ndescription: ...\ntype: learning\n---\n\n## Evidence...",
+    ...
+  )
+```
+
+The tool auto-generates the `title:` / `tags:` / `created:` / `source:` / `project:` frontmatter from the arguments. Passing your own `---\n...\n---` block gets double-wrapped — outer title becomes `"---"`.
+
+### Rule 2 — direct file-write frontmatter template (when you skip the MCP tool — AGENTS.md §7 option 2)
 
 ```yaml
-tags:
-  - technical-writer                   # role
-  - repo:mobiz-payment-gateway         # repo scope
-  - current                            # system phase
-  - <feature>                          # e.g. bank-bot, scheduler, deposit
-  - <special>                          # drift, decision, handoff — only if applicable
+---
+title: <one-line human-readable title — this is what Studio displays>
+tags: [technical-writer, repo:mobiz-payment-gateway, current, <feature>, <special>]
+created: <YYYY-MM-DD>
+source: <file:line@commit or conversation source>
+project: github.com/kokarat/mobiz-payment-gateway
+---
+
+# <same as title>
+
+<body paragraphs>
 ```
+
+**Always use `title:` — never `name:` + `description:`.** Studio's document-list UI indexes `title:`; `name:` is reserved for `SKILL.md` skill identity (different semantic). Retros and learnings written with `name:` but no `title:` render as blank rows in Studio until manually fixed.
+
+### Tag layers (mandatory 3-layer)
+
+- role — `technical-writer`
+- repo scope — `repo:mobiz-payment-gateway` (or `repo:cross` if fact spans repos)
+- system phase — `current`
+- feature tags (recommended) — e.g. `bank-bot`, `scheduler`, `deposit`, `payout`, `settlement`
+- special tags (only if applicable) — `drift`, `decision`, `handoff`
 
 Typical baseline learnings:
 

@@ -1,4 +1,5 @@
 ---
+title: drift — scheduler intervals diverge from CLAUDE.md
 name: drift — scheduler intervals diverge from CLAUDE.md
 description: WithdrawalDispatcher runs every 30s (not 1m) and Payout matcher runs every 1m (not 2m as the inline comment claims)
 type: learning

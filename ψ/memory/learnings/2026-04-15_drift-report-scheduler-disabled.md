@@ -1,4 +1,5 @@
 ---
+title: drift — ReportScheduler is disabled in-process; external cron drives hourly reports
 name: drift — ReportScheduler is disabled in-process; external cron drives hourly reports
 description: main.go:170-173 has ReportScheduler commented out; routes/telegram.go:25-26 exposes public trigger endpoints used by the external cron. CLAUDE.md mentions the scheduler without noting the in-process disablement.
 type: learning

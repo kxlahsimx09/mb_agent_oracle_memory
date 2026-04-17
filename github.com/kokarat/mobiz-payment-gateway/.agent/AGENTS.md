@@ -214,12 +214,56 @@ Memory lives in `ψ/memory/` and is indexed by Oracle. Three file types, three u
 - `source:` code file + commit hash, or URL, or "conversation with <human>"
 - `created:` ISO date in GMT+7
 
-**How to actually make the write.** `arra_learn`'s `pattern` argument is treated as **body content only** — the tool auto-generates its own frontmatter wrapper around it. Do **not** embed a `---\n...\n---` YAML block inside `pattern`; the file ends up double-wrapped with an empty outer `title:` and `tags: []`, and neither search nor tag-filtering will see it. Two working paths:
+**How to actually make the write.** `arra_learn`'s `pattern` argument is treated as **body content only** — the tool auto-generates its own frontmatter wrapper around it. Two rules, **binding** — violating either produces broken titles in Studio:
 
-1. **Tool with simple tags:** `arra_learn(pattern=<body markdown only>, concepts=["tag1","tag2",...], project="...", source="...")`. The `concepts` parameter is how tags reach the generated frontmatter.
-2. **Write the file directly** under `ψ/memory/learnings/YYYY-MM-DD_slug.md` with a single YAML frontmatter block containing the full 3-layer tag list from §7a (the `concepts` arg treats tags as flat strings and does not express the `repo:` / system-phase layers). Oracle re-indexes on its next cycle — no tool call needed. This is the form used by most existing vault files.
+### Rule 1 — Do **NOT** embed frontmatter inside `arra_learn(pattern)`
 
-When in doubt, prefer option 2 — the file on disk is what the indexer reads, and it lets you express the full 3-layer tag schema.
+```
+❌ BAD — the tool double-wraps; outer title becomes literal "---"
+  arra_learn(pattern="---\nname: drift — X\ndescription: ...\ntype: learning\n---\n\n## Evidence\n...", ...)
+
+✅ GOOD — plain markdown body only
+  arra_learn(pattern="drift — X.\n\nEvidence:\n- file:line ...", concepts=["tag1","tag2"], project="...", source="...")
+```
+
+The tool's auto-generated outer frontmatter extracts the title from the first line of `pattern`. If the first line is `---`, the title becomes literally `"---"`.
+
+### Rule 2 — Direct file-write (option 2) uses `title:` — **never** `name:` + `description:`
+
+```
+❌ BAD — Studio's document-list UI indexes `title:`; `name:` is reserved for SKILL.md skill identity
+  ---
+  name: drift — X
+  description: some context
+  type: learning
+  ---
+
+✅ GOOD
+  ---
+  title: drift — X
+  tags: [technical-writer, repo:mobiz-payment-gateway, current, drift, <feature>]
+  created: 2026-04-17
+  source: models/X.go:10@ed45b7e
+  project: github.com/kokarat/mobiz-payment-gateway
+  ---
+```
+
+### Two working paths
+
+1. **Tool with simple tags:** `arra_learn(pattern=<plain markdown body>, concepts=["tag1","tag2",...], project="...", source="...")`. Tool auto-generates all frontmatter including `title:`. Inline vector embedding happens on the same call (post PR #754).
+2. **Direct file write** under `ψ/memory/learnings/YYYY-MM-DD_slug.md` with single YAML frontmatter block including the **`title:` field** (not `name:`) + full 3-layer tags from §7a. Oracle re-indexes on its next cycle.
+
+When in doubt, prefer option 1 for new single-learning writes (less error-prone) and option 2 for bulk imports or when full 3-layer tag expression is critical.
+
+### Self-check before committing
+
+After writing any vault file, grep for anti-patterns:
+
+```bash
+# should return nothing
+grep -rE "^title:\s*---\s*$" ~/.arra-oracle-v2/ψ/memory/      # double-wrap bug
+grep -rL "^title:" ~/.arra-oracle-v2/ψ/memory/learnings/      # missing title (legacy format)
+```
 
 **Golden rule:** *If it isn't in the vault, it didn't happen.*
 

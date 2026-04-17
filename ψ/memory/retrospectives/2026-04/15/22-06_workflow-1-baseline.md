@@ -1,4 +1,5 @@
 ---
+title: retro — workflow-1 baseline of mobiz-payment-gateway at 379e984
 name: retro — workflow-1 baseline of mobiz-payment-gateway at 379e984
 description: First-run baseline by pg-writer. Produced docs/current-system.md + docs/.baseline, filed 12 learnings (10 drift + 2 facts). PR opened; not merged.
 type: retro

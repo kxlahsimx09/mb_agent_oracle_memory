@@ -1,4 +1,5 @@
 ---
+title: MDR Shared date filter must be parsed in Asia/Bangkok — time.Parse gives UTC
 name: MDR Shared date filter must be parsed in Asia/Bangkok — time.Parse gives UTC
 description: As of 48ad80b (2026-04-16, PR #169), MDRSharedController parses YYYY-MM-DD date filters via time.ParseInLocation with a module-level bangkokLoc (Asia/Bangkok with FixedZone +7h fallback). time.Parse alone returns UTC and drops every record created 00:00-07:00 BKK.
 type: learning

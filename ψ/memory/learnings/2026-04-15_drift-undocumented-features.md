@@ -1,4 +1,5 @@
 ---
+title: drift — multiple feature areas have no CLAUDE.md section
 name: drift — multiple feature areas have no CLAUDE.md section
 description: 2FA, Telegram (webhook + config + broadcast), Bank Accounts (approval workflow), Direct Transfers, Pools, Activity Logs, Audit Trail middleware, App Settings, Callback Logs, MDR Shared logs, Bank Statements, Banks master list, Maintenance window — all live in code but missing from CLAUDE.md.
 type: learning

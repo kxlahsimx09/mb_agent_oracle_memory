@@ -1,4 +1,5 @@
 ---
+title: legacy pullout in-flight reservation — subtract pendingOut × MaxAmount from source balance
 name: legacy pullout in-flight reservation — subtract pendingOut × MaxAmount from source balance
 description: As of 4919e45 (2026-04-16, PR #167), the legacy pullout scheduler path reserves task.MaxAmount per pending pullout from the same source bank before checking effective balance. Refill chains already had this via CountPendingPulloutsFromSource.
 type: learning

@@ -1,4 +1,5 @@
 ---
+title: wallet_change_logs — reference_id links client deduction to partner MDR credits
 name: wallet_change_logs — reference_id links client deduction to partner MDR credits
 description: As of 2026-04-16 (PR #171), wallet_change_logs carries reference_id + reference_type fields. Rows written before that date have both empty. Frontend /wallet-change-logs pairs rows sharing reference_id into a coloured row group.
 type: learning
