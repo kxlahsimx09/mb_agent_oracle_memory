@@ -279,6 +279,41 @@ sqlite3 ~/.arra-oracle-v2/oracle.db "SELECT superseded_by FROM oracle_documents 
 
 If empty → supersede didn't commit (check error output). If correct → done. Record the verification (one line per drift) in the retro so the chain is auditable even if the DB is later rebuilt.
 
+#### 7e. Record the resolution as an `arra_trace` + chain it
+
+Per-drift resolution is a mini investigation: read old drift → find commit → verify behavior → write resolution. That *is* a trace. Record it so future agents can `arra_trace_chain(<any>)` and see the narrative of this session's reconcile pass.
+
+For **each** resolved drift (A or C):
+
+```
+# create a trace capturing this drift's resolution
+arra_trace(
+  query="resolution — <drift summary>",
+  queryType="evolution",            # doc/code drift evolved to matching state
+  scope="project",
+  project="github.com/kokarat/bank-bot",
+  foundCommits=[{ hash, shortHash, date, message }],   # the commit that introduced or resolved the drift
+  foundFiles=[{ path: <doc>, type: 'other', matchReason: '<section updated>', confidence: 'high' }],
+  foundLearnings=["<original drift learning source_file>", "<new resolution learning source_file>"]
+)
+# store returned trace_id
+```
+
+Then **chain it to the previous trace of this session** (building a narrative chain of "what I fixed today"):
+
+```
+arra_trace_link(
+  prevTraceId="<previous drift's trace_id>",   # or the session's first trace if this is #2
+  nextTraceId="<this drift's trace_id>"
+)
+```
+
+The **first** trace in the session has no prevTraceId — it's the head of the chain. The **last** trace will have awakening potential (see §Distillation in SKILL) once the reviewer weighs in.
+
+Skip Step 7e entirely for (B) regression-candidates — the drift stays open, no resolution narrative exists yet. A future session that actually closes the code bug will create the trace then.
+
+At session end, `arra_trace_chain(<first trace id>)` returns the full chain. Paste it into the retro as the narrative of "this W4 session closed N drifts in sequence."
+
 ### Step 8 — Commit + PR (5 min)
 
 Branch: `docs/reconcile-drift-<short-hash-of-current-baseline>`.
@@ -370,6 +405,7 @@ This workflow is complete **only** when all are true:
 - **Reconciling archaeological drift without the human.** Drift items > 6 months old may reference code, conventions, or features the current team does not remember. Park them; ask the human.
 - **Skipping `arra_supersede` because "the resolution learning explains it".** The resolution learning is prose; `superseded_by` is machine-readable. `arra_search` and `/api/search` surface the `superseded_by` / `superseded_at` / `superseded_reason` fields to callers, but only if `arra_supersede` was actually called. Without the call, old drift learnings look open to future agents and may be re-opened or re-resolved. This was the #1 gap observed in the first live Workflow 4 run (2026-04-16) — workflow prose prescribed supersede but indexer lag blocked it, and the operator didn't treat "defer supersede" as a pending task.
 - **Calling `arra_supersede` before the resolution learning is indexed.** The MCP tool rejects unknown `newId`. With PR #754 (inline vector embedding + direct INSERT) the new learning is available immediately; without PR #754 the indexer may lag. Always run the 7b verify query before 7c. On old Oracle builds, fall back to a `#pending-supersede` tag + handoff.
+- **Filing standalone `arra_trace` per drift without chaining.** A W4 session that closes N drifts but leaves N disconnected traces loses the session narrative. Next agent `arra_trace_list` sees N root-depth raw traces with no indication they're from one session. Always run Step 7e's `arra_trace_link(prev, next)` to build a chain. Session's first trace is the chain head; paste `arra_trace_chain(head)` into the retro.
 
 ---
 
@@ -386,3 +422,4 @@ This workflow is complete **only** when all are true:
 
 - 2026-04-16 — Initial version, written during `tester` activation. Drafted against the integration-test-writer→tester supersession as a working example of how resolutions get filed; shape follows workflow-1 and workflow-2 conventions (same preamble, DoD, pitfalls, escalation blocks). Awaiting first live run by `pg-writer-oracle` for real-world refinement.
 - 2026-04-17 — Step 7 expanded to 7a/7b/7c/7d after the first live run (`ψ/memory/retrospectives/2026-04/16/17.00_workflow-4-first-live-run.md`) observed that `arra_supersede` was silently deferred due to indexer lag, leaving drift learnings without machine-readable successor pointers. New sub-steps make the verify/call/confirm cycle explicit, add a `#pending-supersede` escape hatch for indexer outages, and add two pitfalls (skipping supersede because the prose explains it; calling supersede before the resolution is indexed). DoD checklist tightened to require the 7d verify query to return the `newId` before the box is checked.
+- 2026-04-17 (later) — Added Step 7e (arra_trace + arra_trace_link) so per-drift resolutions form a **session chain** instead of disconnected traces. Without the chain, a future agent running `arra_trace_list` sees N raw traces with no indication they're from one session. With the chain, `arra_trace_chain(<head>)` returns the narrative of the session's reconcile pass — pasteable into retro. New pitfall entry.

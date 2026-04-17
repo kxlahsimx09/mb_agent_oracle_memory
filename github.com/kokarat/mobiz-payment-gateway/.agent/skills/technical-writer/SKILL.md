@@ -159,10 +159,18 @@ arra_search query="<topic> technical-writer <repo-scope>" type=all limit=10
 arra_reflect                                   # grounding
 arra_threads status="answered" limit=10        # consume oracle answers (§"Asking Oracle")
 arra_threads status="pending" limit=10         # check threads I left open
+arra_trace_list status="raw" limit=10          # raw traces I never distilled (prior W4 chains, W1 passes)
+arra_trace_list status="distilling" limit=5    # mid-distill traces I should finish
 bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter
 ```
 
 Expected audit output: `✅ no double-wrap` + `✅ every indexed doc has a title:`. If `❌` or `⚠️` appears → a previous session left broken vault files. **Fix before writing new ones** — mixing new writes with legacy breakage makes future debugging impossible.
+
+**Handling trace results:**
+
+- `raw` traces older than ~3 days: either promote to `distilled` (write `awakening` if insight crystallized, optionally `arra_supersede`-link to a learning) OR leave them raw with a one-line note in this session's retro explaining why. Don't silently ignore.
+- `distilling` traces: finish them before starting new work. An abandoned `distilling` trace is a half-formed thought that pollutes future searches.
+- For each chain found via `arra_trace_chain(<trace_id>)`: if this session's work is a follow-up on that chain, **extend** it with `arra_trace_link`, don't fork a new standalone trace.
 
 While I work, as soon as I confirm a durable fact from code, I call `arra_learn` with **the mandatory 3-layer tag set** plus feature tags:
 

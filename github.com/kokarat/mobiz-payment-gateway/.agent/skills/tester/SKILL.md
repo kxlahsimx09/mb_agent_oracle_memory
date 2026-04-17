@@ -145,12 +145,10 @@ stop and report.
 3. **Load my own history.** `arra_search query="tester" type=learning
    limit=20` — prior stale-test findings, mock-bank drift notes, coverage
    gaps I've already flagged. Do not re-file what has been filed.
-4. **Check my threads.** `arra_threads status="answered" limit=10` (Oracle
-   answered since last session — ready to consume) + `arra_threads
-   status="pending" limit=10` (still waiting on a human or on me). Read
-   with `arra_thread_read(id)`; close with `arra_thread_update(id, status
-   ="closed")` once resolved. Ignoring this step is how threads become
-   zombies.
+4. **Check my threads + traces.**
+   - `arra_threads status="answered" limit=10` (Oracle answered since last session — ready to consume) + `arra_threads status="pending" limit=10` (still waiting on a human or on me). Read with `arra_thread_read(id)`; close with `arra_thread_update(id, status="closed")` once resolved.
+   - `arra_trace_list status="raw" limit=10` (my raw traces that weren't distilled — W1 validate findings, mock-bank discovery chains) + `arra_trace_list status="distilling" limit=5` (mid-distill traces I should finish). For each chain discovered via `arra_trace_chain(<id>)`: if this session's work is a follow-up, **extend** with `arra_trace_link` — don't fork a new standalone trace.
+   Ignoring this step is how threads become zombies and traces accumulate as orphan raw entries.
 5. **Re-read my SKILL.** `.agent/skills/tester/SKILL.md` (this file). This
    catches charter drift if a human edited the skill between sessions.
 6. **Read `integration-test-writer` SKILL** (superseded but canonical on
