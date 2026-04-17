@@ -109,6 +109,15 @@ Files **outside** this table are out-of-territory for Workflow 2:
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before opening any new work, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion.
+
+- **Pass 1 (primary)**: `grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]' docs/current-system.md workflow README.md CLAUDE.md`. For every id: `arra_thread_read` → if `status="answered"` run the 4-step resolution block (read → classify → update doc + strip/transform marker → `arra_thread_update(status="closed")` + child trace).
+- **Pass 2 (safety-net)**: `arra_threads(status="answered", limit=50)` — any id not seen in Pass 1 but clearly bot-writer territory = earlier pass leaked an anchor → file `#workflow-bug + #thread-orphan`.
+
+**Gate:** Step 1 does not start until Pass 1 = 0 and Pass 2 = 0 unfiled. On a daily-cron schedule, Step 0 must clear the same day it runs — skipping ages zombie threads by 24h per cycle.
+
 ### Step 1 — Grounding (3 min)
 
 ```
@@ -256,6 +265,8 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for `github.com/kokarat/bank-bot`, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a mobiz-payment-gateway W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
+- [ ] Step 0 ran to completion: Pass 1 left zero `answered`-status markers in bot-writer territory; Pass 2 returned zero bot-writer-territory threads not seen in Pass 1. Daily-cron W2 must clear same-day.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc in the same PR. Orphan thread count = 0.
 
 ---
 
@@ -282,3 +293,4 @@ If multiple commits were covered in one session, write **one session-level retro
 - 2026-04-16 — Initial version, adapted from mobiz's `workflow-2-track-commit.md`. Territory map rewritten for Node.js + Playwright layout. Thresholds scaled down (bot repo is smaller). Session-level retro rule imported from tester's workflow-2.
 - 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Bank-bot W2 passes now extend the same horizontal chain the mobiz writer uses — `W1-baseline → W2₁ → W2₂ → …` — and future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Per-finding child traces are still filed at W1 scope; W2 findings remain at `arra_learn` granularity to avoid trace noise.
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint, BOT_SECRET handshake). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no mobiz trace exists yet, defer — mobiz's W2 will link back. DoD added a check that refuses "forgot to look."
+- 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate. Daily W2 cron is especially exposed to zombie threads because it runs every morning, so a single missed resolution ages 24h per cycle. Scoping via doc-anchored grep — see `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired `[AWAITING_THREAD]` marker.

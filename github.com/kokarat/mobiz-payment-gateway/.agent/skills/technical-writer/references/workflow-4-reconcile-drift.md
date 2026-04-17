@@ -85,6 +85,15 @@ Never produced in this workflow:
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before fetching the drift queue, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion. W4 is especially sensitive to stale threads: many B-class escalations open threads (`arra_thread`), and prior W1/W2/W8 passes may have opened threads that resolve *exactly* a drift item you're about to triage — a `[AWAITING_THREAD:<id>]` whose thread has since been answered may have already been resolved by the human, making its associated `#drift` learning obsolete. Miss that, and you either spend W4 effort on a drift that's already been answered or — worse — contradict the human's answer.
+
+- **Pass 1 (primary)**: `grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]'` across pg-writer territory. For each `answered` id, run the 4-step resolution block; the doc update may dissolve a drift item on the queue you're about to process.
+- **Pass 2 (safety-net)**: `arra_threads(status="answered", limit=50)` → any pg-writer id not found in Pass 1 = workflow bug, file `#workflow-bug + #thread-orphan`.
+
+**Gate:** Step 1 does not start until Pass 1 = 0 remaining and Pass 2 = 0 unfiled. Drifts that resolve via thread don't belong in the W4 queue — they belong in a closed thread + an updated doc.
+
 ### Step 1 — Fetch the queue (5 min)
 
 ```
@@ -388,6 +397,8 @@ This workflow is complete **only** when all are true:
 - [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback.
 - [ ] `arra_handoff` entry for the PR with the total counts by class and any residual items the human should know about.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero pg-writer-territory threads not in Pass 1. If Step 0 dissolved items that were otherwise on the Step 1 queue (thread answer pre-resolved them), those items were removed from the scratch list and noted in the retro — they are not a "closed" (A)/(B)/(C) outcome; they are "pre-resolved via thread".
+- [ ] **Anchor discipline**: every `arra_thread(...)` call made in this pass (typically B-class escalations to request human decision) inserted a paired `[AWAITING_THREAD:<id>]` marker into either §9 "Known drift" row or the resolution learning's `related:` list in the same PR. Orphan thread count = 0.
 
 `docs/.baseline` is **not** bumped by this workflow — reconciling drift does not re-verify the whole system. A baseline bump is Workflow 1's job.
 
@@ -423,3 +434,4 @@ This workflow is complete **only** when all are true:
 - 2026-04-16 — Initial version, written during `tester` activation. Drafted against the integration-test-writer→tester supersession as a working example of how resolutions get filed; shape follows workflow-1 and workflow-2 conventions (same preamble, DoD, pitfalls, escalation blocks). Awaiting first live run by `pg-writer-oracle` for real-world refinement.
 - 2026-04-17 — Step 7 expanded to 7a/7b/7c/7d after the first live run (`ψ/memory/retrospectives/2026-04/16/17.00_workflow-4-first-live-run.md`) observed that `arra_supersede` was silently deferred due to indexer lag, leaving drift learnings without machine-readable successor pointers. New sub-steps make the verify/call/confirm cycle explicit, add a `#pending-supersede` escape hatch for indexer outages, and add two pitfalls (skipping supersede because the prose explains it; calling supersede before the resolution is indexed). DoD checklist tightened to require the 7d verify query to return the `newId` before the box is checked.
 - 2026-04-17 (later) — Added Step 7e (arra_trace + arra_trace_link) so per-drift resolutions form a **session chain** instead of disconnected traces. Without the chain, a future agent running `arra_trace_list` sees N raw traces with no indication they're from one session. With the chain, `arra_trace_chain(<head>)` returns the narrative of the session's reconcile pass — pasteable into retro. New pitfall entry.
+- 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation for W4 specifically: a `[AWAITING_THREAD:<id>]` whose thread is now answered may pre-resolve a queued drift — miss that and you either do redundant W4 work or contradict the human's answer. Scoping via doc-anchored grep. See `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero, and thread anchors opened during this pass (B-class escalations) must live in §9 or the resolution learning's `related:` field in the same PR.

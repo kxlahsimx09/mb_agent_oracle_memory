@@ -90,6 +90,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 5. Write an ADR | A reversible-with-effort decision is made | `references/workflow-5-adr.md` |
 | 6. Produce a runbook | An incident taught us something, or a new ops surface appears | `references/workflow-6-runbook.md` |
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
+| — Thread resolution (sub-procedure) | Step 0 of every main workflow; also on-demand when the wake-up ritual shows answered threads | `references/workflow-thread-resolve.md` |
 
 ## Vault path (the #1 trap)
 
@@ -146,7 +147,19 @@ arra_threads(status="pending", limit=10)    # threads I opened or should help wi
 arra_threads(status="answered", limit=10)   # Oracle-answered since last session — ready to consume
 ```
 
-Ignoring this step is how threads become zombies.
+**Answered threads are blocking, not optional.** If the `answered` call returns non-zero, treat the session as being in **thread-resolution mode** — run the procedure in `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion before starting any main workflow. Step 0 of every main workflow re-checks, so skipping here only shifts the work.
+
+### Scoping: "my threads" is doc-anchored, not title-anchored
+
+A thread belongs to this instance iff a doc I own currently contains a `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker referencing its id. Title prefixes collide across agents and survive renames; doc anchors do not.
+
+**Binding rule on every `arra_thread()` call:** you **must** insert the paired marker into the doc produced in the same PR, in the same commit. A thread without a doc anchor is a workflow bug, not a thread. Every main workflow's DoD now rejects orphan threads.
+
+See `references/workflow-thread-resolve.md` for the full territory map + 4-step resolution block + the orphan safety-net scan.
+
+### Cross-repo threads (known gap)
+
+Threads tagged `#repo:cross` (shared contract with mobiz-payment-gateway, callback shape, signature helper, OTP flow, MDR codes) don't fit the single-instance doc-anchor model: bot-writer's grep won't see pg-writer's docs and vice versa. **Until** a shared `docs/cross-repo-questions.md` anchor doc exists in both repos, the convention is: the opening writer files an `arra_learn` tagged `#repo:cross + #thread-anchor` naming the thread id + instruction for the sibling instance to mirror the anchor. Tracked as a known limitation in `workflow-thread-resolve.md §Cross-repo threads`.
 
 ---
 

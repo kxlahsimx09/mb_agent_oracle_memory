@@ -82,6 +82,15 @@ Never produced in this workflow:
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before any new work, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion.
+
+- **Pass 1 (primary)**: `grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]' docs/current-system.md workflow README.md CLAUDE.md`. For every id found: `arra_thread_read(<id>)`. On `status="answered"` run the 4-step resolution block (read → classify → update doc + strip/transform marker → `arra_thread_update(status="closed")` + chain child trace).
+- **Pass 2 (safety-net)**: `arra_threads(status="answered", limit=50)`. Any returned id not seen in Pass 1 + clearly in bot-writer territory = earlier pass leaked an anchor → file `#workflow-bug + #thread-orphan`.
+
+**Gate:** Step 1 does not start until Pass 1 = zero remaining answered markers and Pass 2 = zero unfiled orphans. "Forgot to check" is not a legal outcome.
+
 ### Step 1 — Grounding (5 min)
 
 ```
@@ -406,6 +415,8 @@ Table of `[UNVERIFIED]` markers with reason.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] Root trace (Step 2b) opened with `queryType=project` + baseline commit in `foundCommits`. If a prior baseline trace exists, `arra_trace_link(prev, root)` was called to chain baseline-over-time history.
 - [ ] Every `[DRIFT]` and `[UNVERIFIED]` / `[AWAITING_THREAD]` has a child trace with `parentTraceId=ROOT_TRACE` (Step 9). Retro §"Session map" has `arra_trace_get(ROOT_TRACE, includeChain=true)` pasted.
+- [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in bot-writer territory; Pass 2 (orphan scan) returned zero bot-writer-territory threads not seen in Pass 1.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call made during this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc that is part of the same PR. Orphan count = 0.
 
 ---
 
@@ -432,3 +443,4 @@ Table of `[UNVERIFIED]` markers with reason.
 
 - 2026-04-16 — Initial version, adapted from mobiz's `workflow-1-baseline-current.md`. Shape identical; inputs and template rewritten for Node.js + Playwright stack. First live run will refine the template.
 - 2026-04-17 — Added Step 2b (open baseline's ROOT_TRACE with `queryType=project`) and extended Step 9 (Log learnings) with per-finding child traces anchored to ROOT_TRACE via `parentTraceId`. Step 11 retro now pastes `arra_trace_get(ROOT_TRACE, includeChain=true)` as a "Session map". DoD: root trace + per-drift child traces + horizontal chain linking to prior baselines.
+- 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation: observed zombie threads — agent opened a thread in a prior W8/W1 pass, human answered, next session ignored the answer. Fix: doc-anchored grep (Pass 1) + orphan scan (Pass 2). Scoping is `[AWAITING_THREAD]`/`[RATIFICATION_PENDING]` markers in bot-writer territory, not title prefix. DoD added two items: Step 0 must clear to zero, and every `arra_thread(...)` call in the pass must insert a paired doc marker in the same PR (anchor discipline). See `workflow-thread-resolve.md`.

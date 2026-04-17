@@ -95,6 +95,15 @@ Files **outside** this table are out-of-territory for Workflow 2. Either they be
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before opening any new work, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion.
+
+- **Pass 1 (primary)**: `grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]'` across pg-writer territory (see territory map in `workflow-thread-resolve.md`). For each id: `arra_thread_read` → if `status="answered"` run the 4-step resolution block (read → classify → update doc + strip/transform marker → `arra_thread_update(status="closed")` + child trace). Prior W2 passes that left behind `[AWAITING_THREAD]` markers are the most common source here (the daily cron hits these first).
+- **Pass 2 (safety-net)**: `arra_threads(status="answered", limit=50)` → any id **not** seen in Pass 1 but clearly pg-writer territory = an earlier pass leaked an anchor → file `#workflow-bug + #thread-orphan` learning + `arra_inbox` for human.
+
+**Gate:** Step 1 does not start until Pass 1 = zero remaining answered markers and Pass 2 = zero unfiled orphans. A daily W2 cron pass that skips Step 0 ages zombie threads by 24h every run.
+
 ### Step 1 — Grounding (3 min)
 
 ```
@@ -336,6 +345,8 @@ This workflow is complete **only** when all are true:
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a bank-bot W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
+- [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero pg-writer-territory threads not found by Pass 1. On a daily-cron schedule, Step 0 must clear the same day it runs — Step 0 skip = zombie ageing.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc that is part of the same PR. Orphan thread count = 0. Check: `grep AWAITING_THREAD` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.
 
 ---
 
@@ -373,3 +384,4 @@ This workflow is complete **only** when all are true:
 - 2026-04-16 — Initial draft by a Claude Code assistant during a debugging session for arra-oracle-v3. Written from the SKILL.md commit-tracking contract (§Commit tracking contract) and by mirroring Workflow 1's structure. **Not yet reviewed by the `technical_writer` agent** — treat as draft until the next `pg-writer-oracle` session ratifies it.
 - 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Each W2 pass is now a node in a horizontal chain that shows evolution over time: W1-baseline → W2₁ → W2₂ → … Future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Findings inside the pass (`#drift`, `[UNVERIFIED]`, deferrals) are still filed as `arra_learn` — not as child traces — because W2 work units are typically smaller than W1 and the per-finding child pattern there would be noise. If a single W2 pass grows large enough that per-finding children help, fall back to the W1 pattern and note it in the retro.
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no other-repo trace exists yet, defer — the other repo's W2 will link back. DoD added a check that refuses "forgot to look."
+- 2026-04-17 — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation especially acute for W2: the daily cron re-runs the workflow every morning, so a skipped thread check ages a zombie thread by 24h per cycle. Scoping via doc-anchored grep (not title prefix) — see `workflow-thread-resolve.md`. DoD added two items: Step 0 clears to zero, and every `arra_thread(...)` in the pass inserts a paired `[AWAITING_THREAD]` marker (anchor discipline).

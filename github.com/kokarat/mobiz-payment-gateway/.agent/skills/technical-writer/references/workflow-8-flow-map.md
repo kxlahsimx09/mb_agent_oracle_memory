@@ -91,6 +91,15 @@ Headers at fixed casing. No decorative prose between sections. The document is b
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before opening any W8 work, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion.
+
+- **Pass 1 (primary)** — `grep` for both `[AWAITING_THREAD:<id>]` and `[RATIFICATION_PENDING:<id>]` across pg-writer territory, with extra attention to `docs/flows/`. For `answered` threads, run the 4-step resolution block. **Ratification threads** (the `[RATIFICATION_PENDING]` variant) have an additional test in Step 2 of the resolution block: a neutral "looks good" answer is *insufficient* — require explicit engagement with the spec. Downgrade and follow up if the answer is vague.
+- **Pass 2 (safety-net)** — `arra_threads(status="answered", limit=50)`; any pg-writer-territory id not seen in Pass 1 = leaked anchor → file `#workflow-bug + #thread-orphan`.
+
+**Gate:** Step 1 does not start until Pass 1 = 0 answered markers and Pass 2 = 0 unfiled orphans. W8 is the workflow most likely to accumulate `[RATIFICATION_PENDING]` markers (every reverse-engineered flow spawns one), so Step 0 throughput directly determines how fast the flow portfolio graduates from "pending" to "ratified".
+
 ### Step 1 — Grounding (3 min)
 
 ```
@@ -362,6 +371,8 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 - [ ] Retrospective written (AI Diary + Honest Feedback, mandatory).
 - [ ] `arra_handoff` entry with PR pointer + open thread ids + ratification thread id.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep, including `[RATIFICATION_PENDING]`) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero unfiled orphans. Any ratification thread whose answer was judged insufficient stays open with a follow-up message — not closed prematurely.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass (both question threads and the mandatory ratification thread for reverse-engineered flows) inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md` in the same PR. Orphan thread count = 0. Count check: `grep -cE '\[(AWAITING_THREAD|RATIFICATION_PENDING):' docs/flows/<slug>.md` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.
 
 ---
 
@@ -400,3 +411,4 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 ## Change log for this workflow file
 
 - 2026-04-17 — Initial version. Scoped to `pg-writer-oracle` only (mobiz-payment-gateway pilot); bot-writer does not have W8 yet. Mermaid-only diagrams. Hybrid authorship per human decision: strict transcription required for **new** flows (tier S1/S2 claim mandatory); reverse-engineering allowed for **existing** flows but gated by a `[RATIFICATION_PENDING]` thread. `queryType="pattern"` for the W8 root trace. Per-step children for `[UNIMPLEMENTED]`/`[DRIFT]` (like W1). Claim-strength label in the doc header so downstream agents route by trust level.
+- 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)**. Motivation observed during the first W8 run: agent opened a thread, human answered, next session didn't consume the answer — and the thread never closed. Fix: doc-anchored Pass 1 + orphan-scan Pass 2 (see `workflow-thread-resolve.md`). Ratification-thread answers get a stricter test — a neutral "looks good" is insufficient; the human must engage with the spec. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired marker (anchor discipline).

@@ -86,6 +86,31 @@ Never produced in this workflow:
 
 ## Steps
 
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before opening any new work, run the procedure in `references/workflow-thread-resolve.md` to completion. In short:
+
+**Pass 1 (doc-anchored, primary):**
+
+```bash
+grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]' \
+  docs/current-system.md docs/data-model.md docs/schedulers.md \
+  docs/bank-bot.md docs/flows docs/runbooks docs/releases \
+  docs/migration-notes.md docs/adr README.md CLAUDE.md 2>/dev/null | sort -u
+```
+
+For every id found: `arra_thread_read(<id>)`, dispatch on `status`. Only `status="answered"` triggers the 4-step resolution block (read → classify → update doc + strip/transform marker → `arra_thread_update(status="closed")` + chain child trace if a pass-scoped trace is already open). `closed` with surviving marker → strip the orphan marker + file `#workflow-bug + #orphan-marker` learning.
+
+**Pass 2 (safety-net):**
+
+```
+arra_threads(status="answered", limit=50)
+```
+
+Any returned thread id **not** seen in Pass 1 + clearly in pg-writer territory (title mentions `flow:`, `current-system`, `scheduler`, `deposit`, `bank-bot`) = an earlier pass leaked an anchor. File `#workflow-bug + #thread-orphan` + `arra_inbox` for human triage.
+
+**Gate:** Step 1 does not start until Pass 1 resolves to zero remaining `answered` markers and Pass 2 has zero unfiled orphans in pg-writer territory. "Forgot to check" is not a legal outcome.
+
 ### Step 1 — Grounding (5 min)
 
 ```
@@ -425,6 +450,8 @@ This workflow is complete **only** when all are true:
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`. If this session introduced any broken file, fix it before closing the PR.
 - [ ] Root trace (Step 2b) opened with `queryType=project` + baseline commit in `foundCommits`. If a prior baseline trace exists, `arra_trace_link(prev, root)` was called to chain the baseline-over-time history.
 - [ ] Every `[DRIFT]` and `[UNVERIFIED]` / `[AWAITING_THREAD]` has a child trace with `parentTraceId=ROOT_TRACE` (Step 10). Retro §"Session map" has `arra_trace_get(ROOT_TRACE, includeChain=true)` pasted.
+- [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero pg-writer-territory threads not found by Pass 1. Any hit was resolved or filed as a `#workflow-bug` learning before Step 1 started.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call made during this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc that is part of the same PR. Orphan count = 0. Verify with `grep` of `AWAITING_THREAD` in the PR diff vs count of `arra_thread(` calls in the retro.
 
 ---
 
@@ -450,3 +477,4 @@ This workflow is complete **only** when all are true:
 
 - 2026-04-14 — Initial version, written during technical_writer bootstrapping for mobiz-payment-gateway. Baseline commit of payment-gateway at time of writing: `1e48da1`.
 - 2026-04-17 — Added Step 2b (open baseline's ROOT_TRACE) and extended Step 10 with per-finding child traces anchored to ROOT_TRACE via `parentTraceId`. Step 12 retro now pastes `arra_trace_get(ROOT_TRACE, includeChain=true)` as a "Session map". DoD tightened: root trace + horizontal chain linking + every drift/unverified has a child trace. Prior baselines produced disconnected traces; new shape is a tree per session plus a chain across sessions.
+- 2026-04-17 — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation: observed zombie threads — agent opened a thread, human answered, next session ignored the answer. Fix: doc-anchored grep as primary pass; orphan scan as safety-net. Scoping is `[AWAITING_THREAD]`/`[RATIFICATION_PENDING]` markers in pg-writer territory, not title prefix (title collides across agents). DoD added two items: Step 0 must clear to zero before Step 1 starts, and every `arra_thread(...)` call in the pass must insert a paired doc marker in the same PR (anchor discipline). See `workflow-thread-resolve.md` for the 4-step resolution block and territory map.
