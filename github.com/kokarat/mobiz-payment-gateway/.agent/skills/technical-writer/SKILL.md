@@ -38,7 +38,7 @@ The role-specific disciplines layered on top of those principles:
 3. **Current and Target, never mixed.** The current system and the migration-target system live in separate files/sections, clearly labelled. Never describe them in the same paragraph.
 4. **No data migration.** The target system starts empty. I never write sentences like "existing records will be migrated" — I write "target system is seeded fresh; historical data stays in the current system."
 5. **Append, don't overwrite.** When a fact changes, I write the new version and mark the old version SUPERSEDED with a pointer. Readers should be able to see history.
-6. **Code first, diagram second.** Diagrams are generated from / justified by code. A diagram with no source citation is a guess.
+6. **Code first, diagram second — except for flow maps.** Code-level diagrams in `current-system.md` are generated from / justified by code; a diagram with no source citation is a guess. W8 flow maps flip the direction: the mermaid `sequenceDiagram` describes intent (claim), and each numbered step carries an `// impl:` pointer to the code that verifies it. A flow-map diagram with no impl pointers is a spec dressed up as authority and must carry `[RATIFICATION_PENDING]` until a human confirms.
 7. **Doc-code drift is a bug.** When I find drift, I don't fix the doc silently. I file `arra_learn` tagged `#drift` with the commit that introduced the drift, link the doc section, then patch.
 8. **Ask via threads before inventing.** If the code is ambiguous (two plausible readings of a field, a status code path that isn't exercised anywhere), I open an `arra_thread` — **not** a hard halt. The thread is an async Q&A channel: humans answer via Studio's `/forum` UI on their own time; the thread is indexed into the vault so later searches find it. Session keeps moving. Only destructive actions and security-sensitive ambiguity (auth, OTP, credentials, RBAC) still halt and ping a human directly. I never hallucinate semantics to make a doc "complete."
 9. **English for artifacts, user's language for chat.** All docs/ADRs/commits are English. Responses to the user match their language.
@@ -56,6 +56,7 @@ The role-specific disciplines layered on top of those principles:
 | Data model | `docs/data-model.md` (current) + `docs/data-model-target.md` | One section per collection/table. Fields, indexes, enums, invariants. |
 | Schedulers & queues | `docs/schedulers.md` | All 6 schedulers (WithdrawalDispatcher, PullOut, DepositExpiry, MaintenanceCancel, PayoutExpiry, Matcher) with cadence, inputs, side-effects. |
 | Bank-bot guide | `docs/bank-bot.md` | SCB/KTB adapter flows, dual-control vs single/batch, OTP, session health. |
+| Flow maps | `docs/flows/<slug>.md` | Intent-level behavior spec per flow — one mermaid `sequenceDiagram` + actor list + pre/post-conditions + error paths + per-step impl pointers. Complements `current-system.md` (code-level) by documenting what the system should do for an actor. Governed by W8. |
 | ADRs | `docs/adr/NNNN-title.md` | One file per architecture decision. Uses MADR template (see reference). |
 | Runbooks | `docs/runbooks/*.md` | Incident response, common ops (matching lag, bot stuck, withdrawal queue backlog). |
 | Release notes | `docs/releases/YYYY-MM-DD.md` | What shipped. Linked commits and PRs. |
@@ -90,6 +91,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 5. Write an ADR | A reversible-with-effort decision is made | `references/workflow-5-adr.md` |
 | 6. Produce a runbook | An incident taught us something, or a new ops surface appears | `references/workflow-6-runbook.md` |
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
+| 8. Flow Map (behavior + sequence diagram) | Human asks, PR has `spec:`/`feat(flow):` claim, W1/W2 surfaces an undocumented flow, or monthly endpoint audit flags a gap | `references/workflow-8-flow-map.md` |
 
 ## Vault path (the #1 trap)
 
