@@ -175,7 +175,7 @@ Do not attempt to fix swagger in this workflow — just record drift.
 Use the template in §Template below. Strict rules:
 
 1. Every non-trivial claim ends with a verification marker: `// verified: <path>@<hash>` where `<hash>` is the 7-char short of the baseline commit.
-2. If a claim could not be verified, mark it `[UNVERIFIED — <reason>]` inline. These are acceptable **only** if they represent less than 5% of the claims in the document. Above 5%, the workflow has failed — halt and ask the user.
+2. If a claim could not be verified, mark it `[UNVERIFIED — <reason>]` inline **AND** open an `arra_thread(title="<claim summary>", message="<context + cite file:line + reading A / reading B>")`. Replace the marker with `[AWAITING_THREAD:<threadId> — <reason>]`. Above **5% of total claims** carrying `[AWAITING_THREAD:*]`, stop after bulk-filing threads for every remaining unverified claim — close the baseline with a summary of open threads in §10 and in the PR body. **Do not hard-halt the session**; the threads discover answers async. Security-sensitive ambiguity still halts — see Escalation.
 3. No forward-looking language ("will support", "is planned to") without a linked issue number. This is the **current system**, not the roadmap.
 4. No marketing prose. No exclamation marks. No "seamless", "robust", "enterprise-grade".
 5. Thai is acceptable in quoted strings from code (e.g., bank statement descriptions) but English only for prose.
@@ -343,9 +343,9 @@ This workflow is complete **only** when all are true:
 
 ## Escalation
 
-- If you cannot verify > 5% of claims, halt and ping the user. The root cause is usually either "code is newer than CLAUDE.md" (good — document the drift) or "I don't understand this subsystem" (acceptable — name which one and ask).
-- If you find a security-sensitive behavior that `CLAUDE.md` does not mention (e.g. an auth bypass path), halt and CC `security_auditor` in `arra_inbox` before continuing. Do not document the vulnerability in public `docs/*` files until `security_auditor` has acknowledged.
-- If the baseline reveals that CURRENT and TARGET systems have started to share code (a merge instead of a migration), halt — that contradicts §3 of SKILL.md ("Current and Target, never mixed") and needs a human-level decision before the baseline can proceed.
+- If you cannot verify > 5% of claims, **bulk-file one `arra_thread` per claim** (don't hard-halt). Close the baseline with the open-threads summary and note the count in the PR body. Root cause is usually either "code is newer than CLAUDE.md" (document the drift) or "I don't understand this subsystem" (name it in each thread). Next session's wake-up reconciles answered threads.
+- If you find a security-sensitive behavior that `CLAUDE.md` does not mention (e.g. an auth bypass path), **halt AND open a thread AND CC `security_auditor` in `arra_inbox`** before continuing. Do not document the vulnerability in public `docs/*` files until `security_auditor` has acknowledged — the thread is for internal context only, not public exposure.
+- If the baseline reveals that CURRENT and TARGET systems have started to share code (a merge instead of a migration), **halt** — that contradicts §3 of SKILL.md ("Current and Target, never mixed") and needs a human-level decision before the baseline can proceed. A thread here would be insufficient; this is an architectural drift that blocks the whole workflow.
 
 ---
 

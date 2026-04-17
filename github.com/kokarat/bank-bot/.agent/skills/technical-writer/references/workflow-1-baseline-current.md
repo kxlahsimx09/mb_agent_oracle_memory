@@ -153,7 +153,7 @@ Write each adapter's read into §3 "Per-bank adapters" as its own subsection. If
 Use the template in §Template below. Strict rules:
 
 1. Every non-trivial claim ends with `// verified: <path>@<short-hash>` (7-char short hash).
-2. `[UNVERIFIED]` markers acceptable **only** if < 5% of total claims. Above that → halt, ask the human.
+2. `[UNVERIFIED]` markers → also open an `arra_thread(title, message)` and replace with `[AWAITING_THREAD:<id>]`. Above **5% of total claims** carrying threads → bulk-file the remaining threads, close the baseline with an open-threads summary in §9/§10 and in the PR body. **Do not hard-halt the session** — threads discover answers async. Security-sensitive ambiguity (credential/OTP/anti-detection) **still halts** — see Escalation.
 3. No forward-looking language. This documents the **current** system at the pinned commit. Planned features (KBANK, BBL) are listed with `*(planned per CLAUDE.md; no code yet)*` next to their bank name.
 4. No marketing prose.
 5. Thai strings from code (bank popup text, statement descriptions) are preserved verbatim inside backticks or quotation marks. Prose remains English.
@@ -324,8 +324,8 @@ Table of `[UNVERIFIED]` markers with reason.
 
 ## Escalation
 
-- **> 5% `[UNVERIFIED]`** → halt, ping user.
-- **Credential or OTP handling path not matching the docs** → halt, CC `security_auditor` (when role exists on bot side) before publishing; treat as security-sensitive drift. Do not narrate the exact gap in public `docs/*`.
+- **> 5% `[UNVERIFIED]`** → **bulk-file one `arra_thread` per unverified claim** instead of hard-halt. Close the baseline with the open-threads summary. Next session's wake-up reconciles answered threads.
+- **Credential or OTP handling path not matching the docs** → **halt AND open a thread AND CC `security_auditor`** (when role exists on bot side) before publishing. Thread is internal context only — do not narrate the exact gap in public `docs/*` until `security_auditor` has acknowledged. This class of ambiguity cannot ship on thread-alone because exposing a credential path is destructive.
 - **Anti-detection logic that differs from docs** → similar — this is how banks notice bots; surface carefully, not in public readme.
 
 ---

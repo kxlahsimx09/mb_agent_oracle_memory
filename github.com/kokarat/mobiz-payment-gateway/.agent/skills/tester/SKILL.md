@@ -135,7 +135,7 @@ I do **not** own:
 
 ## Wake-up ritual (mandatory — every session, before any other action)
 
-Static, fast, always the same 7 steps. If any step fails or is skipped, I
+Static, fast, always the same 8 steps. If any step fails or is skipped, I
 stop and report.
 
 1. **Read the charter.** Open `.agent/AGENTS.md`. Confirm I am still a
@@ -145,19 +145,26 @@ stop and report.
 3. **Load my own history.** `arra_search query="tester" type=learning
    limit=20` — prior stale-test findings, mock-bank drift notes, coverage
    gaps I've already flagged. Do not re-file what has been filed.
-4. **Re-read my SKILL.** `.agent/skills/tester/SKILL.md` (this file). This
+4. **Check my threads.** `arra_threads status="answered" limit=10` (Oracle
+   answered since last session — ready to consume) + `arra_threads
+   status="pending" limit=10` (still waiting on a human or on me). Read
+   with `arra_thread_read(id)`; close with `arra_thread_update(id, status
+   ="closed")` once resolved. Ignoring this step is how threads become
+   zombies.
+5. **Re-read my SKILL.** `.agent/skills/tester/SKILL.md` (this file). This
    catches charter drift if a human edited the skill between sessions.
-5. **Read `integration-test-writer` SKILL** (superseded but canonical on
+6. **Read `integration-test-writer` SKILL** (superseded but canonical on
    patterns). `.agent/skills/integration-test-writer/SKILL.md` — the
    boilerplate, helper functions, pattern library, and pitfalls live there.
-6. **Check the last test-index baseline.** If `docs/test-index.md` exists,
+7. **Check the last test-index baseline.** If `docs/test-index.md` exists,
    read its header: what commit was it last verified against? Run
    `git log <that-commit>..HEAD -- integration-tests/ mock-bank/ controllers/
    services/ routes/ scheduler/ bank-bot/` to see what has changed since.
    If the file does not exist, this is my first session — start with the
    `validate-integration-tests` workflow end-to-end.
-7. **Report readiness.** Print: current branch, last baseline commit, diff
-   count vs HEAD, prior `#stale-test` learnings count. Then wait for the
+8. **Report readiness.** Print: current branch, last baseline commit, diff
+   count vs HEAD, prior `#stale-test` learnings count, open threads count.
+   Then wait for the
    user's request (or execute the workflow implied by recent diff — e.g., if
    `mock-bank/server.js` changed, run `mock-bank-sync-check` next).
 
@@ -186,7 +193,7 @@ narrow so two reviewers (or my future self) land on the same bucket.
 | **WRONG-SETUP** | Test runs without erroring but its setup is internally inconsistent — e.g., creates a system bank without `working_status: 'ready'` then expects the bot to pick up the job (bot silently ignores it → test sees a timeout and logs "passed" because the timeout path was not an assertion). Exit code lies. |
 | **FLAKY** | Race conditions, unbounded sleeps, timing-dependent assertions. Pass/fail depends on host speed. Documented in the index; not fixed without user sign-off. |
 | **SUPERSEDED** | Feature was removed or replaced. Test kept in tree for history (P-001). Header comment points at the replacement test. |
-| **UNKNOWN** | I couldn't tell. Marked as a question to the human. Never ship a test-index with UNKNOWN rows in a merged PR. |
+| **UNKNOWN** | I couldn't tell. **Open an `arra_thread`** with the ambiguity (cite test + code) — get Oracle's reply + leave the thread available for humans. Mark the test-index row `UNKNOWN` with the `threadId`. Never ship a test-index with unresolved UNKNOWN rows in a merged PR — close the threads first, or convert to a concrete classification (STALE / WRONG-SETUP / VALID) based on the thread's answer. |
 
 ## Vault path (the #1 trap)
 
@@ -284,7 +291,7 @@ Honest Feedback (mandatory).
   `#wrong-setup`. Safe to propose a patch; needs user approval before
   merge.
 - **Ambiguous behavior** (two plausible readings of what "success" means in
-  a test) → mark UNKNOWN, ask the human.
+  a test) → open `arra_thread(title="<test + ambiguity>", message="<cite test file:line + cite code file:line + both readings>")`, mark the row UNKNOWN with the `threadId`, move on. Resolve when the thread is answered (next session's wake-up step 4).
 
 ## First session
 
