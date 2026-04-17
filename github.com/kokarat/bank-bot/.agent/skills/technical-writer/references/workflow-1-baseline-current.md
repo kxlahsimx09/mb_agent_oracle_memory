@@ -99,6 +99,29 @@ git log -1 --format='%H %ci %s'
 
 Record the full 40-char hash. If the commit moves mid-workflow (someone pushed to main while you're reading), **stop and restart**.
 
+### Step 2b — Open the baseline's root trace (1 min)
+
+A baseline is one big multi-hour investigation. Open an anchor trace now so every per-finding child trace (Step 9) can point back to it via `parentTraceId`. Future agents running `arra_trace_chain(<root>)` see the whole session as a tree.
+
+```
+arra_trace(
+  query="baseline — bank-bot at <short-hash>",
+  queryType="project",
+  scope="project",
+  project="github.com/kokarat/bank-bot",
+  foundCommits=[{ hash: "<40-char>", shortHash: "<7-char>", date: "<ISO>", message: "<subject>" }]
+)
+# store returned trace_id as ROOT_TRACE for the rest of the session
+```
+
+If a prior baseline trace exists for this repo (`arra_trace_list project="github.com/kokarat/bank-bot" queryType="project" limit=5`), chain horizontally:
+
+```
+arra_trace_link(prevTraceId="<prior baseline root trace_id>", nextTraceId=ROOT_TRACE)
+```
+
+No prior baseline → first run; skip the link (ROOT_TRACE becomes chain head).
+
 ### Step 3 — Structure read (10 min)
 
 Read in this order — do not skip ahead:
@@ -229,6 +252,26 @@ Typical baseline learnings for bank-bot:
 
 Aim for **5–12 learnings** on a first baseline.
 
+**Also: per-finding child traces.** For every `[DRIFT]` marker and every `[UNVERIFIED]` / `[AWAITING_THREAD:<id>]` you added, create a child trace under the session's `ROOT_TRACE` from Step 2b:
+
+```
+arra_trace(
+  query="<short drift/unverified summary>",
+  queryType="pattern",                    # recurring structural smell; use "general" for one-offs
+  scope="project",
+  project="github.com/kokarat/bank-bot",
+  parentTraceId=ROOT_TRACE,               # anchor to the baseline's root
+  foundFiles=[
+    { path: "<doc path:line>", type: "other", matchReason: "<why this is drift>", confidence: "high" },
+    { path: "<code path:line>@<short>", type: "other", matchReason: "<what code actually does>", confidence: "high" }
+  ],
+  foundCommits=[{ hash, shortHash, date, message }],    # if known
+  foundLearnings=["<companion #drift learning source_file>"]
+)
+```
+
+Children are **vertical** (parent → child) — they represent sub-investigations within the baseline pass. No `arra_trace_link` between siblings.
+
 ### Step 10 — Commit + PR (5 min)
 
 Branch: `docs/baseline-current-<short-hash>` (e.g. `docs/baseline-current-95dbb70`).
@@ -255,6 +298,20 @@ Per `AGENTS.md` §9, **never** `gh pr merge`.
 ### Step 11 — Retrospective (5 min)
 
 Run `rrr` per `AGENTS.md` §7. AI Diary + Honest Feedback are mandatory. Write retro file to `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_bot-baseline-<short>.md` (central vault path — NOT `bank-bot/ψ/`; see SKILL § "Vault path (the #1 trap)").
+
+**Paste the session's trace tree** into the retro as a "Session map" section:
+
+```
+arra_trace_get(ROOT_TRACE, includeChain=true)
+# paste the returned chain/children list into retro under ## Session map
+```
+
+If this baseline chained from a prior baseline (Step 2b), also paste the horizontal chain:
+
+```
+arra_trace_chain(ROOT_TRACE)
+# shows baseline-over-time history
+```
 
 ---
 
@@ -347,6 +404,8 @@ Table of `[UNVERIFIED]` markers with reason.
 - [ ] Retrospective under `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/…`, AI Diary + Honest Feedback present.
 - [ ] `arra_handoff` entry with PR pointer and next unanswered question.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] Root trace (Step 2b) opened with `queryType=project` + baseline commit in `foundCommits`. If a prior baseline trace exists, `arra_trace_link(prev, root)` was called to chain baseline-over-time history.
+- [ ] Every `[DRIFT]` and `[UNVERIFIED]` / `[AWAITING_THREAD]` has a child trace with `parentTraceId=ROOT_TRACE` (Step 9). Retro §"Session map" has `arra_trace_get(ROOT_TRACE, includeChain=true)` pasted.
 
 ---
 
@@ -372,3 +431,4 @@ Table of `[UNVERIFIED]` markers with reason.
 ## Change log for this workflow file
 
 - 2026-04-16 — Initial version, adapted from mobiz's `workflow-1-baseline-current.md`. Shape identical; inputs and template rewritten for Node.js + Playwright stack. First live run will refine the template.
+- 2026-04-17 — Added Step 2b (open baseline's ROOT_TRACE with `queryType=project`) and extended Step 9 (Log learnings) with per-finding child traces anchored to ROOT_TRACE via `parentTraceId`. Step 11 retro now pastes `arra_trace_get(ROOT_TRACE, includeChain=true)` as a "Session map". DoD: root trace + per-drift child traces + horizontal chain linking to prior baselines.

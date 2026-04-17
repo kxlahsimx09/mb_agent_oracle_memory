@@ -122,6 +122,32 @@ Record:
 
 If the range is empty, Workflow 2 is a no-op — update `last-verified-at` in `docs/.baseline` and exit. Note this in the retro.
 
+### Step 2b — Open the W2 trace + chain to prior (1 min)
+
+Each W2 pass is a follow-up on the most recent baseline (W1) or the most recent W2. It belongs in a **horizontal chain** (prev → next) so a future agent running `arra_trace_chain(<any-node>)` sees the evolution over time: W1 baseline → W2₁ → W2₂ → W2₃ …
+
+```
+arra_trace(
+  query="track-commit — <prior-short>..<new-short> (<N> commits)",
+  queryType="evolution",                    # this is change-over-time, not structural
+  scope="project",
+  project="github.com/kokarat/mobiz-payment-gateway",
+  foundCommits=[ ...each commit in the range as { hash, shortHash, date, message } ]
+)
+# store returned trace_id as W2_TRACE
+```
+
+Find the chain head (most recent baseline root or last W2 trace) and link:
+
+```
+arra_trace_list(project="github.com/kokarat/mobiz-payment-gateway",
+                queryType=["project","evolution"], depth=0, limit=5)
+# pick the most recent entry — that's the chain head to extend
+arra_trace_link(prevTraceId="<head>", nextTraceId=W2_TRACE)
+```
+
+If no prior trace exists → skip the link (agents before this one didn't record traces; accept the gap, don't invent a phantom predecessor).
+
 ### Step 3 — Classify each touched file (5 min)
 
 For each file in the range, assign one of:
@@ -274,6 +300,7 @@ This workflow is complete **only** when all are true:
 - [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback.
 - [ ] `arra_handoff` entry written with a pointer to the PR and the next expected Workflow 2 trigger.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 
 ---
 
@@ -309,3 +336,4 @@ This workflow is complete **only** when all are true:
 ## Change log for this workflow file
 
 - 2026-04-16 — Initial draft by a Claude Code assistant during a debugging session for arra-oracle-v3. Written from the SKILL.md commit-tracking contract (§Commit tracking contract) and by mirroring Workflow 1's structure. **Not yet reviewed by the `technical_writer` agent** — treat as draft until the next `pg-writer-oracle` session ratifies it.
+- 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Each W2 pass is now a node in a horizontal chain that shows evolution over time: W1-baseline → W2₁ → W2₂ → … Future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Findings inside the pass (`#drift`, `[UNVERIFIED]`, deferrals) are still filed as `arra_learn` — not as child traces — because W2 work units are typically smaller than W1 and the per-finding child pattern there would be noise. If a single W2 pass grows large enough that per-finding children help, fall back to the W1 pattern and note it in the retro.

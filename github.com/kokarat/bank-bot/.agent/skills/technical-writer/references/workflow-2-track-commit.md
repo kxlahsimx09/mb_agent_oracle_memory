@@ -134,6 +134,28 @@ Reject the fast path (escalate to Workflow 1) if:
 - `app.js` changed by > 50 LOC.
 - `core/` had > 2 files touched.
 
+### Step 2b — Open the W2 trace + chain to prior (1 min)
+
+Each W2 pass is a follow-up on the most recent baseline (W1) or the most recent W2 for this project. It belongs in a **horizontal chain** (prev → next) so future agents can reconstruct the evolution of `current-system.md` over time without re-reading every retro.
+
+```
+arra_trace(
+  query="track-commit — <prior-short>..<new-short> (<N> commits)",
+  queryType="evolution",
+  scope="project",
+  project="github.com/kokarat/bank-bot",
+  foundCommits=[ ...each commit in the range as { hash, shortHash, date, message } ]
+)
+# store returned trace_id as W2_TRACE
+
+arra_trace_list(project="github.com/kokarat/bank-bot",
+                queryType=["project","evolution"], depth=0, limit=5)
+# pick the most recent entry — that's the chain head to extend
+arra_trace_link(prevTraceId="<head>", nextTraceId=W2_TRACE)
+```
+
+If no prior project/evolution trace exists (first W2 after the very first W1 that pre-dates tracing), skip the `arra_trace_link` call and note it in the retro — the next W2 will chain to this one.
+
 ### Step 3 — Per-file read + doc update (per file: 5–10 min)
 
 For each in-territory file:
@@ -198,6 +220,7 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] Retrospective written (session-level, not per-commit).
 - [ ] `arra_handoff` entry with PR pointer.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for `github.com/kokarat/bank-bot`, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 
 ---
 
@@ -222,3 +245,4 @@ If multiple commits were covered in one session, write **one session-level retro
 ## Change log
 
 - 2026-04-16 — Initial version, adapted from mobiz's `workflow-2-track-commit.md`. Territory map rewritten for Node.js + Playwright layout. Thresholds scaled down (bot repo is smaller). Session-level retro rule imported from tester's workflow-2.
+- 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Bank-bot W2 passes now extend the same horizontal chain the mobiz writer uses — `W1-baseline → W2₁ → W2₂ → …` — and future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Per-finding child traces are still filed at W1 scope; W2 findings remain at `arra_learn` granularity to avoid trace noise.
