@@ -56,10 +56,27 @@ Files **not** in bot-writer's territory (skip):
 ```bash
 grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\]' \
   docs/current-system.md workflow README.md CLAUDE.md \
-  2>/dev/null | sort -u
+  2>/dev/null
 ```
 
 Expected output per line: `<file>:<line>:[<MARKER>:<id>]`.
+
+**Dedupe by id, not by line.** One thread id can legitimately appear multiple times in a single doc (header + change log + resolved-questions section). Naive `sort -u` dedupes identical `<file>:<line>:[<MARKER>:<id>]` strings, not identical `<id>`s — so two different lines referencing the same id survive and the id is processed twice.
+
+```bash
+raw=$(grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING):[A-Za-z0-9_-]+\]' <territory> 2>/dev/null)
+echo "$raw" | sed -E 's/.*\[(AWAITING_THREAD|RATIFICATION_PENDING):([A-Za-z0-9_-]+)\].*/\2/' | sort -u
+# → unique ids to process
+
+# For each unique id, the load-bearing anchor is the first matching line:
+for id in <unique-ids>; do
+  echo "$raw" | grep -F "[$MARKER:$id]" | head -1
+done
+```
+
+**Which occurrence is load-bearing?** The **first / top-most** occurrence in the doc. Subsequent mentions — typically in `§Change log` or inline narrative prose — are **informational** references to the thread, not live markers awaiting resolution. Only the load-bearing anchor is subject to the "update/strip marker + close thread + `arra_thread_update(status='closed')`" transform; informational mentions stay as-is (historical record per P-001).
+
+Practical heuristic: `[RATIFICATION_PENDING]` load-bearing anchor lives in the doc **header** (first 10 lines); `[AWAITING_THREAD]` lives inline on the specific claim. A mention further down the doc in §Change log is informational.
 
 For each unique `<id>`:
 
@@ -170,3 +187,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 ## Change log
 
 - 2026-04-17 — Initial version, mirrored from pg-writer (mobiz) with territory map narrowed to bot-writer's files (`docs/current-system.md`, `workflow/`, `README.md`, `CLAUDE.md`). W8 language pruned — bot-writer does not have W8 yet in the current pilot. Project field set to `github.com/kokarat/bank-bot`. Created alongside "thread resolution is blocking" rule in SKILL.md and Step 0 adoption in W1/W2/W4.
+- 2026-04-17 (later) — **Calibration from pg-writer's W9 first-run retro** (bug applies to both instances): Pass 1 dedupe fixed — extract id with `sed`, `sort -u` the ids (not the `<file>:<line>:<marker>` strings), then for each unique id locate the load-bearing anchor (first/top-most occurrence). Prior `sort -u` would double-process an id mentioned in both header and §Change log. Added practical heuristic for where each marker's anchor lives.

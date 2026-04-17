@@ -68,12 +68,33 @@ grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED_STEP|UNDOCUMENTE
   docs/current-system.md docs/data-model.md docs/schedulers.md \
   docs/bank-bot.md docs/flows docs/runbooks docs/releases \
   docs/migration-notes.md docs/adr README.md CLAUDE.md \
-  2>/dev/null | sort -u
+  2>/dev/null
 ```
 
 (The regex accepts both `UNDOCUMENTED-STEP` and `UNDOCUMENTED_STEP` for forward-compatibility with earlier drafts of W9; normalise new markers to the hyphen form.)
 
 Expected output per line: `<file>:<line>:[<MARKER>:<id>]`.
+
+**Dedupe by id, not by line.** One thread id can legitimately appear multiple times in a single doc:
+
+- **Line-by-line `sort -u` is wrong** — it dedupes identical `<file>:<line>:[<MARKER>:<id>]` strings, not identical `<id>`s. Two different lines referencing the same id survive, causing `arra_thread_read(<id>)` to fire twice and the id to be processed twice.
+- **Dedupe by id**: extract the `<id>` with a second pass, keep only unique ids, then for each unique id locate its *load-bearing anchor* (the first/top-most occurrence) using the original grep output.
+
+```bash
+# Pipe the raw grep output through an awk/sed that extracts the id and dedupes:
+raw=$(grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED-STEP):[A-Za-z0-9_-]+\]' <territory> 2>/dev/null)
+echo "$raw" | sed -E 's/.*\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED-STEP):([A-Za-z0-9_-]+)\].*/\2/' | sort -u
+# → unique ids to process
+
+# For each unique id, the load-bearing anchor is the first matching line in `raw`:
+for id in <unique-ids>; do
+  echo "$raw" | grep -F "[$MARKER:$id]" | head -1   # file:line of the anchor
+done
+```
+
+**Which occurrence is load-bearing?** The **first / top-most** occurrence in the doc. Subsequent mentions — typically in `§Change log`, `§Resolved questions`, or inline narrative prose — are **informational** references to the thread, not live markers awaiting resolution. Only the load-bearing anchor is subject to the "update/strip marker + close thread + `arra_thread_update(status='closed')`" transform; the informational mentions stay as-is (they are a historical record per P-001).
+
+Practical heuristic: the load-bearing anchor for `[RATIFICATION_PENDING]` lives in the doc **header** (first 10 lines); for `[AWAITING_THREAD]` and `[UNDOCUMENTED-STEP]` it lives inline on the specific claim or in the §Implementation pointers section. A mention further down the doc in §Change log is informational.
 
 For each unique `<id>`:
 
@@ -187,3 +208,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 
 - 2026-04-17 — Initial version. Doc-anchored scoping (grep-based). Pass 1 + Pass 2 structure. 4-step resolution block. Cross-repo known-gap documented. Created alongside the "thread resolution is blocking" rule in SKILL.md and Step 0 adoption in W1/W2/W4/W8.
 - 2026-04-17 (later) — Extended the recognised-marker family to include `[UNDOCUMENTED-STEP:<id>]` (introduced by W9). Pass 1 grep regex widened. Resolution table gained two rows for the UNDOCUMENTED-STEP lifecycle (human says "real step" → spawn W8 revision; human says "internal helper" → file `#undocumented-step-benign` learning so the next W9 scan doesn't re-flag). Step 0 now applies to W9 passes as well.
+- 2026-04-17 (later) — **Calibration from W9 first-run retro** (`ψ/memory/retrospectives/2026-04/17/23.19_flow-track-349b1e5-90425ba.md`): Pass 1 dedupe bug fixed. Naive `sort -u` dedupes line strings not ids, so a thread id mentioned in both the doc header and the §Change log was at risk of being processed twice. New procedure: extract just the id with a `sed` pass, `sort -u` the ids, then for each unique id locate the **load-bearing anchor** (first/top-most occurrence in the doc). Subsequent mentions in §Change log or inline narrative are informational and stay as-is (historical record per P-001). Added a practical heuristic for where each marker's load-bearing anchor lives (`[RATIFICATION_PENDING]` → header; `[AWAITING_THREAD]` → inline claim; `[UNDOCUMENTED-STEP]` → §Implementation pointers).

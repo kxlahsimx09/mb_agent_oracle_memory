@@ -203,18 +203,20 @@ For each (flow, step, target_file, target_line, target_short) in the affected po
 
 | Class | Test | Action |
 |---|---|---|
-| **A — Hash refresh** | Target lines unchanged; file hash `@short` just moved forward. | Update the pointer's `@<short>` to the newest commit that touched the file. No drift. |
-| **B — Line relocation** | Target lines moved (insertion or removal above) but same semantics at the same named symbol. | Update `path:<new-line>@<new-short>`. No drift. |
-| **C — Step drift** | Target line still exists, same symbol, but behavior changed (e.g., callback payload field renamed, retry count changed, condition flipped). | Insert `[DRIFT]` inline next to the flow step + file `arra_learn` tagged `#drift + #flow-drift + flow:<slug> + step:<n>`. Queue for W4. Leave pointer at old `@<short>` so the drift shows the exact verification gap. |
-| **D — Undocumented step** | The commit introduced a new actor-crossing call in the code path the flow covers, but no numbered step claims it. | Insert `[UNDOCUMENTED-STEP:<threadId>]` in the flow's §Implementation pointers with a one-line description of what the new step does. Open `arra_thread` asking the human whether this is a genuine new step (→ queue W8 revision) or an internal helper (→ ignore for flows, may belong in `current-system.md`). |
+| **A — Hash refresh** | The file was touched somewhere in the range, but **the specific line the pointer targets did not shift** and the named symbol at that line is semantically unchanged. Only `@<short>` moves forward. | Update the pointer's `@<short>` to the newest commit that touched the file. No drift. |
+| **B — Line relocation** | **The pointer's target line number shifted** (lines inserted/removed above) but the named symbol at the new line has the same semantics. | Update `path:<new-line>@<new-short>`. No drift. |
+| **C — Step drift** | Target line still exists, same symbol, but **behavior changed** (e.g., callback payload field renamed, retry count changed, condition flipped). | Insert `[DRIFT]` inline next to the flow step + file `arra_learn` tagged `#drift + #flow-drift + flow:<slug> + step:<n>`. Queue for W4. Leave pointer at old `@<short>` so the drift shows the exact verification gap. |
+| **D — Undocumented step** | The commit introduced a new actor-crossing call **inside code territory an existing flow's pointer set already covers** — i.e., the new call sits near or between numbered steps in that flow's diagram. The flow now has a step gap. | Insert `[UNDOCUMENTED-STEP:<threadId>]` in the flow's §Implementation pointers with a one-line description of what the new call does. Open `arra_thread` asking the human: genuine new step (→ queue W8 revision) or internal helper (→ ignore for flows, may belong in `current-system.md`). |
 | **E — Step unimplemented** | A pointer's target was removed or the symbol no longer exists at all. | Replace the pointer with `[UNIMPLEMENTED]` + file `arra_learn` tagged `#drift + #unimplemented + flow:<slug> + step:<n>`. Queue W4. |
 | **F — Strength downgrade** | ≥ 50% of a flow's steps now carry `[DRIFT]` or `[UNIMPLEMENTED]` from this pass **or** the accumulated unresolved backlog. | Downgrade the flow doc header from S1/S2 to S4; add `[RATIFICATION_PENDING:<new-threadId>]` in the header (a fresh ratification thread); file `arra_learn` tagged `#flow-strength-downgrade`; handoff to schedule a W8 revision. Do **not** attempt ratification in this pass — W9 is fast-fix, not re-ratification. |
 
 **Rules:**
 
 - Classes A and B are *fast-fix* and are the vast majority of W9 outcomes on a steady-state repo. Don't over-classify to C when the semantics genuinely didn't change.
+- **A vs B decision tool**: "did the *specific* line my pointer points to get displaced?" If lines were inserted *above* the pointer's target line and pushed it to a new line number → **B**. If lines were inserted *elsewhere* in the file (below the pointer's target, or in another function entirely) and the pointer's line number is still correct → **A**. `@<short>` bumps in both cases; the line number only bumps in B.
 - C and E both feed W4 queue; do not attempt to fix the doc text in W9 beyond adding the marker.
 - D always opens a thread; never silently add steps to a flow diagram in W9 (that's authoring = W8).
+- **D vs "uncovered surface"**: D applies **only** when the new actor-crossing sits inside code territory an existing flow's pointer set already covers (near or between numbered steps). If the commit introduces a brand-new endpoint, service, or code path that **no** current flow covers, it is **not** D — it is an **uncovered surface**. For uncovered surfaces, do not open a thread; instead file an `arra_learn` tagged `#w8-handoff + #uncovered-surface + flow:<proposed-slug>` naming the new code + suggesting a W8 authoring pass. The next W8 consumer picks it up. W9 never authors flows, and class D is specifically about *gaps within existing flow territory*, not *greenfield territory*.
 - F is rare and serious; prefer calling W8 revision today over claiming W9 can re-ratify.
 
 ### Step 5 — Apply actions per class (10–30 min)
@@ -309,7 +311,9 @@ If the whole pass produced zero affected flows, file **one** pass-level learning
 
 Branch: `docs/flow-track-<flows-baseline-short>-<new-short>`.
 
-Commit message:
+Commit message — **template varies by class-count fired this pass**:
+
+**Multi-class (≥ 2 non-zero classes):** use the full per-class bullet list for auditability.
 
 ```
 docs(flows): track <flows-baseline-short>..<new-short> — <N flows affected>
@@ -320,13 +324,35 @@ docs(flows): track <flows-baseline-short>..<new-short> — <N flows affected>
 - <D> undocumented-step threads opened
 - <E> unimplemented steps queued for W4
 - <F> strength-downgrade W8 revisions handed off
+- <U> uncovered-surface handoffs filed (W8 queue)
 - docs/flows/.baseline bumped to <new-short>
 
 No flow spec changes (new steps / ratification) — those go through W8.
 No code behavior changes.
 ```
 
-PR body lists the affected flows, each touched flow's outcome, links every new `arra_learn`, and includes the literal line **"I will not merge this PR. Awaiting human review."**
+**Single-class (exactly 1 non-zero class):** collapse to a single descriptive line. A list of `0`s next to a lone `1` reads as padding and buries the signal in `git log`.
+
+```
+docs(flows): track <flows-baseline-short>..<new-short> — 1 pointer updated (<short human-readable>)
+
+- <flow-slug> step <n>: <path>:<old-line>@<old-short> → <path>:<new-line>@<new-short>
+  (class B — <1-line reason the line shifted, e.g., "new endpoint inserted above">)
+- docs/flows/.baseline bumped to <new-short>
+
+No flow spec changes, no code behavior changes.
+```
+
+**Zero-drift pass** (no affected flows in the range at all — range only touched uncovered territory): single line is enough.
+
+```
+docs(flows): track <flows-baseline-short>..<new-short> — no flow pointers affected
+
+Range touched only <brief summary of out-of-flow-territory>. Baseline bumped to <new-short>.
+#flow-track #no-drift-found learning filed.
+```
+
+PR body always lists the affected flows (or "none — range out of flow territory"), each touched flow's outcome, links every new `arra_learn`, and includes the literal line **"I will not merge this PR. Awaiting human review."**
 
 ### Step 9 — Retrospective (3 min)
 
@@ -354,6 +380,7 @@ PR body lists the affected flows, each touched flow's outcome, links every new `
 - [ ] Every `[DRIFT]` / `[UNIMPLEMENTED]` has a matching `#drift + #flow-drift` learning with `source: docs/flows/<slug>.md` and per-finding child trace under W9_TRACE.
 - [ ] Every `[UNDOCUMENTED-STEP]` and `[RATIFICATION_PENDING]` anchored in this pass has a paired `arra_thread` open in `status="pending"`.
 - [ ] One `#flow-track` learning landed per affected flow (or one `#no-drift-found` if the pass was clean).
+- [ ] Every uncovered surface discovered this pass (new endpoint / service / code path with **no** existing flow coverage — not a class-D step-within-flow) has a `#w8-handoff + #uncovered-surface + flow:<proposed-slug>` learning. Uncovered surfaces do not open threads and do not mutate any existing flow doc; they hand off to a future W8 authoring pass.
 - [ ] W9 root trace (Step 2b) opened with `queryType="evolution"` + all commits in range. `arra_trace_link` to prior W2/W9 head called (unless bootstrap).
 - [ ] Per-finding child traces (Step 5b) for every C/E with `parentTraceId=W9_TRACE`.
 - [ ] Cross-repo sibling check (Step 2c) ran: linked to bank-bot W2 trace (+ `#cross-repo-sync` learning), or explicitly recorded no cross-repo signal, or deferred with note. "Forgot to check" is not legal.
@@ -404,3 +431,8 @@ PR body lists the affected flows, each touched flow's outcome, links every new `
 ## Change log for this workflow file
 
 - 2026-04-17 — Initial version. Scoped to `pg-writer-oracle` only (mobiz pilot, matches W8 scope). Daily cron alongside W2. Pointer-level verification unit (not doc-section). Six outcome classes A/B/C/D/E/F with clear action mapping. Fast-fix thresholds: ≤ 5 flows, ≤ 50% per-flow step drift; exceeding either escalates to W8 revision. Global `docs/flows/.baseline` (not per-flow); bootstrap fall-back uses the oldest `// impl:` commit hash across the portfolio. Step 2c cross-repo sibling link mirrors W2's identical step for the bank-bot W2 head. W9 never edits flow bodies, never edits code, never authors new flows. `[UNDOCUMENTED-STEP:<threadId>]` introduced as a new marker alongside the existing `[AWAITING_THREAD]` / `[RATIFICATION_PENDING]` family — Step 0 of future W9/W8 passes will catch it via the same doc-anchored grep in `workflow-thread-resolve.md`.
+- 2026-04-17 (later) — **Calibration from first-ever W9 run** (retro `ψ/memory/retrospectives/2026-04/17/23.19_flow-track-349b1e5-90425ba.md`, 1× Class-B pointer refresh). Four concrete spec clarifications:
+  - **A vs B decision tool** added to §Rules — "did the *specific* line my pointer points to get displaced?" Insertions above the pointer's line → B; insertions elsewhere in the file → A. `@<short>` bumps in both; line number only bumps in B.
+  - **Class D vs uncovered surface** — D applies **only** when the new actor-crossing sits inside territory an existing flow already covers. A brand-new endpoint/service/code path with no flow coverage is **not** D; file `#w8-handoff + #uncovered-surface + flow:<proposed-slug>` learning and hand off to W8 authoring. Step 4 table + §Rules + DoD all updated; live run correctly inferred this but spec was ambiguous.
+  - **Step 8 commit-message template** split by class-count: full per-class bullet list for multi-class passes; collapsed single-line form for single-class passes; one-liner for zero-drift passes. Padding `A: 0` next to `B: 1` buries the signal in `git log`.
+  - **Fast-fix thresholds unchanged** — retro noted sample size of 2 flows is insufficient to stress-test ≤5-flow / ≤50%-step thresholds. Revisit when the portfolio reaches ~10 flows.
