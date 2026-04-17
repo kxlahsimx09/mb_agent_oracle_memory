@@ -156,6 +156,40 @@ arra_trace_link(prevTraceId="<head>", nextTraceId=W2_TRACE)
 
 If no prior project/evolution trace exists (first W2 after the very first W1 that pre-dates tracing), skip the `arra_trace_link` call and note it in the retro — the next W2 will chain to this one.
 
+### Step 2c — Cross-repo sibling link (1–2 min, conditional)
+
+Daily W2 cron runs across mobiz + bank-bot frequently touch **related** code (shared contract, callback URL shape, signature format, OTP flow, BOT_SECRET handshake). When both repos changed in the same 24h window for the same reason, chain the two W2 traces together so `arra_trace_chain(<either-W2>)` surfaces the sibling.
+
+**Detect the cross-repo signal.** Any one of these is enough:
+
+- A commit message in the range references the other repo by name (`mobiz-payment-gateway`, `mobiz`, `bank-bot`) or by a ticket id known to span both.
+- A file in the range is part of the shared contract: callback payload shape, signature/HMAC header, OTP endpoint client, MDR code/enum, BOT_SECRET env usage.
+- The PR description links the other repo's PR.
+- A commit message mentions a shared concept (webhook version bump, callback header change, OTP endpoint rename, MDR code rename, signature scheme change).
+
+If **no signal**, skip the rest of this step. Do not speculate.
+
+**Look up the other repo's recent W2 trace.**
+
+```
+arra_trace_list(
+  project="github.com/kokarat/mobiz-payment-gateway",
+  queryType=["project","evolution"], depth=0, limit=5
+)
+# keep only traces whose created_at is within the last 24h
+# pick the most recent one that covers commits landing on the same day or the day before
+```
+
+**Decide and link:**
+
+- If a matching other-repo trace exists → `arra_trace_link(prevTraceId=<other-W2>, nextTraceId=W2_TRACE)` (the older of the two is always prev).
+- If no trace yet (you ran before mobiz's W2 today) → **defer**. Do not force a parent trace. Mobiz's W2 will list bank-bot traces on its pass and link backward to you. Note the defer in the retro so the human can spot-check that the back-link landed.
+- If more than one plausible other-repo trace exists → pick the most recent and file a one-line note in the retro explaining why. Ambiguity here is a signal to talk to the human via `arra_thread`.
+
+**Always, when you link:** file an `arra_learn` tagged `#cross-repo-sync` that names both traces + the shared concept (e.g., "mobiz callback v2 ↔ bank-bot adapter selectors update"). This is the semantic record; the `arra_trace_link` is the navigation record.
+
+**Caveat to keep in mind.** `arra_trace_link` is directional (prev → next) and was designed for temporal evolution. Here we're using it for a sibling-in-time relationship. Readers of `arra_trace_chain` will see the siblings in chronological order but should not over-read "prev → next" as a causal arrow across repos. The `#cross-repo-sync` learning is the authoritative description of *what the two W2 passes have in common*; the link is just the thread that keeps them findable.
+
 ### Step 3 — Per-file read + doc update (per file: 5–10 min)
 
 For each in-territory file:
@@ -221,6 +255,7 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] `arra_handoff` entry with PR pointer.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for `github.com/kokarat/bank-bot`, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
+- [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a mobiz-payment-gateway W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
 
 ---
 
@@ -246,3 +281,4 @@ If multiple commits were covered in one session, write **one session-level retro
 
 - 2026-04-16 — Initial version, adapted from mobiz's `workflow-2-track-commit.md`. Territory map rewritten for Node.js + Playwright layout. Thresholds scaled down (bot repo is smaller). Session-level retro rule imported from tester's workflow-2.
 - 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Bank-bot W2 passes now extend the same horizontal chain the mobiz writer uses — `W1-baseline → W2₁ → W2₂ → …` — and future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Per-finding child traces are still filed at W1 scope; W2 findings remain at `arra_learn` granularity to avoid trace noise.
+- 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint, BOT_SECRET handshake). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no mobiz trace exists yet, defer — mobiz's W2 will link back. DoD added a check that refuses "forgot to look."
