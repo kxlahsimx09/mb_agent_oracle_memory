@@ -1,0 +1,17 @@
+{
+  "name": "20-payment-gateway",
+  "windows": [
+    {
+      "name": "pg-writer-oracle",
+      "repo": "kokarat/mobiz-payment-gateway"
+    },
+    {
+      "name": "pg-tester-oracle",
+      "repo": "kokarat/mobiz-payment-gateway"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "kokarat/mobiz-payment-gateway"
+  ]
+}

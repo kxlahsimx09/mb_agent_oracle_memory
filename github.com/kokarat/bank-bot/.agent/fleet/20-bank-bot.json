@@ -1,0 +1,13 @@
+{
+  "name": "20-bank-bot",
+  "windows": [
+    {
+      "name": "bot-writer-oracle",
+      "repo": "kokarat/bank-bot"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "kokarat/bank-bot"
+  ]
+}

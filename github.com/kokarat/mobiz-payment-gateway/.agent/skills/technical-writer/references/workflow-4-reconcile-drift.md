@@ -1,0 +1,342 @@
+# Workflow 4 — Reconcile Drift
+
+> Reference document for the `technical_writer` agent.
+> Read this file before running the workflow. Do not skim.
+
+This workflow is how open `#drift` learnings get **closed**. A drift is any place where code and documentation disagree — they were flagged (by Workflow 1, Workflow 2, or another agent) and queued in the Oracle vault tagged `#drift`, with `[DRIFT: …]` markers left inline in the affected docs. Workflow 4 processes that queue one drift at a time: reads both sides, decides which one moves, applies the move, and leaves a resolution trail back to the original learning.
+
+This workflow is **not** where drift is discovered — that happens inside Workflows 1, 2, and 3. Workflow 4 is the cleanup pass. Running it once a week or once every 10–20 open drift items keeps the doc tree honest without blocking faster workflows.
+
+---
+
+## When to run this workflow
+
+Run when **any** of the following is true:
+
+- `arra_search query="drift technical-writer repo:mobiz-payment-gateway current" type=learning` returns **≥ 5 open** `#drift` entries without `#resolution` successors.
+- `docs/current-system.md` §9 "Known drift" table has grown for two consecutive baselines without shrinking.
+- A human explicitly asks to "reconcile drift," "fix the drift queue," "เคลียร์ drift."
+- Workflow 1 or 2 finished with `[DRIFT]` markers you chose **not** to resolve inline (they are parked here now).
+- A sibling agent (`tester`, `security_auditor`, etc.) filed a `#drift` learning addressed to `technical_writer` via `arra_inbox`.
+
+Do **not** run this workflow:
+
+- To discover new drift — use Workflow 1 (full baseline) or Workflow 2 (commit-range fast fix).
+- To fix **code** — the writer never changes production code. If a drift turns out to be "code is wrong," the outcome of Workflow 4 for that item is a GitHub issue + handoff, not a patch.
+- During an active feature PR — drift reconciliation on a busy branch confuses commit history. Use its own branch.
+- When the vault's `#drift` queue is < 3 items *and* no human asked — just let Workflow 2 pick them up as it passes through.
+
+---
+
+## Preconditions
+
+- [ ] `git status --porcelain` is empty.
+- [ ] `git fetch origin && git status -sb` shows no `behind`.
+- [ ] `docs/.baseline` exists and is parsable.
+- [ ] Oracle is reachable (`curl -sf http://localhost:47778/api/stats` returns 200). This workflow **requires** Oracle — the drift queue lives there. If unreachable, halt; do not proceed.
+- [ ] You have at least **45 minutes** of focused time. Each drift item is 5–10 min; batching is fine, but do not leave half-resolved items in a PR.
+
+---
+
+## Inputs you will read
+
+In approximate order:
+
+1. The open drift queue from Oracle:
+
+   ```
+   arra_search query="drift repo:mobiz-payment-gateway current technical-writer" type=learning limit=30
+   ```
+
+   For each hit, note: `id`, `source` (the doc + code citation it carries), `created` date, and whether a matching `#resolution` or `superseded_by` pointer already exists. Items that already have a successor do not belong on this pass's queue.
+
+2. The cited doc section — open the markdown file and read the surrounding paragraph, not just the flagged line.
+3. The cited code — open the Go / Node source at the cited `:line` and read the full function, not just the cited line.
+4. The commit that introduced the drift (usually captured in the learning's `source:` field). Use `git show <sha>` to understand intent; `git log -S '<symbol>'` if the learning does not cite a commit.
+5. `docs/.baseline` — confirm the doc is being reconciled against a known anchor. If the drift was logged before the current baseline, it may already be resolved by a later Workflow 1 run; re-verify before changing anything.
+6. Related learnings — the `related:` list on the drift. Often a second drift on the same surface lets you close two items with one edit.
+
+---
+
+## Outputs you will produce
+
+Per drift item, **one** of these three outcomes. Every item ends in exactly one of these — "skipped with no note" is not allowed.
+
+| Outcome | When | Artifacts |
+|---|---|---|
+| **(A) Fix doc** (most common) | Code is right; doc is stale | Edited doc section + new `// verified: <path>@<short>` citation + removed `[DRIFT]` marker + follow-up `arra_learn` tagged `#resolution` pointing at the original drift via `supersedes:`; call `arra_supersede(oldId, newId)` |
+| **(B) Fix code** — escalate | Doc encodes a stated invariant the code violates | **No doc edit.** GitHub issue filed (`gh issue create` with title `regression-candidate: <invariant>`). Follow-up `arra_learn` tagged `#regression-candidate` that references the drift via `related:` (NOT `supersedes:` — the drift stays open until code is fixed). Handoff to `backend_developer` via `arra_handoff` |
+| **(C) Obsolete / duplicate** | Drift references a deleted surface, a since-renamed file, a duplicate of another drift, or a feature that has been intentionally removed | Follow-up `arra_learn` tagged `#resolution` with `reason: obsolete \| duplicate-of:<id> \| feature-removed` ; `arra_supersede(oldId, newId)`. The `[DRIFT]` marker is removed from the doc if the doc section still exists, or the whole section is removed if the feature was removed |
+
+Required artifacts regardless of outcome:
+
+- A commit on branch `docs/reconcile-drift-<short-baseline-hash>` containing all doc edits (never mixed with code edits).
+- A PR body linking every resolved drift learning, every new resolution learning, and every GitHub issue opened.
+- `docs/current-system.md` §9 "Known drift" table shrunk accordingly (resolved rows removed; outcome-B rows kept with a new column linking the GH issue).
+
+Never produced in this workflow:
+
+- Code edits. Ever.
+- New top-level doc files.
+- ADRs (Workflow 5).
+- Retroactive rewrites of closed drift learnings (P-001 — Nothing is Deleted; use `arra_supersede` not file edits).
+
+---
+
+## Steps
+
+### Step 1 — Fetch the queue (5 min)
+
+```
+arra_search query="drift repo:mobiz-payment-gateway current technical-writer" type=learning limit=30
+arra_reflect
+```
+
+Write each hit to a scratch list in this format (keep the scratch — you will paste it into the retrospective at the end):
+
+```
+[ ] <learning-id>  |  <feature-tag>  |  <one-line summary>  |  source: <doc>:<line> + <code>:<line>@<short>
+```
+
+Drop from the list:
+
+- Items that already have a `#resolution` or `superseded_by` successor.
+- Items tagged `#regression-candidate` without a `#resolution` — those are **code team's** queue, not yours. Do not re-open.
+- Items older than **6 months** without a `related:` trace — these are archaeological and need the human to decide whether they are still meaningful. Park them separately; do not resolve blindly.
+
+### Step 2 — Triage (10 min)
+
+For each remaining item, read **both** sides — doc and code — and classify as (A) / (B) / (C) per the outcome table above.
+
+Heuristics that usually work:
+
+- If the code was changed in a commit **after** the drift was filed → almost always (A).
+- If the doc cites an invariant like "balance is never negative" and the code path in question does not guard against negative balance → investigate carefully; this may be (B).
+- If the cited file has been **deleted** → (C) obsolete.
+- If the drift's `source:` cites a file that was **renamed** → read the git-log of the rename and follow it; the drift may be live at the new path.
+- If two drift items share the same code file and same feature tag → check if they are the same thing with different wordings; one resolution may close both → (C) duplicate for the second.
+
+Do not skip triage. A reconciliation done without triage mislabels (B) cases as (A) and silently "fixes" documentation that was correctly describing a code bug.
+
+### Step 3 — Resolve (A)-class items: fix the doc (15 min per 5 items)
+
+For each (A) item:
+
+1. Open the cited doc section. Read the surrounding 20–30 lines, not just the `[DRIFT]` line — the fix often affects an adjacent sentence.
+2. Re-read the cited code at HEAD. Confirm the current behavior is what you are about to describe.
+3. Rewrite the doc section so it matches the code at `HEAD`. Update the `// verified: <path>@<short>` to the current short hash.
+4. Remove the `[DRIFT]` marker.
+5. If the drift item also carries an `[UNVERIFIED]` sibling marker in the same section, decide whether the rewrite verifies it too — if yes, remove that marker too and note it in the learning.
+6. Add the fix to the working tree; do not commit yet (batch all drift resolutions into one commit at Step 6).
+
+### Step 4 — Resolve (B)-class items: escalate code bug (15 min per item)
+
+For each (B) item:
+
+1. **Do not edit the doc.** The doc is describing the intended invariant — it is the spec. The code is wrong.
+2. Open a GitHub issue:
+
+   ```
+   gh issue create \
+     --title "regression-candidate: <one-line invariant violation>" \
+     --body "$(cat <<EOF
+   ## Evidence
+   - Invariant stated in: <doc path + section anchor>
+   - Code violating invariant: <source path + line>
+   - Oracle drift learning: <learning-id>
+   - First filed: <created date>
+
+   ## Expected (per doc)
+   <short summary>
+
+   ## Actual (per code)
+   <short summary>
+
+   ## Next step
+   Assigned to backend_developer team for fix. Writer will close the drift learning **only after** the code change lands and re-verification passes.
+   EOF
+   )"
+   ```
+
+3. File a follow-up `arra_learn`:
+
+   ```yaml
+   tags:
+     - technical-writer
+     - repo:mobiz-payment-gateway
+     - current
+     - <feature>
+     - regression-candidate
+   related:
+     - <drift-learning-id>        # still open; do not supersede
+   source: <doc path>:<line> + <code path>:<line>@<short>
+   project: github.com/kokarat/mobiz-payment-gateway
+   ```
+
+   Content: issue URL, summary of the invariant, the exact line(s) in code that violate it, and a statement that the drift remains **open** until code is fixed.
+
+4. `arra_handoff(content=<summary + issue URL + drift id>, slug="regression-candidate-<topic>")` addressed implicitly to the backend team (since there is no subscriber model — see the handoff investigation in the vault). The next agent that runs `arra_inbox()` picks it up.
+
+5. Do **not** call `arra_supersede` on the drift item. Leave it open.
+
+### Step 5 — Resolve (C)-class items: close as obsolete/duplicate (5 min per item)
+
+For each (C) item:
+
+1. If the drift references a feature still present in the doc (but the feature was removed from code) → delete the doc section describing it; per P-001 the deletion is tracked in git history, and the originating learning stays in the vault forever.
+2. If the drift is a **duplicate** of another drift that was already resolved → call `arra_supersede(oldId, duplicate_of_id)` with a one-line `reason: "duplicate of <id>; closed as part of that resolution"`.
+3. If the cited file or section is simply gone and the drift cannot be reconstructed → file a one-line `#resolution` learning with `reason: "obsolete — <why> at <commit>"` and `arra_supersede(oldId, newId)`.
+
+No doc edit is required for pure-obsolete items beyond removing a now-empty `[DRIFT]` marker if one still lingers in a doc.
+
+### Step 6 — Update §9 "Known drift" (5 min)
+
+Open `docs/current-system.md` §9. For each row:
+
+- (A) and (C) resolutions: **remove the row**.
+- (B) regression candidates: **keep the row, add a column** linking the GitHub issue; change status to `ESCALATED: #<issue-number>`.
+
+Bump the doc's `// verified:` citation on any section you touched in Step 3.
+
+### Step 7 — Write `arra_learn` resolutions (5 min)
+
+One follow-up learning per (A) and per (C) item, plus one per (B) as specified in Step 4. Template for (A) and (C):
+
+```yaml
+title: "resolution — <feature>/<topic> drift closed"
+tags:
+  - technical-writer
+  - repo:mobiz-payment-gateway
+  - current
+  - <feature>
+  - resolution
+source: <doc-path>:<line>@<new-short> + <code-path>:<line>@<new-short>
+supersedes:
+  - <original-drift-learning-id>
+related:
+  - <any sibling drift learnings resolved in the same edit>
+project: github.com/kokarat/mobiz-payment-gateway
+---
+
+## Drift class (original)
+<verbatim copy of the original drift's description, one paragraph>
+
+## Resolution path (taken)
+(A) fix-doc | (B) fix-code-escalated | (C) obsolete-or-duplicate
+
+## What changed
+- Doc: <section heading> rewritten to match code at <short-hash>.
+- Code: unchanged. (Always, for A/C. For B: see linked issue and the regression-candidate learning.)
+
+## How I verified
+<2–3 sentences — which file I read, which specific line numbers, what the new `// verified:` cite points at>
+
+## Residual risk
+<one sentence — any sibling drift still open, any doc section with a new [UNVERIFIED] because of this change, or "none">
+```
+
+Call `arra_supersede(oldId, newId)` for every (A) and (C). Skip for (B).
+
+### Step 8 — Commit + PR (5 min)
+
+Branch: `docs/reconcile-drift-<short-hash-of-current-baseline>`.
+
+Commit message:
+
+```
+docs: reconcile drift queue — <N> items closed
+
+- <N_A> doc-rewrites (class A)
+- <N_B> regression-candidates escalated (class B) — see linked issues
+- <N_C> obsolete/duplicate closures (class C)
+
+Every resolution has a supersedes link (A/C) or related link (B) back
+to the originating #drift learning. §9 of docs/current-system.md
+updated. docs/.baseline unchanged.
+
+No code behavior changes.
+```
+
+PR body includes:
+
+- The scratch list from Step 1 with each item's final outcome (A/B/C) and its learning-id.
+- Links to all new `#resolution` and `#regression-candidate` learnings.
+- Links to all GitHub issues opened in Step 4.
+- The usual "**I will not merge this PR. Awaiting human review.**" line (per `.agent/AGENTS.md` §9).
+
+Per `.agent/AGENTS.md` §9 (safety rules), **never** `gh pr merge`.
+
+### Step 9 — Retrospective (5 min)
+
+Run `rrr` per `.agent/AGENTS.md` §7. AI Diary + Honest Feedback mandatory.
+
+Specific things this workflow's retro **must** cover:
+
+- How many items landed in each class. If (B) is > 30% of items, that is a signal the code is drifting from invariants faster than baselines are catching — raise it.
+- Any drift item that was harder than 10 minutes to triage — those usually point at genuinely ambiguous code that may need an ADR (hand off to Workflow 5).
+- Any drift older than 3 months. Long-lived drift is usually a smell of an orphaned subsystem; name it so the next retro can pick up the thread.
+
+---
+
+## Template for a resolved §9 "Known drift" row removal
+
+Before:
+
+```markdown
+| Deposit FIFO matching | controllers/Deposit.go:241 | doc says FIFO, code does amount-first | [learning:2026-04-15_drift-deposit-fifo] | open |
+```
+
+After the resolution lands the row is **removed entirely**. The audit trail lives in: the git diff of the doc, the `#resolution` learning, and (via `supersedes`) the original drift learning's `superseded_by` pointer. Readers who need history click through; readers who need current state see a clean table.
+
+For a (B) escalation the row stays but changes:
+
+```markdown
+| Deposit FIFO matching | controllers/Deposit.go:241 | doc says FIFO, code does amount-first | [learning:2026-04-15_drift-deposit-fifo] | **ESCALATED: #412** |
+```
+
+Once issue #412 is closed and the code is re-verified, a later Workflow 4 pass will complete the close as a (A)-class resolution.
+
+---
+
+## Definition of Done
+
+This workflow is complete **only** when all are true:
+
+- [ ] Every item from Step 1's scratch list has exactly one of the outcomes (A)/(B)/(C) recorded.
+- [ ] Every (A) and (C) has a `#resolution` learning and `arra_supersede(oldId, newId)` was called.
+- [ ] Every (B) has a `#regression-candidate` learning, an `arra_handoff`, and a linked GitHub issue.
+- [ ] `docs/current-system.md` §9 reflects the new state (resolved rows gone; (B) rows marked ESCALATED with issue number).
+- [ ] All `[DRIFT]` inline markers touched in this pass are either removed (A/C) or left in place with an `[ESCALATED: #issue]` annotation (B).
+- [ ] Git branch pushed; PR opened; **not merged**.
+- [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback.
+- [ ] `arra_handoff` entry for the PR with the total counts by class and any residual items the human should know about.
+
+`docs/.baseline` is **not** bumped by this workflow — reconciling drift does not re-verify the whole system. A baseline bump is Workflow 1's job.
+
+---
+
+## Common pitfalls (learned the hard way)
+
+- **Silent doc rewrites.** Editing a doc to match the code without logging a `#resolution` learning breaks the audit trail and violates P-004. A reader in 6 months cannot tell whether the doc is correct because the code was always this way, or because someone aligned it after a drift. Always write the learning; always call `arra_supersede`.
+- **Mass-closing drifts in one learning.** One resolution per original drift. Batching them into a "closed 12 drifts today" entry makes each individual drift unsearchable and breaks the `supersedes:` pointer. Patient, not efficient, is the rule here.
+- **Calling (B) an (A).** The commonest mistake — a drift says "doc claims X, code does Y." Reflex: rewrite doc to describe Y. But if X was a stated invariant (P-004: documents are also claims about what we *meant*), rewriting the doc silently erases the intent and lets a real bug live. Check whether the doc's X was an invariant or a description.
+- **Reconciling drift during a feature PR.** Mixing `docs:` commits with code changes makes the reconciliation invisible in `git log` and risks the code change being blamed for the doc edit. Always its own branch.
+- **Skipping triage because the queue is big.** A 30-item drift queue tempts "mark all (A), move on." Don't. The worst time to lose triage discipline is when the queue is long — it's when (B) cases hide.
+- **Forgetting to update §9.** The doc's own "Known drift" table is the public-facing state. If you close 5 drift learnings but leave the table untouched, the next agent sees an inconsistent vault and either re-opens the same drift or panics. Always sync.
+- **Using `#drift` tag on the resolution.** The resolution learning is tagged `#resolution`, not `#drift`. Re-using `#drift` doubles the queue size on the next pass.
+- **Reconciling archaeological drift without the human.** Drift items > 6 months old may reference code, conventions, or features the current team does not remember. Park them; ask the human.
+
+---
+
+## Escalation
+
+- **(B) count > 30% of the queue** — the code is drifting from invariants. Halt after finishing the current item, `arra_handoff` to the human with the count and top-3 offending surfaces. Do not start another Workflow 4 run until a code pass has happened.
+- **Drift in a security-sensitive area** (auth, JWT, RBAC, rate limit, callback) — before publishing the resolution PR, CC `security_auditor` in the PR description. Do not resolve drift in this area silently.
+- **Drift that depends on a decision not yet made** — the code and doc disagree because the feature is mid-design. Park the drift (do not close as obsolete), file a `handoff` to `system_architect` / `requirement_writer`, and move on to the next item.
+- **Drift in a file this role does not own** (e.g. `integration-tests/`, `bank-bot/src/…` selectors) — leave it for `tester`. Add `#out-of-territory` to the drift's `related:` list and skip. Do not resolve drift outside territory.
+
+---
+
+## Change log for this workflow file
+
+- 2026-04-16 — Initial version, written during `tester` activation. Drafted against the integration-test-writer→tester supersession as a working example of how resolutions get filed; shape follows workflow-1 and workflow-2 conventions (same preamble, DoD, pitfalls, escalation blocks). Awaiting first live run by `pg-writer-oracle` for real-world refinement.
