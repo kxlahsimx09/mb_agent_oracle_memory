@@ -198,9 +198,13 @@ Open `docs/current-system.md` §9. For each row:
 
 Bump the doc's `// verified:` citation on any section you touched in Step 3.
 
-### Step 7 — Write `arra_learn` resolutions (5 min)
+### Step 7 — Write `arra_learn` resolutions + link with `arra_supersede` (5 min)
 
-One follow-up learning per (A) and per (C) item, plus one per (B) as specified in Step 4. Template for (A) and (C):
+This step has **two halves**. The `arra_supersede` call is non-negotiable for (A) and (C) — without it the old drift learning has no machine-readable pointer to its successor, and `/api/search` / `arra_search` cannot surface the `superseded_by` flag to future readers.
+
+#### 7a. Write the resolution learning (one per A and C; one per B per Step 4)
+
+Template for (A) and (C):
 
 ```yaml
 title: "resolution — <feature>/<topic> drift closed"
@@ -235,7 +239,45 @@ project: github.com/kokarat/mobiz-payment-gateway
 <one sentence — any sibling drift still open, any doc section with a new [UNVERIFIED] because of this change, or "none">
 ```
 
-Call `arra_supersede(oldId, newId)` for every (A) and (C). Skip for (B).
+The `supersedes:` frontmatter field is informational (human-readable); the actual machine-readable link lives in the `oracle_documents.superseded_by` column, populated by the `arra_supersede` call in 7c.
+
+#### 7b. Verify the resolution learning is indexed
+
+`arra_supersede` requires both `oldId` and `newId` to exist in `oracle_documents`. If Oracle has inline embedding (`arra_learn` post-PR #754 writes directly to DB), the new row is available immediately. On older Oracle builds the indexer is batched — the file may not be queryable for up to a few minutes.
+
+Quick check before calling supersede:
+
+```bash
+sqlite3 ~/.arra-oracle-v2/oracle.db "SELECT id FROM oracle_documents WHERE id = 'learning_<YYYY-MM-DD>_resolution-<slug>';"
+```
+
+- If the row exists → proceed to 7c.
+- If not → either wait for the next indexer pass (check `sqlite3 … "SELECT last_indexed FROM indexing_status;"`), or force: `bun src/indexer/cli.ts`.
+- If the indexer is unreachable / offline → **defer supersede to a follow-up session**: leave the resolution learning filed (it stands on its own), add a `#pending-supersede` tag to it, and `arra_inbox` a handoff for the next session to complete the supersede. **Do not block the PR on indexer availability.**
+
+#### 7c. Call `arra_supersede` — one call per (A) and per (C)
+
+```
+arra_supersede(
+  oldId="<original-drift-learning-id>",
+  newId="<resolution-learning-id>",
+  reason="<one short sentence — the root cause of the drift or why now obsolete>"
+)
+```
+
+- **(A) fix-doc:** `reason` is typically "Doc aligned to code at @<short>" or similar.
+- **(C) obsolete:** `reason` is `"obsolete — <why>"` or `"duplicate-of:<other-id>"`.
+- **(B) regression-candidate:** **do NOT call supersede.** The drift stays open (the code is still wrong); the `#regression-candidate` learning is filed via `related:` pointer only.
+
+#### 7d. Verify supersede landed
+
+One-shot DB check — should return the `newId`:
+
+```bash
+sqlite3 ~/.arra-oracle-v2/oracle.db "SELECT superseded_by FROM oracle_documents WHERE id = '<original-drift-learning-id>';"
+```
+
+If empty → supersede didn't commit (check error output). If correct → done. Record the verification (one line per drift) in the retro so the chain is auditable even if the DB is later rebuilt.
 
 ### Step 8 — Commit + PR (5 min)
 
@@ -303,8 +345,8 @@ Once issue #412 is closed and the code is re-verified, a later Workflow 4 pass w
 This workflow is complete **only** when all are true:
 
 - [ ] Every item from Step 1's scratch list has exactly one of the outcomes (A)/(B)/(C) recorded.
-- [ ] Every (A) and (C) has a `#resolution` learning and `arra_supersede(oldId, newId)` was called.
-- [ ] Every (B) has a `#regression-candidate` learning, an `arra_handoff`, and a linked GitHub issue.
+- [ ] Every (A) and (C) has a `#resolution` learning **AND** `arra_supersede(oldId, newId, reason)` **was called** **AND** the supersede landed (7d verify query returned the `newId`). If indexer lag forced supersede to defer → the resolution learning carries `#pending-supersede` and there's an `arra_handoff` for the next session to complete it.
+- [ ] Every (B) has a `#regression-candidate` learning, an `arra_handoff`, and a linked GitHub issue. **No `arra_supersede` call for (B)** — drift stays open.
 - [ ] `docs/current-system.md` §9 reflects the new state (resolved rows gone; (B) rows marked ESCALATED with issue number).
 - [ ] All `[DRIFT]` inline markers touched in this pass are either removed (A/C) or left in place with an `[ESCALATED: #issue]` annotation (B).
 - [ ] Git branch pushed; PR opened; **not merged**.
@@ -325,6 +367,8 @@ This workflow is complete **only** when all are true:
 - **Forgetting to update §9.** The doc's own "Known drift" table is the public-facing state. If you close 5 drift learnings but leave the table untouched, the next agent sees an inconsistent vault and either re-opens the same drift or panics. Always sync.
 - **Using `#drift` tag on the resolution.** The resolution learning is tagged `#resolution`, not `#drift`. Re-using `#drift` doubles the queue size on the next pass.
 - **Reconciling archaeological drift without the human.** Drift items > 6 months old may reference code, conventions, or features the current team does not remember. Park them; ask the human.
+- **Skipping `arra_supersede` because "the resolution learning explains it".** The resolution learning is prose; `superseded_by` is machine-readable. `arra_search` and `/api/search` surface the `superseded_by` / `superseded_at` / `superseded_reason` fields to callers, but only if `arra_supersede` was actually called. Without the call, old drift learnings look open to future agents and may be re-opened or re-resolved. This was the #1 gap observed in the first live Workflow 4 run (2026-04-16) — workflow prose prescribed supersede but indexer lag blocked it, and the operator didn't treat "defer supersede" as a pending task.
+- **Calling `arra_supersede` before the resolution learning is indexed.** The MCP tool rejects unknown `newId`. With PR #754 (inline vector embedding + direct INSERT) the new learning is available immediately; without PR #754 the indexer may lag. Always run the 7b verify query before 7c. On old Oracle builds, fall back to a `#pending-supersede` tag + handoff.
 
 ---
 
@@ -340,3 +384,4 @@ This workflow is complete **only** when all are true:
 ## Change log for this workflow file
 
 - 2026-04-16 — Initial version, written during `tester` activation. Drafted against the integration-test-writer→tester supersession as a working example of how resolutions get filed; shape follows workflow-1 and workflow-2 conventions (same preamble, DoD, pitfalls, escalation blocks). Awaiting first live run by `pg-writer-oracle` for real-world refinement.
+- 2026-04-17 — Step 7 expanded to 7a/7b/7c/7d after the first live run (`ψ/memory/retrospectives/2026-04/16/17.00_workflow-4-first-live-run.md`) observed that `arra_supersede` was silently deferred due to indexer lag, leaving drift learnings without machine-readable successor pointers. New sub-steps make the verify/call/confirm cycle explicit, add a `#pending-supersede` escape hatch for indexer outages, and add two pitfalls (skipping supersede because the prose explains it; calling supersede before the resolution is indexed). DoD checklist tightened to require the 7d verify query to return the `newId` before the box is checked.
