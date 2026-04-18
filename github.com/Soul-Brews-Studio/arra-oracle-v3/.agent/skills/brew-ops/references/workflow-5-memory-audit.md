@@ -56,6 +56,44 @@ arra_search query="brew-ops audit" type=learning limit=5
 
 Read prior audit findings. Don't re-investigate issues another audit already flagged unless evidence suggests they recurred.
 
+## Step 0.5 — Preflight indexing check (non-blocking)
+
+Before running the structural audit, check whether disk has files the DB hasn't seen yet. Peer workflows (pg-writer, bot-writer, etc.) write retros/learnings to disk, and `soul-sync` can pull peer content in — but **none of these trigger the indexer automatically**. Files sit on disk until someone runs `bun run index`.
+
+The audit's §13 (retro synthesis) and §14 (coherence sampling) read from disk directly, so they work regardless. But §2 (Disk↔DB sync) will legitimately flag unindexed files as drift — which is useful **signal** but may not be **actionable** if the files arrived 2 minutes ago from soul-sync.
+
+```bash
+VAULT=~/Code/github.com/kxlahsimx09/mb_agent_oracle_memory
+DB=~/.arra-oracle-v2/oracle.db
+
+# Count files on disk not in DB
+bun --eval '
+const db = new (require("bun:sqlite").Database)(require("os").homedir() + "/.arra-oracle-v2/oracle.db");
+const { execSync } = require("child_process");
+const vault = require("os").homedir() + "/Code/github.com/kxlahsimx09/mb_agent_oracle_memory";
+const found = execSync(`find ${vault} -path "*/ψ/memory/*" -name "*.md"`, {encoding:"utf8"})
+  .trim().split("\n").map(p => p.replace(vault + "/", ""));
+const dbSet = new Set(db.query("SELECT DISTINCT source_file FROM oracle_documents").all().map(r => r.source_file));
+const unindexed = found.filter(p => !dbSet.has(p));
+console.log("Disk files:", found.length, "| DB files:", dbSet.size, "| Unindexed:", unindexed.length);
+if (unindexed.length > 0 && unindexed.length <= 10) unindexed.forEach(p => console.log("  •", p.slice(-80)));
+'
+```
+
+**Decision tree:**
+
+| Unindexed count | Action |
+|---|---|
+| 0 | ✅ proceed to §1 |
+| 1-3 | ⚠️ proceed — §2 will flag, acceptable drift |
+| 4+ | 🛑 **stop and ask the user**: "N files unindexed. Run `bun run index` first (recommended) or continue with known drift?" |
+
+If the user says "continue", note the count in the final report §15 under "Known drift at audit start: N unindexed files". Do **NOT** run the indexer yourself — that masks the drift from this audit and hides whatever pattern caused the accumulation.
+
+**Why this isn't auto-fixing:** silently running `bun run index` at audit start would turn every audit into a PASS for §2, even when peer sync is broken. The whole point of a read-only audit is to see reality, not to fix it.
+
+---
+
 ## Step 1 — Git sync
 
 ```bash
