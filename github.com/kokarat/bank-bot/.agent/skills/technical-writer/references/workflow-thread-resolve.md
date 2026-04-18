@@ -80,17 +80,30 @@ Practical heuristic: `[RATIFICATION_PENDING]` load-bearing anchor lives in the d
 
 For each unique `<id>`:
 
-1. `arra_thread_read(threadId=<id>)` → inspect `status` + last message.
-2. Dispatch on status:
+1. `arra_thread_read(threadId=<id>)` → inspect **both** `status` **and** `last_message.role`.
+2. Dispatch on the pair `(status, last-message role)`:
 
-| `status` | Action |
-|---|---|
-| `active` | No-op. Thread still awaits human. Leave marker. |
-| `pending` | No-op. Human triaging. Leave marker. |
-| `answered` | **Run the 4-step resolution block below.** This is the reason Pass 1 exists. |
-| `closed` | **Orphan marker**: the thread was closed elsewhere but the doc still references it. Strip the marker in the same commit; file a one-line `#workflow-bug + #orphan-marker` learning naming the file + commit that introduced the marker. |
+| `status` | last message role | Action |
+|---|---|---|
+| `active` | any | No-op. Thread still awaits human. Leave marker. |
+| `pending` | `claude` | No-op. Genuinely waiting for human. Leave marker. |
+| `pending` | `human` | **Run the 4-step resolution block.** Human has replied; Oracle's deployment does not auto-transition `pending` → `answered` when a human message lands (see §"Oracle status lifecycle" below). This is the **most common case** that actually fires in practice. |
+| `answered` | any | **Run the 4-step resolution block.** Normal case when / if Oracle auto-transitions in a future deployment. |
+| `closed` | any | **Orphan marker**: the thread was closed elsewhere but the doc still references it. Strip the marker in the same commit; file a one-line `#workflow-bug + #orphan-marker` learning naming the file + commit that introduced the marker. |
 
-### The 4-step resolution block (for `status=answered`)
+### Oracle status lifecycle — deployment quirk (read this once, understand forever)
+
+In this Oracle deployment, thread status transitions are **not** fully automatic:
+
+- Opening a thread: status starts as `pending`.
+- Human writes a reply via Studio `/forum` UI: status **stays `pending`**. The human message is appended to the thread's `messages` array, but no status transition fires.
+- Only explicit calls to `arra_thread_update(threadId, status=...)` change status.
+
+`arra_threads(status="answered", limit=50)` therefore returns **0 results** on a working system where humans have actually replied — because nobody ever called `arra_thread_update(status="answered")`. Observed concretely: thread #3 (`bank-bot .env.example BOT_SECRET`) had a human reply on 2026-04-17 but stayed `pending`, so Pass 2 filtered on `status="answered"` found zero.
+
+**The fix embedded in the dispatch table above:** Pass 1 classifies by **(status, last-message role)** not by status alone. A thread with `status="pending"` whose most recent message came from a human is treated as effectively-answered and runs the 4-step resolution block. Deployment-agnostic: if/when Oracle auto-transitions in the future, the `status="answered"` branch fires; until then, the `pending + human` branch carries the load.
+
+### The 4-step resolution block (for answered-effective threads)
 
 1. **Read the answer.** `arra_thread_read(threadId=<id>)`. Read every message since you opened it, not just the latest — humans sometimes answer the original question in message 3 and correct themselves in message 5.
 2. **Classify the answer.**
@@ -138,19 +151,21 @@ For each unique `<id>`:
 
 ### Pass 2 — Safety-net orphan scan
 
-After Pass 1 resolves everything grep'd from docs, cross-check:
+After Pass 1 resolves everything grep'd from docs, cross-check against the thread list. Because of the Oracle status-lifecycle quirk (see §"Oracle status lifecycle" above), scanning only `status="answered"` misses every thread where a human actually replied. Pass 2 must scan **both** `pending` and `answered`, then filter by last-message role the same way Pass 1 does:
 
 ```
-arra_threads(status="answered", limit=50)
+pending  = arra_threads(status="pending",  limit=50)
+answered = arra_threads(status="answered", limit=50)   # kept for forward-compat
+candidates = pending ∪ answered
 ```
 
-For each returned thread whose id was **not** seen in Pass 1's grep output:
+For each thread `t` in `candidates` whose id was **not** seen in Pass 1's grep output:
 
-1. Check whether its title or message body suggests bot-writer territory (mentions `flow:`, `current-system`, `bank-bot`, `scheduler`, `deposit`, etc.).
-2. If it does → **this is a workflow bug** (an earlier pass opened a thread but forgot to anchor it in a doc). File `#workflow-bug + #thread-orphan` learning naming the thread id + opening commit + guess at which workflow leaked it. Escalate via `arra_inbox` so a human can triage (anchor or close).
-3. If it's clearly another agent's territory (e.g., title starts with `test:`, `security:`, mentions `target-system`) → leave it; not ours.
+1. **Filter by effective state.** Only proceed if `t` is in an answered-effective state — i.e., `t.status == "answered"` **or** (`t.status == "pending"` **and** `t.last_message.role == "human"`). A `pending + claude-last-message` thread is genuinely still waiting and is not an orphan candidate; skip it.
+2. **Territory check.** Look at `t.title` and the body of `t.messages[0]`. If the title / first message mentions bot-writer territory (`bank-bot`, `scb`, `ktb`, `kbank`, `bbl`, `otp`, `selector`, `session-reuse`, `approver`, `dispatcher`, `sse`, `.env.example`, etc.) → continue to step 3. Otherwise it's clearly another agent's territory (e.g. titles mentioning `mobiz-payment-gateway`, `flow:`, `current-system` in the mobiz-side sense) — leave it; not ours.
+3. **File as orphan.** This is a **workflow bug** — an earlier pass opened a thread but forgot to anchor it in a doc. File a `#workflow-bug + #thread-orphan` learning naming the thread id + opening commit + guess at which workflow leaked it. Escalate via `arra_inbox` so a human can triage (anchor after-the-fact or close). Do **not** run the 4-step resolution block on the orphan directly — without a doc to update, closing the thread would lose the human's answer.
 
-Pass 2 is a **safety-net**, not a primary mechanism. In a healthy steady state, Pass 2 should find zero bot-writer threads without anchors. Repeated Pass-2 hits = prior workflows are leaking → investigate the anchor-discipline DoD check.
+Pass 2 is a **safety-net**, not a primary mechanism. In a healthy steady state, Pass 2 should find zero bot-writer threads without anchors. Repeated Pass-2 hits = prior workflows are leaking → investigate the anchor-discipline DoD check that the main workflows inherited (see W1/W2/W4 DoD).
 
 ---
 
@@ -188,3 +203,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 
 - 2026-04-17 — Initial version, mirrored from pg-writer (mobiz) with territory map narrowed to bot-writer's files (`docs/current-system.md`, `workflow/`, `README.md`, `CLAUDE.md`). W8 language pruned — bot-writer does not have W8 yet in the current pilot. Project field set to `github.com/kokarat/bank-bot`. Created alongside "thread resolution is blocking" rule in SKILL.md and Step 0 adoption in W1/W2/W4.
 - 2026-04-17 (later) — **Calibration from pg-writer's W9 first-run retro** (bug applies to both instances): Pass 1 dedupe fixed — extract id with `sed`, `sort -u` the ids (not the `<file>:<line>:<marker>` strings), then for each unique id locate the load-bearing anchor (first/top-most occurrence). Prior `sort -u` would double-process an id mentioned in both header and §Change log. Added practical heuristic for where each marker's anchor lives.
+- 2026-04-18 — **Oracle status-lifecycle fix (Pass 1 + Pass 2).** Observed via thread #3 (`bank-bot .env.example BOT_SECRET`) from bot-writer's W1 first-run retro (16.58): human answered on 2026-04-17 (`ถาม dev มาแล้ว เค้าบอกว่า เป็นแค่ place_holder`) but thread `status` stayed `pending` — Oracle does not auto-transition `pending` → `answered` on human reply. Pass 1 and Pass 2 now dispatch on `(status, last-message role)` pair instead of status alone. `pending + human-last-message` is treated as answered-effective and runs the 4-step resolution block. Pass 2 scans both `pending` and `answered` lists then filters by role. Added §"Oracle status lifecycle" explainer. Mirrored from pg-writer's copy; no bot-specific adjustments beyond territory keywords.

@@ -99,17 +99,32 @@ Practical heuristic: the load-bearing anchor for `[RATIFICATION_PENDING]` lives 
 
 For each unique `<id>`:
 
-1. `arra_thread_read(threadId=<id>)` → inspect `status` + last message.
-2. Dispatch on status:
+1. `arra_thread_read(threadId=<id>)` → inspect **both** `status` **and** `last_message.role`.
+2. Dispatch on the pair `(status, last-message role)`:
 
-| `status` | Action |
-|---|---|
-| `active` | No-op. Thread still awaits human. Leave marker. |
-| `pending` | No-op. Human triaging. Leave marker. |
-| `answered` | **Run the 4-step resolution block below.** This is the reason Pass 1 exists. |
-| `closed` | **Orphan marker**: the thread was closed elsewhere but the doc still references it. Strip the marker in the same commit; file a one-line `#workflow-bug + #orphan-marker` learning naming the file + commit that introduced the marker. |
+| `status` | last message role | Action |
+|---|---|---|
+| `active` | any | No-op. Thread still awaits human. Leave marker. |
+| `pending` | `claude` | No-op. Genuinely waiting for human. Leave marker. |
+| `pending` | `human` | **Run the 4-step resolution block.** Human has replied; Oracle's deployment does not auto-transition `pending` → `answered` when a human message lands (see §"Oracle status lifecycle" below). This is the **most common case** that actually fires in practice. |
+| `answered` | any | **Run the 4-step resolution block.** Normal case when / if Oracle auto-transitions in a future deployment. |
+| `closed` | any | **Orphan marker**: the thread was closed elsewhere but the doc still references it. Strip the marker in the same commit; file a one-line `#workflow-bug + #orphan-marker` learning naming the file + commit that introduced the marker. |
 
-### The 4-step resolution block (for `status=answered`)
+### Oracle status lifecycle — deployment quirk (read this once, understand forever)
+
+In this Oracle deployment, thread status transitions are **not** fully automatic. Specifically:
+
+- Opening a thread: status starts as `pending`.
+- Human writes a reply (via Studio `/forum` UI): status **stays `pending`**. The human message is appended to the thread's `messages` array, but no status transition fires.
+- Only explicit calls to `arra_thread_update(threadId, status=...)` change status.
+
+This means `arra_threads(status="answered", limit=50)` returns **0 results** on a working system where humans have actually replied — because nobody ever called `arra_thread_update(status="answered")`. The workflow originally assumed auto-transition and filtered only by `status="answered"`; that spec was broken on contact with reality (observed during the 2026-04-17 bot-writer W1 session — thread #3 had a human reply but Pass 2 found zero).
+
+**The fix embedded in the dispatch table above:** Pass 1 classifies by **(status, last-message role)** not by status alone. A thread with `status="pending"` whose most recent message came from a human is treated as effectively-answered and runs the 4-step resolution block. This is deployment-agnostic: if/when Oracle auto-transitions in the future, the `status="answered"` branch fires; until then, the `pending + human` branch carries the load.
+
+**Side effect on status semantics:** `answered` and `pending + human last-message` are operationally equivalent to this workflow. `pending + claude last-message` is the only genuinely-waiting state.
+
+### The 4-step resolution block (for answered-effective threads)
 
 1. **Read the answer.** `arra_thread_read(threadId=<id>)`. Read every message since you opened it, not just the latest — humans sometimes answer the original question in message 3 and correct themselves in message 5.
 2. **Classify the answer.**
@@ -159,19 +174,21 @@ For each unique `<id>`:
 
 ### Pass 2 — Safety-net orphan scan
 
-After Pass 1 resolves everything grep'd from docs, cross-check:
+After Pass 1 resolves everything grep'd from docs, cross-check against the thread list. Because of the Oracle status-lifecycle quirk (see §"Oracle status lifecycle" above), scanning only `status="answered"` misses every thread where a human actually replied. Pass 2 must scan **both** `pending` and `answered`, then filter by last-message role the same way Pass 1 does:
 
 ```
-arra_threads(status="answered", limit=50)
+pending  = arra_threads(status="pending",  limit=50)
+answered = arra_threads(status="answered", limit=50)   # kept for forward-compat
+candidates = pending ∪ answered
 ```
 
-For each returned thread whose id was **not** seen in Pass 1's grep output:
+For each thread `t` in `candidates` whose id was **not** seen in Pass 1's grep output:
 
-1. Check whether its title or message body suggests pg-writer territory (mentions `flow:`, `current-system`, `bank-bot`, `scheduler`, `deposit`, etc.).
-2. If it does → **this is a workflow bug** (an earlier pass opened a thread but forgot to anchor it in a doc). File `#workflow-bug + #thread-orphan` learning naming the thread id + opening commit + guess at which workflow leaked it. Escalate via `arra_inbox` so a human can triage (anchor or close).
-3. If it's clearly another agent's territory (e.g., title starts with `test:`, `security:`, mentions `target-system`) → leave it; not ours.
+1. **Filter by effective state.** Only proceed if `t` is in an answered-effective state — i.e., `t.status == "answered"` **or** (`t.status == "pending"` **and** `t.last_message.role == "human"`). A `pending + claude-last-message` thread is genuinely still waiting and is not an orphan candidate; skip it.
+2. **Territory check.** Look at `t.title` and the body of `t.messages[0]`. If they mention this instance's territory (pg-writer: `flow:`, `current-system`, `scheduler`, `deposit`, `bank-bot` (as referenced from mobiz side); bot-writer: `bank-bot`, `scb`, `ktb`, `selector`, `otp`, `session-reuse`, etc.) → continue to step 3. Otherwise it's clearly another agent's territory (titles starting with `test:`, `security:`, mentioning `target-system` before `next-writer` exists, etc.) — leave it; not ours.
+3. **File as orphan.** This is a **workflow bug** — an earlier pass opened a thread but forgot to anchor it in a doc. File a `#workflow-bug + #thread-orphan` learning naming the thread id + opening commit + guess at which workflow leaked it. Escalate via `arra_inbox` so a human can triage (anchor after-the-fact or close). Do **not** run the 4-step resolution block on the orphan directly — without a doc to update, closing the thread would lose the human's answer.
 
-Pass 2 is a **safety-net**, not a primary mechanism. In a healthy steady state, Pass 2 should find zero pg-writer threads without anchors. Repeated Pass-2 hits = prior workflows are leaking → investigate the anchor-discipline DoD check.
+Pass 2 is a **safety-net**, not a primary mechanism. In a healthy steady state, Pass 2 should find zero in-territory orphans. Repeated Pass-2 hits = prior workflows are leaking → investigate the anchor-discipline DoD check that the main workflows inherited (see W1/W2/W4/W8/W9 DoD).
 
 ---
 
@@ -211,3 +228,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 - 2026-04-17 (later) — Extended the recognised-marker family to include `[UNDOCUMENTED-STEP:<id>]` (introduced by W9). Pass 1 grep regex widened. Resolution table gained two rows for the UNDOCUMENTED-STEP lifecycle (human says "real step" → spawn W8 revision; human says "internal helper" → file `#undocumented-step-benign` learning so the next W9 scan doesn't re-flag). Step 0 now applies to W9 passes as well.
 - 2026-04-17 (later) — **Calibration from W9 first-run retro** (`ψ/memory/retrospectives/2026-04/17/23.19_flow-track-349b1e5-90425ba.md`): Pass 1 dedupe bug fixed. Naive `sort -u` dedupes line strings not ids, so a thread id mentioned in both the doc header and the §Change log was at risk of being processed twice. New procedure: extract just the id with a `sed` pass, `sort -u` the ids, then for each unique id locate the **load-bearing anchor** (first/top-most occurrence in the doc). Subsequent mentions in §Change log or inline narrative are informational and stay as-is (historical record per P-001). Added a practical heuristic for where each marker's load-bearing anchor lives (`[RATIFICATION_PENDING]` → header; `[AWAITING_THREAD]` → inline claim; `[UNDOCUMENTED-STEP]` → §Implementation pointers).
 - 2026-04-18 — **Added `[RATIFICATION_LAPSED:<id>]` to the recognised marker family** as part of the W8 calibration bundle. Terminal/historical marker written by W8 Step 7's decay rule when a ratification thread ages past 60 days without a human answer. Intentionally excluded from Pass 1 grep — reprocessing a terminal marker every session would be noise. Documents stay readable/usable with the marker; next W8 revision either re-opens a fresh ratification thread or accepts the lapsed state by downgrading claim strength in the header.
+- 2026-04-18 (later) — **Oracle status-lifecycle fix (Pass 1 + Pass 2).** Observed concretely via thread #3 (`bank-bot .env.example BOT_SECRET`): human had answered `ถาม dev มาแล้ว เค้าบอกว่า เป็นแค่ place_holder` on 2026-04-17 but the thread's `status` stayed `pending` — Oracle does not auto-transition `pending` → `answered` when a human reply lands. Pass 1 was classifying by `status` alone and missed every human-answered thread; Pass 2's `arra_threads(status="answered")` always returned 0. Fix: Pass 1 now dispatches on the **pair** `(status, last-message role)` — `pending + human-last-message` is operationally equivalent to `answered` and runs the 4-step resolution block. Pass 2 now scans both `pending` and `answered` thread lists, then filters by the same role rule. Added a §"Oracle status lifecycle" explainer so future agents understand why the rule looks unusual. Deployment-agnostic: if/when Oracle auto-transitions in the future, the old code path (`status=answered`) still works in parallel.
