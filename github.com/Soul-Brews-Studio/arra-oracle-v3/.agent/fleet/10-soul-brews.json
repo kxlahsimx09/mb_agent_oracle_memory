@@ -1,0 +1,15 @@
+{
+  "name": "10-soul-brews",
+  "windows": [
+    {
+      "name": "brew-ops-oracle",
+      "repo": "Soul-Brews-Studio/arra-oracle-v3"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "Soul-Brews-Studio/arra-oracle-v3",
+    "Soul-Brews-Studio/maw-js",
+    "Soul-Brews-Studio/oracle-studio"
+  ]
+}

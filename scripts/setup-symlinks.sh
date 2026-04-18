@@ -16,6 +16,7 @@ echo ""
 PROJECTS=(
   "github.com/kokarat/mobiz-payment-gateway"
   "github.com/kokarat/bank-bot"
+  "github.com/Soul-Brews-Studio/arra-oracle-v3"
 )
 
 GHQ_ROOT=$(ghq root 2>/dev/null | head -1)

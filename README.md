@@ -57,6 +57,7 @@ Edits in either location appear in both (it's the same inode). Single source of 
 |---|---|
 | `github.com/kokarat/mobiz-payment-gateway` | `pg-writer`, `pg-tester` |
 | `github.com/kokarat/bank-bot` | `bot-writer` |
+| `github.com/Soul-Brews-Studio/arra-oracle-v3` | `brew-ops` |
 
 To mount a new project:
 1. Create `github.com/<owner>/<repo>/.agent/` with its `AGENTS.md`, `fleet/`, `skills/`.
