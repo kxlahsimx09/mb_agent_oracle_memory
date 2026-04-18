@@ -3,7 +3,7 @@ title: drift — SSE intake is disabled at runtime despite heavy marketing in CL
 tags: [technical-writer, repo:bank-bot, current, sse, drift]
 created: 2026-04-17
 source: docs/current-system.md §8 DRIFT-1 @ 95dbb70
-project: github.com/kokarat/bank-bot<
+project: github.com/kokarat/bank-bot
 ---
 
 # drift — SSE intake is disabled at runtime despite heavy marketing in CLAUDE.md / README
