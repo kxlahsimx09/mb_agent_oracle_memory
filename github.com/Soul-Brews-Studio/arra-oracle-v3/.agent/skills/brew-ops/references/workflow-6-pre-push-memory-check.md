@@ -139,7 +139,7 @@ If the auto-commit hook ignores the check exit code, this workflow's value is di
 
 ## Escalation
 
-If the check repeatedly fails on peer-synced content, that's a signal the **upstream peer's writing workflow** is broken. File an `arra_handoff` to the owning role (e.g., pg-writer-oracle if the failing files came from that peer) with the specific FAIL reasons. Do not try to fix peer content — that's their domain.
+If the check repeatedly fails on peer-synced content, that's a signal the **upstream peer's writing workflow** is broken. Open an `arra_thread` addressed to the owning role (e.g., `pg-writer-oracle` if the failing files came from that peer) with the specific FAIL reasons + example files. Do not try to fix peer content — that's their domain.
 
 ---
 

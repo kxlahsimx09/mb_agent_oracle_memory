@@ -137,8 +137,8 @@ Memory lives in `<ghq>/kxlahsimx09/mb_agent_oracle_memory/ψ/memory/` (the centr
 
 1. **Open** with `arra_search` for the task.
 2. **During work**, when you discover a durable fact (selector rename, bank-portal quirk, OTP retry behavior), call `arra_learn` *immediately*.
-3. **Hand off** via `arra_handoff` when pausing.
-4. **Close** with `rrr` (`ψ/memory/retrospectives/…`). AI Diary + Honest Feedback are mandatory.
+3. **Ask** via `arra_thread` when you need verification (pair with `[AWAITING_THREAD:<id>]` anchor). Threads persist and are swept by each workflow's Step 0.
+4. **Close** with `rrr` (`ψ/memory/retrospectives/…`). AI Diary + Honest Feedback are mandatory. The retro is the state carrier for the next session — there is no separate handoff step.
 
 **Every memory write must carry:** `title`, `tags` (3-layer — see §7a), `related`, `source` (file + commit hash), `created` (GMT+7 ISO date).
 

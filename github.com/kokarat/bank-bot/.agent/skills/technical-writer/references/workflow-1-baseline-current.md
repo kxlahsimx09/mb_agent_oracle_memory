@@ -410,8 +410,8 @@ Table of `[UNVERIFIED]` markers with reason.
 - [ ] Every `[DRIFT]` marker has a matching `arra_learn` tagged `#drift` + `#repo:bank-bot` + `#current` + `#technical-writer`.
 - [ ] `docs/.baseline` exists with the exact two-line format.
 - [ ] Git branch pushed; PR opened; **not merged**.
-- [ ] Retrospective under `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/…`, AI Diary + Honest Feedback present.
-- [ ] `arra_handoff` entry with PR pointer and next unanswered question.
+- [ ] Retrospective under `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/…`, AI Diary + Honest Feedback present. The retro is the state carrier for the next session; no separate handoff step.
+- [ ] Every unanswered question has an `arra_thread` open with a paired `[AWAITING_THREAD:<id>]` anchor in the doc (see §Escalation). PR body lists open thread ids — it does not carry the questions themselves.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] Root trace (Step 2b) opened with `queryType=project` + baseline commit in `foundCommits`. If a prior baseline trace exists, `arra_trace_link(prev, root)` was called to chain baseline-over-time history.
 - [ ] Every `[DRIFT]` and `[UNVERIFIED]` / `[AWAITING_THREAD]` has a child trace with `parentTraceId=ROOT_TRACE` (Step 9). Retro §"Session map" has `arra_trace_get(ROOT_TRACE, includeChain=true)` pasted.

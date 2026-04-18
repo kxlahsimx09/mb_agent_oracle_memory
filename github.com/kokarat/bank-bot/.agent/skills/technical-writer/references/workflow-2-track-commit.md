@@ -261,7 +261,7 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] Each new `#drift` marker has its paired `arra_learn` for Workflow 4.
 - [ ] Branch pushed, PR opened; **not merged**.
 - [ ] Retrospective written (session-level, not per-commit).
-- [ ] `arra_handoff` entry with PR pointer.
+- [ ] Retro is the state carrier for the next session; no separate handoff step. Open questions — if any — live in `arra_thread` with `[AWAITING_THREAD:<id>]` anchors per §Escalation.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for `github.com/kokarat/bank-bot`, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a mobiz-payment-gateway W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.

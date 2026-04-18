@@ -11,14 +11,14 @@ This is brew-ops' periodic health check for the Oracle memory system. It answers
 
 > **"Is every agent using Oracle memory the way upstream designed it to be used, and is the pipeline still healthy?"**
 
-No writes to the vault except `arra_learn` of findings and (if urgent) `arra_handoff`. Nothing is re-indexed, no files moved, no DB rows modified. The workflow **observes and reports** — fixes are separate, human-approved follow-ups.
+No writes to the vault except `arra_learn` of findings and (if urgent) an `arra_thread` to flag the issue for a specific role. Nothing is re-indexed, no files moved, no DB rows modified. The workflow **observes and reports** — fixes are separate, human-approved follow-ups.
 
 ## Scope & rules
 
 - **Read-only on vault files, DB, and all services.** Use `arra_search`, `sqlite3` / `bun:sqlite`, `curl` to the HTTP API, and `find` on disk.
 - **Writes allowed (findings only):**
   - `arra_learn` with the audit summary, tagged `#brew-ops #memory #audit`.
-  - `arra_handoff` if P0 issues need immediate attention.
+  - `arra_thread` to flag a specific role when P0 issues need their attention (anchor with `[AWAITING_THREAD:<id>]` if anchored in a doc).
 - **Writes forbidden:** no `bun run index`, no `bun src/scripts/index-model.ts`, no `arra_supersede`, no file moves, no `git push`, no config changes.
 - **Principle wins.** If a check conflicts with a principle in Oracle (P-001..P-004), the principle wins — describe the drift, don't delete.
 - **One audit, one learning.** Every completed audit produces at least one `arra_learn` entry so the next audit can see what changed.
@@ -524,7 +524,7 @@ Vector-drift gaps should not fire the severity (those are P0-1 territory, not P2
 
 ### 13b.4 Remediation (read-only discipline)
 
-- **real-gap**: file `arra_handoff` to the role that would know (e.g. query about SCB scraper → bot-writer-oracle). Include the query, count, and suggestion to write a learning.
+- **real-gap**: open `arra_thread(title="knowledge gap: <query>", message="<count>× in past 14d; suggestion: write a learning covering <topic>")` addressed to the role that would know (e.g. query about SCB scraper → bot-writer). The role picks it up on their next session.
 - **recall-issue**: file `arra_learn` with a note + the missing synonym list under a `concepts:` field so next agent's search hits it. This is one of the few writes workflow-5 is allowed (informational, not fixing code).
 - **vector-drift**: escalate as P0-1 via §3 — do not categorize as a knowledge gap.
 - **test-noise / typo**: ignore, note in report under "Excluded".
@@ -637,14 +637,14 @@ echo "commits: vault=$VAULT_COMMITS proj=$PROJ_COMMITS | learnings=$LEARNS retro
 - Learnings written: M | Retros written: K
 - **Uncaptured changes:** <bullet list>
 - Severity: <P0|P1|P2>
-- Suggested handoff: <one-liner ready to paste into arra_handoff>
+- Suggested thread: <one-liner ready to paste into `arra_thread(title=..., message=...)`>
 ```
 
 ### 14f. Remediation
 
 Do **NOT** auto-fix threads. Instead:
 
-- For a `Fragmented`/`Incomplete` thread → file `arra_handoff` to the owning role (e.g., `technical-writer` for flow gaps) with: missing pieces, recommended structure, 2–3 line problem statement. Let the owning agent close the gap next session.
+- For a `Fragmented`/`Incomplete` thread → open `arra_thread(title="coverage gap: <topic>", message="missing pieces: ...; recommended structure: ...; problem statement: ...")` addressed to the owning role (e.g. `technical-writer` for flow gaps). Let the owning agent close the gap next session.
 - For a **P0 session-capture gap** (16d) → brew-ops writes the missing learnings + retro **before ending the audit session**. This is the one case where this read-only workflow is allowed to write more than an audit summary, because the alternative is losing durable state to P-001 erosion.
 
 ---
@@ -722,7 +722,7 @@ tags:
 
 **Optional (if P0 found):**
 
-- `arra_handoff` to the role(s) whose area has the P0, e.g., if indexer bug → `arra_handoff` with `to: brew-ops` (self) + note to open PR.
+- `arra_thread` addressed to the role(s) whose area has the P0, e.g. if indexer bug → `arra_thread(title="P0 indexer: <symptom>", message="<reproduction + proposed fix or PR intent>")`. Audit reports link the thread id so the recipient can find context.
 - `arra_thread` to start a discussion if the issue is architectural.
 
 **Do NOT:**
@@ -735,7 +735,7 @@ tags:
 | Condition | Action |
 |---|---|
 | Missing root principle (P-001..P-004) | **STOP.** Tell human immediately. Don't continue audit. |
-| Active path corruption (non-superseded) | P0 file in report + `arra_handoff` to self with proposed fix |
+| Active path corruption (non-superseded) | P0 file in report + `arra_thread(title="P0 path corruption: <path>", message="<proposed fix>")` (addressed to brew-ops / human) |
 | Supersede chain broken | P0 + explain the P-001 risk |
 | Vector search degraded + server fresh | P0 + cite learning `2026-04-14_arra-oracle-indexer-server-lancedb-drift` |
 | >3 stale handoffs older than 14d | P1 + suggest archival pass to each owning role |
@@ -749,7 +749,7 @@ The audit is **complete** when:
 - [ ] All 15 steps executed (or explicitly skipped with reason).
 - [ ] Report written with P0/P1/P2 sections + retro synthesis + metrics table.
 - [ ] At least 1 `arra_learn` filed with `#brew-ops #audit` tags.
-- [ ] If any P0 found: `arra_handoff` filed.
+- [ ] If any P0 found: `arra_thread` opened addressed to the owning role (brew-ops, technical-writer, etc.) with reproduction + proposed fix; thread id listed in the audit report.
 - [ ] No vault writes beyond the learning + handoff.
 
 ## Known-good baseline (2026-04-18)

@@ -204,7 +204,7 @@ tags:
 
 When I find a fact that applies to **both** repos (e.g. a shared contract, a PromptPay quirk, a migration mapping), I tag `#repo:cross` plus `#migration-map` so both instances find it.
 
-When I pause or finish a block, I `arra_handoff` with a pointer to the doc diff and the next unanswered question. I end every session with `rrr` — AI Diary and Honest Feedback are mandatory, not optional.
+When I have an unanswered question (invariant verification, domain-expert input, ratification pending), I open an `arra_thread` and anchor it in the doc with `[AWAITING_THREAD:<id>]`. The thread is the durable channel; the next W2 Step 0 sweeps it when answered. I end every session with `rrr` — AI Diary and Honest Feedback are mandatory, not optional. The retro is the state carrier for the next session; there is no separate handoff step.
 
 When drift is found I write a `#drift` learning plus an `arra_trace` linking:
 

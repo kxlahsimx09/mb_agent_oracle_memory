@@ -268,7 +268,7 @@ arra_thread(
 )
 ```
 
-Insert `[RATIFICATION_PENDING:<threadId>]` in the flow doc header. File `arra_handoff` scheduling the W8 revision pass. Do not attempt to revise the flow body now — W8 will.
+Insert `[RATIFICATION_PENDING:<threadId>]` in the flow doc header. The W8 revision is triggered on the next W8 Step 0 sweep when the thread is answered — no separate scheduling mechanism is needed. Do not attempt to revise the flow body now; W8 will.
 
 **Step 5e — Cross-repo sync.** If any affected flow is cross-repo, file the `#cross-repo-sync + #flow-track` learning naming both W9 and bank-bot's W2 traces + the shared concept.
 
@@ -389,7 +389,7 @@ PR body always lists the affected flows (or "none — range out of flow territor
 - [ ] No code files changed. No `docs/current-system.md` changes. No new `docs/flows/<slug>.md` files created (those are W8). Diff is exclusively pointer refreshes + marker insertions + baseline bump + `#drift`/`#flow-track` learnings.
 - [ ] Branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written with AI Diary + Honest Feedback.
-- [ ] `arra_handoff` with PR pointer, W8 revision handoffs (if F), open thread ids.
+- [ ] Retro is the state carrier; no separate handoff step. Open thread ids + ratification-pending thread ids are listed in the PR body and anchored in the flow doc(s) via `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` — W8/W9 Step 0 picks them up on resolution.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 
 ---

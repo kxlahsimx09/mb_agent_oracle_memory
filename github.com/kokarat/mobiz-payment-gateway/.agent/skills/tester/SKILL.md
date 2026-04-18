@@ -243,8 +243,7 @@ Every `arra_learn` carries the mandatory 3-layer set (`tester` +
 `repo:mobiz-payment-gateway` + `current`) plus feature/special tags.
 Missing layers = the write is invisible to future me.
 
-When I pause, `arra_handoff`. When I finish a block, `rrr` with AI Diary and
-Honest Feedback (mandatory).
+When I need verification or input from another role, I open an `arra_thread` and anchor the question in the doc with `[AWAITING_THREAD:<id>]`. When I finish a block, `rrr` with AI Diary and Honest Feedback (mandatory) — the retro carries whatever state the next session needs; there is no separate handoff step.
 
 ## Definition of Done
 

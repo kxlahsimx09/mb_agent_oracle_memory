@@ -440,7 +440,7 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 - [ ] Cross-repo flows: `#cross-repo-sync` learning filed with expected bot-writer counterpart slug.
 - [ ] Branch pushed, PR opened; **not merged**.
 - [ ] Retrospective written (AI Diary + Honest Feedback, mandatory).
-- [ ] `arra_handoff` entry with PR pointer + open thread ids + ratification thread id.
+- [ ] Retro is the state carrier for the next session; no separate handoff step. Open thread ids + ratification thread id are listed in the PR body and anchored in the flow doc via `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` so next W8/W9 Step 0 sweeps them on resolution.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep, including `[RATIFICATION_PENDING]`) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero unfiled orphans. Any ratification thread whose answer was judged insufficient stays open with a follow-up message — not closed prematurely.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass (both question threads and the mandatory ratification thread for reverse-engineered flows) inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md` in the same PR. Orphan thread count = 0. Count check: `grep -cE '\[(AWAITING_THREAD|RATIFICATION_PENDING):' docs/flows/<slug>.md` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.

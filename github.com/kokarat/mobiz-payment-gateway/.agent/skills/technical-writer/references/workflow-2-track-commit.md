@@ -340,8 +340,7 @@ This workflow is complete **only** when all are true:
 - [ ] `docs/.baseline` bumped **only** if no in-territory file was deferred; otherwise left at prior hash with deferral noted in retro.
 - [ ] At least one `arra_learn` entry filed per durable fact (or an explicit retro note that the range had no durable facts).
 - [ ] Git branch pushed; PR opened; **not merged**.
-- [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback.
-- [ ] `arra_handoff` entry written with a pointer to the PR and the next expected Workflow 2 trigger.
+- [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback. The retro is the state carrier; no separate handoff step.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a bank-bot W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.

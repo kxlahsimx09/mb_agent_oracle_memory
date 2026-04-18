@@ -140,8 +140,8 @@ Memory lives in `ψ/memory/` and is indexed by Oracle. Three file types:
 
 1. **Open** with `arra_search` for the task.
 2. **During work**, when you discover a durable fact, call `arra_learn` immediately.
-3. **Hand off** via `arra_handoff` when pausing.
-4. **Close** with `rrr` (retrospective with AI Diary + Honest Feedback).
+3. **Ask** via `arra_thread` when you need verification (pair with `[AWAITING_THREAD:<id>]` anchor). Threads persist per P-001 and are swept by each workflow's Step 0.
+4. **Close** with `rrr` (retrospective with AI Diary + Honest Feedback). The retro is the state carrier for the next session — there is no separate handoff step.
 5. **Propagate** with `maw soul-sync` when the node has peers.
 
 ### 7a. Tagging convention (mandatory 3-layer)

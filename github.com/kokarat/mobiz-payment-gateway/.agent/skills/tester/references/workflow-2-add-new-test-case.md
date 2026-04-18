@@ -300,19 +300,13 @@ EOF
 
 **Do not merge.** Human reviews.
 
-## Step 10 — Handoff (per test) + retrospective (session-end only)
+## Step 10 — Retrospective (session-end only)
 
-### Per-test — always
+### Per-test open questions — use threads, not handoffs
 
-For **every** test added in this session, write an `arra_handoff`
-right after its PR is opened (Step 9):
+If a specific test has an unanswered question that a domain expert needs to resolve (e.g. "first runtime run — pass or fail?", "should this edge case return 400 or 422?"), open an `arra_thread` for that question with the PR URL and the test path in the message body. Anchor the question in the test script or in `docs/test-index.md` with `[AWAITING_THREAD:<id>]` so the next tester/writer pass sweeps it when resolved.
 
-- Pointer to the PR URL
-- One-liner on what the test covers
-- The next unanswered question (usually: "first runtime run — pass or
-  fail?")
-
-Handoffs are cheap and scoped to one test — one per test is correct.
+Do NOT write an `arra_handoff` for the PR — PR tracking lives in the PR itself, not in Oracle.
 
 ### Session-end — exactly once
 

@@ -445,8 +445,8 @@ This workflow is complete **only** when all are true:
 - [ ] Every `[DRIFT]` marker has a matching `arra_learn` entry tagged `#drift` + `#repo:mobiz-payment-gateway` + `#current` + `#technical-writer`.
 - [ ] `docs/.baseline` exists with the exact two-line format.
 - [ ] Git branch pushed; PR opened; **not merged**.
-- [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback.
-- [ ] `arra_handoff` entry written with a pointer to the PR and the next unanswered question.
+- [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback. The retro is the state carrier for the next session; no separate handoff step.
+- [ ] Every unanswered question has an `arra_thread` open with a paired `[AWAITING_THREAD:<id>]` anchor in the doc (see §Escalation). PR body lists open thread ids — it does not carry the questions themselves.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`. If this session introduced any broken file, fix it before closing the PR.
 - [ ] Root trace (Step 2b) opened with `queryType=project` + baseline commit in `foundCommits`. If a prior baseline trace exists, `arra_trace_link(prev, root)` was called to chain the baseline-over-time history.
 - [ ] Every `[DRIFT]` and `[UNVERIFIED]` / `[AWAITING_THREAD]` has a child trace with `parentTraceId=ROOT_TRACE` (Step 10). Retro §"Session map" has `arra_trace_get(ROOT_TRACE, includeChain=true)` pasted.

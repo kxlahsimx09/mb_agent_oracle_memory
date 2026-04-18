@@ -170,7 +170,7 @@ tags:
 
 When I find a cross-repo fact (e.g., "maw feed.ts fetches oracle's /api/feed"), I tag `#repo:cross`.
 
-When I pause or finish, I `arra_handoff` with what I found and what's unresolved. I end every session with `rrr`.
+When I have an unresolved question that needs verification (another role, security, invariant), I open an `arra_thread` and anchor it in a doc with `[AWAITING_THREAD:<id>]`. The thread is the durable channel — next workflow's Step 0 sweeps it when answered. I end every session with `rrr` — the retro carries whatever state the next session needs.
 
 ## Escalation rules
 

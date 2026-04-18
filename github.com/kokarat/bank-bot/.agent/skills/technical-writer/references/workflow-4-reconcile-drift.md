@@ -65,7 +65,7 @@ Per drift item, **one** of these three outcomes. Every item ends in exactly one 
 | Outcome | When | Artifacts |
 |---|---|---|
 | **(A) Fix doc** (most common) | Code is right; doc is stale | Edited doc section + new `// verified: <path>@<short>` citation + removed `[DRIFT]` marker + follow-up `arra_learn` tagged `#resolution` pointing at the original drift via `supersedes:`; call `arra_supersede(oldId, newId)` |
-| **(B) Fix code** — escalate | Doc encodes a stated invariant the code violates | **No doc edit.** GitHub issue filed (`gh issue create` with title `regression-candidate: <invariant>`). Follow-up `arra_learn` tagged `#regression-candidate` that references the drift via `related:` (NOT `supersedes:` — the drift stays open until code is fixed). Handoff to `backend_developer` via `arra_handoff` |
+| **(B) Fix code** — escalate | Doc encodes a stated invariant the code violates | **No doc edit.** GitHub issue filed (`gh issue create` with title `regression-candidate: <invariant>`). Follow-up `arra_learn` tagged `#regression-candidate` that references the drift via `related:` (NOT `supersedes:` — the drift stays open until code is fixed). Open `arra_thread(title="regression-candidate: <invariant>", message="<issue URL> + <drift id>")` and insert `[AWAITING_THREAD:<id>]` at the drift row in §9 — `backend_developer` or `code_reviewer` resolves on the thread; next W4 Step 0 sweeps it when answered |
 | **(C) Obsolete / duplicate** | Drift references a deleted surface, a since-renamed file, a duplicate of another drift, or a feature that has been intentionally removed | Follow-up `arra_learn` tagged `#resolution` with `reason: obsolete \| duplicate-of:<id> \| feature-removed` ; `arra_supersede(oldId, newId)`. The `[DRIFT]` marker is removed from the doc if the doc section still exists, or the whole section is removed if the feature was removed |
 
 Required artifacts regardless of outcome:
@@ -184,7 +184,7 @@ For each (B) item:
 
    Content: issue URL, summary of the invariant, the exact line(s) in code that violate it, and a statement that the drift remains **open** until code is fixed.
 
-4. `arra_handoff(content=<summary + issue URL + drift id>, slug="regression-candidate-<topic>")` addressed implicitly to the backend team (since there is no subscriber model — see the handoff investigation in the vault). The next agent that runs `arra_inbox()` picks it up.
+4. `arra_thread(title="regression-candidate: <topic>", message="<summary + issue URL + drift id>")` + insert `[AWAITING_THREAD:<id>]` at the drift row in `docs/current-system.md §9`. Threads are searchable, persist per P-001, and the next W4 Step 0 sweeps them on `status="answered"`. (Prior version used `arra_handoff`, which currently has no subscriber model — the thread discipline replaces it; see the `decision-technical-writer-workflow-2` learning from 2026-04-18.)
 
 5. Do **not** call `arra_supersede` on the drift item. Leave it open.
 
@@ -389,13 +389,13 @@ Once issue #412 is closed and the code is re-verified, a later Workflow 4 pass w
 This workflow is complete **only** when all are true:
 
 - [ ] Every item from Step 1's scratch list has exactly one of the outcomes (A)/(B)/(C) recorded.
-- [ ] Every (A) and (C) has a `#resolution` learning **AND** `arra_supersede(oldId, newId, reason)` **was called** **AND** the supersede landed (7d verify query returned the `newId`). If indexer lag forced supersede to defer → the resolution learning carries `#pending-supersede` and there's an `arra_handoff` for the next session to complete it.
-- [ ] Every (B) has a `#regression-candidate` learning, an `arra_handoff`, and a linked GitHub issue. **No `arra_supersede` call for (B)** — drift stays open.
+- [ ] Every (A) and (C) has a `#resolution` learning **AND** `arra_supersede(oldId, newId, reason)` **was called** **AND** the supersede landed (7d verify query returned the `newId`). If indexer lag forced supersede to defer → the resolution learning carries `#pending-supersede`; next W4 Step 1 grounding search for `#pending-supersede` picks it up and completes it.
+- [ ] Every (B) has a `#regression-candidate` learning, an `arra_thread` with `[AWAITING_THREAD:<id>]` anchor at §9, and a linked GitHub issue. **No `arra_supersede` call for (B)** — drift stays open.
 - [ ] `docs/current-system.md` §9 reflects the new state (resolved rows gone; (B) rows marked ESCALATED with issue number).
 - [ ] All `[DRIFT]` inline markers touched in this pass are either removed (A/C) or left in place with an `[ESCALATED: #issue]` annotation (B).
 - [ ] Git branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written under `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md`, including AI Diary + Honest Feedback.
-- [ ] `arra_handoff` entry for the PR with the total counts by class and any residual items the human should know about.
+- [ ] Retro carries total counts by class and any residual items the human should know about. No separate handoff step; PR body lists open `arra_thread` ids for (B) items.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in bot-writer territory; Pass 2 (orphan scan) returned zero bot-writer-territory threads not in Pass 1. Items dissolved by Step 0 thread-resolution are not (A)/(B)/(C) outcomes — note them as "pre-resolved via thread" in the retro.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass (typically B-class escalations to request human decision) inserted a paired `[AWAITING_THREAD:<id>]` marker into either §9 "Known drift" row or the resolution learning's `related:` list in the same PR. Orphan thread count = 0.
@@ -422,7 +422,7 @@ This workflow is complete **only** when all are true:
 
 ## Escalation
 
-- **(B) count > 30% of the queue** — the code is drifting from invariants. Halt after finishing the current item, `arra_handoff` to the human with the count and top-3 offending surfaces. Do not start another Workflow 4 run until a code pass has happened.
+- **(B) count > 30% of the queue** — the code is drifting from invariants. Halt after finishing the current item, open `arra_thread(title="W4 halt: (B) count >30%", message="<count> + top-3 offending surfaces")` and anchor it in the retro's §"Session map". Do not start another Workflow 4 run until a code pass has happened.
 - **Drift in a security-sensitive area** (auth, JWT, RBAC, rate limit, callback) — before publishing the resolution PR, CC `security_auditor` in the PR description. Do not resolve drift in this area silently.
 - **Drift that depends on a decision not yet made** — the code and doc disagree because the feature is mid-design. Park the drift (do not close as obsolete), file a `handoff` to `system_architect` / `requirement_writer`, and move on to the next item.
 - **Drift in a file this role does not own** (e.g. `integration-tests/`, `bank-bot/src/…` selectors) — leave it for `tester`. Add `#out-of-territory` to the drift's `related:` list and skip. Do not resolve drift outside territory.

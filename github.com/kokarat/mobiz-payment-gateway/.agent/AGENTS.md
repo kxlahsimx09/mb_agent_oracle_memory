@@ -202,8 +202,8 @@ Memory lives in `ψ/memory/` and is indexed by Oracle. Three file types, three u
 
 1. **Open** with `arra_search` for the task + `arra_reflect` for a random grounding.
 2. **During work**, when you discover a durable fact (bug, contract, schema quirk, bank-portal behavior), call `arra_learn` *immediately*. Do not batch at the end — you will forget nuance.
-3. **Hand off** via `arra_handoff` when pausing: capture what you did, what is blocked, what the next agent needs.
-4. **Close** the session with `rrr` (`ψ/memory/retrospectives/…`). Skipping AI Diary or Honest Feedback is treated as an incomplete session.
+3. **Ask** via `arra_thread` when you need verification or domain-expert input (pair with an `[AWAITING_THREAD:<id>]` anchor in the doc the thread is about). Threads persist per P-001 and are swept by each workflow's Step 0.
+4. **Close** the session with `rrr` (`ψ/memory/retrospectives/…`). Skipping AI Diary or Honest Feedback is treated as an incomplete session. The retro carries whatever state the next session needs — there is no separate handoff step.
 5. **Propagate** with `maw soul-sync` when the node has peers. New files only; the receiving peer re-indexes.
 
 **Every memory write must carry:**
