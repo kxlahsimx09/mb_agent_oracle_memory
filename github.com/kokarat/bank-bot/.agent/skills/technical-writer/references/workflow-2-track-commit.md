@@ -283,8 +283,23 @@ If multiple commits were covered in one session, write **one session-level retro
 ## Escalation
 
 - **Commit range is larger than expected** → stop, escalate to Workflow 1.
-- **Security-sensitive area** (BOT_SECRET flow, credential caching, OTP handling) → CC `security_auditor` when role exists; meanwhile, include human review as explicit reviewer on the PR.
 - **Behavior the PR description doesn't cover** (silent change piggy-backing on a stated change) → add it to the doc update but call it out in the PR body and in the retro.
+
+When this workflow produces a doc claim that needs **domain-expert verification** (security, invariant-level, anywhere wrong docs would mislead operators), use the **thread-first** pattern. Never put the ask in the PR body: it dies on merge, Step 0 can't sweep it, next agent has no record.
+
+**Thread-first pattern (canonical):**
+
+1. Open the thread:
+   `arra_thread(title="verify: <one-line claim>", message="<claim> @ <commit>; source: <file:line>; reviewer: <@role>")` → capture `thread_id`.
+2. Anchor the claim in the doc: insert `[AWAITING_THREAD:<thread_id>]` inline at the exact section the thread is about.
+3. PR body, single line: "Pending verification: `arra_thread_read(<id>)` — see `[AWAITING_THREAD:<id>]` markers. When reviewer calls `arra_thread_update(status="answered")`, next W2 Step 0 sweeps it automatically."
+4. Do **NOT** ask the question in PR body prose or review comments. Step 0 only sees `[AWAITING_THREAD:*]` anchors in committed docs. Threads are the durable record; the PR is the delivery vehicle.
+
+**Categories that trigger thread-first escalation (bank-bot territory):**
+
+- **Security-sensitive area** (BOT_SECRET flow, credential caching, OTP handling, session cookies) → CC `security_auditor` on the thread. Do not land public-facing doc updates until the thread is `status="answered"`.
+- **Invariant-level claim** about bank-portal behavior that a human operator would rely on (e.g., "SCB approver demotes matched-but-cancelled tasks before clicking Approve") → same pattern; the thread is the durable record that the claim was verified at this commit.
+- **Cross-repo contract claim** (callback payload, HMAC signature, MDR enum, OTP endpoint) — if the claim describes behavior shared with `mobiz-payment-gateway` → CC both `code_reviewer` and the mobiz `technical-writer` peer on the thread so both sides ratify together.
 
 ---
 
@@ -294,3 +309,4 @@ If multiple commits were covered in one session, write **one session-level retro
 - 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Bank-bot W2 passes now extend the same horizontal chain the mobiz writer uses — `W1-baseline → W2₁ → W2₂ → …` — and future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Per-finding child traces are still filed at W1 scope; W2 findings remain at `arra_learn` granularity to avoid trace noise.
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint, BOT_SECRET handshake). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no mobiz trace exists yet, defer — mobiz's W2 will link back. DoD added a check that refuses "forgot to look."
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate. Daily W2 cron is especially exposed to zombie threads because it runs every morning, so a single missed resolution ages 24h per cycle. Scoping via doc-anchored grep — see `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired `[AWAITING_THREAD]` marker.
+- 2026-04-18 — **Escalation rewritten thread-first** (mirror of mobiz W2 edit the same day). Prior version said "CC `security_auditor` when role exists; meanwhile, include human review as explicit reviewer on the PR" for security-sensitive areas. Same failure mode as mobiz: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body. Added a bank-bot-specific category for **cross-repo contract claims** that span mobiz ↔ bank-bot (shared payload / HMAC / MDR / OTP) — the thread is the joint ratification point so both sides agree at the same commit. Meta-workflow edit by `brew-ops` with human approval; peer roles can ratify or counter-edit on their next pass.

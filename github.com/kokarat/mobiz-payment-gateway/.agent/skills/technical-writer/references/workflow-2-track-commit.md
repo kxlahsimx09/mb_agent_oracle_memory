@@ -363,8 +363,24 @@ This workflow is complete **only** when all are true:
 
 ## Escalation
 
-- Security-sensitive change (auth, RBAC, callbacks, MDR, OTP, signature validation) → stop the fast-fix. File `#drift` + CC `security_auditor` via `arra_inbox`. Do not update docs in public until acknowledged.
-- Financial-behavior change (wallet ops, fees, settlements, payout expiry) → CC `code_reviewer` in the PR description. Fast-fix still allowed if purely documentation, but flag in retro.
+When this workflow produces a doc claim that needs **domain-expert verification** (financial, security, invariant-level — anywhere wrong docs would mislead operators), use the **thread-first** pattern. Never put the ask in the PR body: it dies on merge, Step 0 can't sweep it, next agent has no record.
+
+**Thread-first pattern (canonical):**
+
+1. Open the thread:
+   `arra_thread(title="verify: <one-line claim>", message="<claim> @ <commit>; source: <file:line>; reviewer: <@role>")` → capture `thread_id`.
+2. Anchor the claim in the doc: insert `[AWAITING_THREAD:<thread_id>]` inline at the exact section the thread is about.
+3. PR body, single line: "Pending verification: `arra_thread_read(<id>)` — see `[AWAITING_THREAD:<id>]` markers. When reviewer calls `arra_thread_update(status="answered")`, next W2 Step 0 sweeps it automatically."
+4. Do **NOT** ask the question in PR body prose or review comments. Step 0 only sees `[AWAITING_THREAD:*]` anchors in committed docs. Threads are the durable record; the PR is the delivery vehicle.
+
+**Categories that trigger thread-first escalation:**
+
+- **Financial-behavior change** (wallet ops, fees, settlements, payout expiry, wallets_change_logs invariants) → CC `code_reviewer` on the thread. Fast-fix still allowed if purely documentation, but flag in retro.
+- **Security-sensitive change** (auth, RBAC, callbacks, MDR, OTP, signature validation) → stop the fast-fix. CC `security_auditor` on the thread. Do not land public-facing doc updates for this claim until the thread is `status="answered"`.
+- **Invariant-level claim** describing behavior that domain experts must ratify (e.g., "X happens only when Y was previously Z") → same pattern; the thread is the durable record that the claim was verified (or corrected) at this commit.
+
+**Other escalations (no thread needed):**
+
 - Commit range reveals that a prior baseline claim was wrong (not the commit's fault — the baseline missed it) → file `#drift` with the original Workflow 1 commit as the provenance, not the current commit. This is P-004 in action.
 - Commit touches both current and target systems (shared code) → stop. That contradicts SKILL §3 ("Current and Target, never mixed"). Human decision needed before proceeding.
 
@@ -385,3 +401,4 @@ This workflow is complete **only** when all are true:
 - 2026-04-17 — Added Step 2b (open a W2 trace with `queryType="evolution"`, then `arra_trace_link` to the prior baseline/W2 chain head). Each W2 pass is now a node in a horizontal chain that shows evolution over time: W1-baseline → W2₁ → W2₂ → … Future agents reconstruct the sequence with `arra_trace_chain(<any-node>)`. DoD tightened to require the trace and the link. Findings inside the pass (`#drift`, `[UNVERIFIED]`, deferrals) are still filed as `arra_learn` — not as child traces — because W2 work units are typically smaller than W1 and the per-finding child pattern there would be noise. If a single W2 pass grows large enough that per-finding children help, fall back to the W1 pattern and note it in the retro.
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no other-repo trace exists yet, defer — the other repo's W2 will link back. DoD added a check that refuses "forgot to look."
 - 2026-04-17 — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation especially acute for W2: the daily cron re-runs the workflow every morning, so a skipped thread check ages a zombie thread by 24h per cycle. Scoping via doc-anchored grep (not title prefix) — see `workflow-thread-resolve.md`. DoD added two items: Step 0 clears to zero, and every `arra_thread(...)` in the pass inserts a paired `[AWAITING_THREAD]` marker (anchor discipline).
+- 2026-04-18 — **Escalation rewritten thread-first.** Prior version said "CC `code_reviewer` in the PR description" for financial-behavior claims and "CC `security_auditor` via `arra_inbox`" for security. Both have the same failure mode: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this, and was asymmetrically underused. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body — the thread is the durable record, the PR is only the delivery vehicle. Meta-workflow edit by `brew-ops` with human approval (not a technical-writer session); peer roles can ratify or counter-edit on their next pass.
