@@ -20,7 +20,8 @@ This procedure turns "answered thread" from a **passive signal** into **blocking
 A thread is **mine** (this instance's responsibility) if and only if a doc I own currently contains a recognised marker referencing its id. The recognised marker family is:
 
 - `[AWAITING_THREAD:<id>]` — generic "I asked a question about this claim" (W1/W2/W4/W8).
-- `[RATIFICATION_PENDING:<id>]` — "I reverse-engineered this flow; human must ratify" (W8, and downgrades triggered by W9 class F).
+- `[RATIFICATION_PENDING:<id>]` — "I reverse-engineered this flow; human must ratify" (W8, and downgrades triggered by W9 class F). Subject to a **decay rule** — see W8 Step 7: 7d bump, 30d `#missing-ratification` learning, 60d lapse.
+- `[RATIFICATION_LAPSED:<id>]` — "This flow's ratification thread went unanswered for > 60 days and has been closed as lapsed" (W8 decay terminal state). The doc is still readable/usable, just carrying an explicit "never-ratified" label. **Informational, not blocking** — Pass 1 does not reprocess these; they survive as historical record per P-001.
 - `[UNDOCUMENTED-STEP:<id>]` — "W9 noticed a new actor-crossing in code the flow doesn't cover; human must decide new-step vs internal-helper" (W9 only).
 
 Title prefixes (`flow:<slug>`, `drift:<area>`) are **hints for humans**, not scoping. They collide across agents and survive renames. Doc anchors are load-bearing; titles are not.
@@ -71,7 +72,7 @@ grep -rEn '\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED_STEP|UNDOCUMENTE
   2>/dev/null
 ```
 
-(The regex accepts both `UNDOCUMENTED-STEP` and `UNDOCUMENTED_STEP` for forward-compatibility with earlier drafts of W9; normalise new markers to the hyphen form.)
+(The regex accepts both `UNDOCUMENTED-STEP` and `UNDOCUMENTED_STEP` for forward-compatibility with earlier drafts of W9; normalise new markers to the hyphen form. `[RATIFICATION_LAPSED:<id>]` is **intentionally excluded** from Pass 1 — it is a terminal/historical marker, not a live one, and reprocessing it every session would be noise.)
 
 Expected output per line: `<file>:<line>:[<MARKER>:<id>]`.
 
@@ -209,3 +210,4 @@ A future dedicated `docs/cross-repo-questions.md` in each repo would close this 
 - 2026-04-17 — Initial version. Doc-anchored scoping (grep-based). Pass 1 + Pass 2 structure. 4-step resolution block. Cross-repo known-gap documented. Created alongside the "thread resolution is blocking" rule in SKILL.md and Step 0 adoption in W1/W2/W4/W8.
 - 2026-04-17 (later) — Extended the recognised-marker family to include `[UNDOCUMENTED-STEP:<id>]` (introduced by W9). Pass 1 grep regex widened. Resolution table gained two rows for the UNDOCUMENTED-STEP lifecycle (human says "real step" → spawn W8 revision; human says "internal helper" → file `#undocumented-step-benign` learning so the next W9 scan doesn't re-flag). Step 0 now applies to W9 passes as well.
 - 2026-04-17 (later) — **Calibration from W9 first-run retro** (`ψ/memory/retrospectives/2026-04/17/23.19_flow-track-349b1e5-90425ba.md`): Pass 1 dedupe bug fixed. Naive `sort -u` dedupes line strings not ids, so a thread id mentioned in both the doc header and the §Change log was at risk of being processed twice. New procedure: extract just the id with a `sed` pass, `sort -u` the ids, then for each unique id locate the **load-bearing anchor** (first/top-most occurrence in the doc). Subsequent mentions in §Change log or inline narrative are informational and stay as-is (historical record per P-001). Added a practical heuristic for where each marker's load-bearing anchor lives (`[RATIFICATION_PENDING]` → header; `[AWAITING_THREAD]` → inline claim; `[UNDOCUMENTED-STEP]` → §Implementation pointers).
+- 2026-04-18 — **Added `[RATIFICATION_LAPSED:<id>]` to the recognised marker family** as part of the W8 calibration bundle. Terminal/historical marker written by W8 Step 7's decay rule when a ratification thread ages past 60 days without a human answer. Intentionally excluded from Pass 1 grep — reprocessing a terminal marker every session would be noise. Documents stay readable/usable with the marker; next W8 revision either re-opens a fresh ratification thread or accepts the lapsed state by downgrading claim strength in the header.

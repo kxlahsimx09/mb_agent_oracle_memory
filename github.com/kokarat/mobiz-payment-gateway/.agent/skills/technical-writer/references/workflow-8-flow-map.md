@@ -201,9 +201,25 @@ For each numbered step, add a pointer under `## Implementation pointers`:
 - Step 1 → `routes/main.go:142@abc1234` // impl: POST /pay route
 - Step 2 → `controllers/PayController.go:88@abc1234` // impl: validation + persist
 - Step 3 → `helpers/bankbot.go:55@abc1234` // impl: ForwardToBankBot
-- Step 4 → `[UNIMPLEMENTED]` — see `ψ/memory/learnings/2026-04-17_flow-<slug>-step-4-unimplemented.md`
+- Step 4 → `// ext: kokarat/bank-bot` — BankBot owns login + transfer; tracked in that repo's future W8
+- Step 5 → `[UNIMPLEMENTED]` — see `ψ/memory/learnings/2026-04-18_flow-<slug>-step-5-unimplemented.md`
 ...
 ```
+
+**Marker disambiguation for non-impl steps.** W8 distinguishes "someone else's territory" from "genuine coverage gap":
+
+| Marker | Meaning | Is it drift? | Action |
+|---|---|---|---|
+| `// ext: <owner>/<repo>` | Step is owned by a cross-repo sibling (bank-bot, or a future service). **Intentional**, we don't implement it here. | **No** | File a `#cross-repo-sync` breadcrumb learning naming the expected sibling flow slug so their future W8 can chain back. Do not queue W4. |
+| `[UNIMPLEMENTED]` | Flow claims a step exists in code, but no repo we own has the implementation. **Genuine gap.** | **Yes** | File `#drift + #unimplemented + flow:<slug>` learning + child trace; queue W4. |
+| `[DRIFT]` | Code for the step exists but its behavior diverges from the flow claim. | **Yes** | File `#drift + #flow-divergence + flow:<slug>` learning + child trace; queue W4. |
+
+Rule of thumb: if a reviewer asks "so when will *we* build this?" and the honest answer is "we won't — it lives in `<other-repo>`", it is `// ext:`. If the answer is "we thought we had — missing", it is `[UNIMPLEMENTED]`. Mislabelling a `// ext:` step as `[UNIMPLEMENTED]` inflates the W4 queue with non-drift; the reverse under-counts real gaps.
+
+For `// ext:` steps:
+
+- File an `arra_learn` tagged `#cross-repo-sync + #flow + flow:<slug>` naming the sibling repo and the expected counterpart slug (when that sibling adopts W8).
+- **No** child trace; no W4 queue entry. The step is intentional territory boundary, not a finding.
 
 For `[UNIMPLEMENTED]` steps — code does not cover the step claimed in the flow:
 
@@ -262,15 +278,28 @@ arra_thread(
 
 Put the returned id in the doc header: `[RATIFICATION_PENDING:<threadId>]`. The marker stays until the thread is answered + the human confirms. A reverse-engineered flow with no ratification thread is worse than no flow doc at all — it dresses code up as authoritative intent.
 
+**Ratification decay — what if the thread is never answered?**
+
+An unanswered ratification thread cannot block W8 passes on *other* flows, but it also cannot be allowed to age silently — a 6-month-old `[RATIFICATION_PENDING]` that nobody re-asked about is a claim of stale authority that the workflow has not acknowledged.
+
+| Age since thread opened | Action (performed at Step 0 of the next W8/W9 pass that finds the marker) |
+|---|---|
+| < 7 days | No action. Normal answer latency. |
+| 7–30 days | `arra_thread(threadId=<id>, message="bump — still pending after N days; any blocker on the ratification review?")` — one gentle re-ask. No doc change. |
+| > 30 days | File `#missing-ratification + flow:<slug>` learning naming the thread id + age. `[RATIFICATION_PENDING]` marker stays; §Change log notes the decay state. |
+| > 60 days | **Lapse:** `arra_thread_update(threadId=<id>, status="closed")` with reason "no human response in 60d". Replace `[RATIFICATION_PENDING:<id>]` in the doc header with `[RATIFICATION_LAPSED:<id>]` (new marker). File `#ratification-lapsed + flow:<slug>` learning. The next W8 revision must either open a fresh ratification thread (effectively re-attempting ratification) or accept the lapsed state by explicitly downgrading the claim strength label in the header and removing the marker. W9 treats `[RATIFICATION_LAPSED]` as informational, not blocking (the flow is still readable + usable, just carrying an explicit "intent never ratified within the review window" label). |
+
+The decay rule does **not** apply to `[AWAITING_THREAD]` on specific claims — those stay pending indefinitely (an unanswered question on a single claim is less load-bearing than an unratified whole-flow spec). It applies only to `[RATIFICATION_PENDING]` in flow-doc headers.
+
 ### Step 8 — Cross-link to `current-system.md`
 
 Find the `current-system.md` section whose code the flow crosses most heavily. Add a one-liner under that section's heading:
 
 ```markdown
-> **Flow:** [`<slug>`](flows/<slug>.md) · `// impl-level`
+> **Flow:** [`<slug>`](flows/<slug>.md)
 ```
 
-The `// impl-level` marker signals to readers that the cross-link points to intent-level doc (W8), not another impl-level doc.
+No additional marker is needed. The path (`flows/<slug>.md`) plus the `**Flow:**` label together convey that the link points to an intent-level flow doc. A prior version of this workflow suggested appending `// impl-level` to the line; that convention proved ambiguous (the marker name suggests "link target is impl-level" when the intent was the opposite) and has been dropped. Per P-001 (nothing deleted), legacy `// impl-level` occurrences in existing `current-system.md` from earlier W8 passes stay as-is — no sweep. New W8 passes emit only the bare cross-link.
 
 If the flow is cross-repo (touches bank-bot):
 
@@ -340,6 +369,27 @@ PR body must include:
 - Link to each open thread.
 - Ratification-thread link (if reverse-engineered), clearly labelled as *required before this doc is authoritative*.
 - The literal line: **"I will not merge this PR. Awaiting human review + thread resolution."**
+
+**Stacked-PR case (when a sibling flow's PR is still in-flight).** W8 passes often land close together. If the flow being authored references another flow doc via `§Related flows` **and** that sibling's PR has not merged yet, do **not** target `main` — stack on the sibling branch so the new flow can cite the sibling's file at a resolvable path:
+
+```bash
+# Branch off the sibling's branch, not main
+git checkout -b docs/flow-<new-slug> docs/flow-<sibling-slug>
+# ... authoring ...
+gh pr create \
+  --base docs/flow-<sibling-slug> \
+  --title "docs(flow): <new-slug> — <one-line>"
+```
+
+PR body gets a dedicated `## Stacked on` section:
+
+```markdown
+## Stacked on
+- PR #<sibling-number> (`docs/flow-<sibling-slug>`) — **this PR cannot merge until the parent does.**
+- GitHub will auto-retarget this PR to `main` when the sibling merges.
+```
+
+Stacking depth cap: **2**. If `A ← B ← C` (C stacks on B which stacks on A), halt and file an `arra_inbox` asking the human whether to flatten — 3+ deep stacks accumulate review-cycle bottlenecks that defeat the point of separate PRs. Stacking 2 deep is common and healthy; 3+ is a smell.
 
 ### Step 11 — Retrospective (5 min)
 
@@ -435,3 +485,8 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 - 2026-04-17 — Initial version. Scoped to `pg-writer-oracle` only (mobiz-payment-gateway pilot); bot-writer does not have W8 yet. Mermaid-only diagrams. Hybrid authorship per human decision: strict transcription required for **new** flows (tier S1/S2 claim mandatory); reverse-engineering allowed for **existing** flows but gated by a `[RATIFICATION_PENDING]` thread. `queryType="pattern"` for the W8 root trace. Per-step children for `[UNIMPLEMENTED]`/`[DRIFT]` (like W1). Claim-strength label in the doc header so downstream agents route by trust level.
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)**. Motivation observed during the first W8 run: agent opened a thread, human answered, next session didn't consume the answer — and the thread never closed. Fix: doc-anchored Pass 1 + orphan-scan Pass 2 (see `workflow-thread-resolve.md`). Ratification-thread answers get a stricter test — a neutral "looks good" is insufficient; the human must engage with the spec. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired marker (anchor discipline).
 - 2026-04-17 (later) — Added **Step 9a (Initialize `docs/flows/.baseline`)** so W9 (track commits against flows) has a commit-range anchor to scan from. W8 is the seeder-of-last-resort — it creates the file on the very first W8 pass in a repo, then never touches it again. W9 is the sole writer of baseline bumps (revisions by W8 don't verify the whole portfolio; only W9 does). DoD added: baseline file must exist with the two-line format.
+- 2026-04-18 — **W8 calibration bundle** from three same-day W8 retros (19.49 deposit-qr-request, 20.35 ratification revision, 21.05 deposit-slip-upload-admin-approve). Four concrete spec fixes, no new workflow logic:
+  1. **`// ext:` vs `[UNIMPLEMENTED]` disambiguation (Step 5).** W8 now distinguishes "owned by a cross-repo sibling, intentional" from "genuine coverage gap, drift queue." `// ext: <owner>/<repo>` is first-class for cross-repo-owned steps and files a `#cross-repo-sync` breadcrumb (not `#drift`, not queued for W4). `[UNIMPLEMENTED]` stays for real gaps. Retro 19.49 had used `// ext:` ad-hoc; the disambiguation table now codifies the rule.
+  2. **`[RATIFICATION_PENDING]` decay rule (Step 7).** Added an age-based decay ladder: 7d bump, 30d `#missing-ratification` learning, 60d lapse. At lapse, the marker transitions to `[RATIFICATION_LAPSED]` (new terminal marker, informational/historical, not blocking). Keeps stale markers from living forever without acknowledgement. `[AWAITING_THREAD]` on individual claims is exempt — only whole-flow `[RATIFICATION_PENDING]` decays.
+  3. **Stacked-PR clause (Step 10).** Documents the pattern retro 21.05 used successfully: when a new flow's `§Related flows` links to a sibling flow whose PR is still in-flight, branch off the sibling branch and PR `--base=<sibling-branch>`, with a §Stacked on section in the PR body. Stacking depth capped at 2 — 3+ deep stacks accumulate review-cycle bottlenecks and require `arra_inbox` escalation to flatten.
+  4. **Dropped `// impl-level` marker (Step 8).** Original cross-link marker proved ambiguous (the marker name suggests "link target is impl-level" when the intent was the opposite). Dropped in favour of the bare `**Flow:** [<slug>](flows/<slug>.md)` line — path + label carry the meaning cleanly. Legacy `// impl-level` occurrences in existing `current-system.md` retained per P-001.
