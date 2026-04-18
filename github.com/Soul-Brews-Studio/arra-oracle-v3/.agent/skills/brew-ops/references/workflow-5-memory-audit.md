@@ -436,7 +436,112 @@ Categorize signals:
 
 **Output:** a ≤200-word synthesis paragraph grouping signals by category, with retro IDs cited (e.g., `retro@20.35_flow-deposit-qr-request-ratification`).
 
-## Step 14 — Report output
+## Step 14 — Narrative coherence sampling
+
+Structural checks (§2–§8) verify that data is *consistent*. This step asks a different question:
+
+> **"If a fresh agent read these memory entries sequentially, would they understand the story?"**
+
+Coherence is **sampled, not exhaustive** — reading every learning is too expensive. Pick 3–5 threads, read them as a new agent would, score them.
+
+### 14a. Pick threads
+
+Two sources:
+
+1. **Recency-based** (default): top 3 topics by retro+learning count in past 14 days.
+2. **User-specified** (if audit was triggered by a topic, e.g. `--topic <keyword>`): search and cluster by filename.
+
+Example clusters surfaced in the first real audit (2026-04-18):
+- `deposit-qr-request` (cross-repo, 2 retros + 4 learnings)
+- `scb-approver` (3 learnings, bank-bot, no retro bridge)
+- `vault-case-rename` (major infra change — coverage check)
+
+### 14b. Per-thread sequential read
+
+```bash
+# List files chronologically (combine learnings + retros + handoffs for the topic)
+find $VAULT -path '*/ψ/memory/*' -name "*<keyword>*" | xargs ls -tr
+```
+
+Read each file's frontmatter + first ~200 words (not full content — keep cost bounded). Assess **6 dimensions**:
+
+| Dimension | PASS signal | FAIL signal |
+|---|---|---|
+| **Title integrity** | Full descriptive sentence | Truncated mid-word (e.g. `"Verifying that arra_learn n"`) |
+| **Chronological chain** | `related:` back-links + `superseded_by` forward-links intact | Orphan files; no cross-references |
+| **Source citation** | commit hash + file:line + PR# | "this session" / "conversation" only |
+| **Outcome stated** | Current state described; decision ratified | Plan-only / TODO / no conclusion |
+| **Cross-repo breadcrumb** | Spans repos? each side has a pointer to the other | Isolated — other repo has no record |
+| **Stand-alone readable** | Fresh agent understands w/o external context | Needs 3+ other files to decode |
+
+### 14c. Thread score
+
+| Score | Criteria |
+|---|---|
+| **Excellent** | 5–6 dimensions PASS |
+| **Good** | 4 dimensions PASS |
+| **Fragmented** | 2–3 dimensions PASS — partial story |
+| **Incomplete** | 0–1 dimension PASS — major capture gap |
+
+### 14d. Current-session capture check (P-001 safety net)
+
+This catches the most dangerous gap: **an active session making durable changes without writing them down**.
+
+```bash
+SESSION_START="4 hours ago"   # or the ISO date when the audit-triggering session began
+
+# Git activity in the session window
+VAULT_COMMITS=$(git -C $VAULT log --since="$SESSION_START" --oneline | wc -l | tr -d ' ')
+PROJ_COMMITS=$(git -C ~/Code/github.com/Soul-Brews-Studio/arra-oracle-v3 log --since="$SESSION_START" --oneline | wc -l | tr -d ' ')
+
+# Memory activity in the same window
+LEARNS=$(find $VAULT -path '*/ψ/memory/learnings/*' -newermt "$SESSION_START" | wc -l | tr -d ' ')
+RETROS=$(find $VAULT -path '*/ψ/memory/retrospectives/*' -newermt "$SESSION_START" | wc -l | tr -d ' ')
+
+echo "commits: vault=$VAULT_COMMITS proj=$PROJ_COMMITS | learnings=$LEARNS retros=$RETROS"
+```
+
+**Acceptance:**
+
+| Gap | Severity |
+|---|---|
+| `commits == 0` | PASS — nothing to capture |
+| `learnings + retros >= (commits / 3)` | PASS — reasonable capture ratio |
+| `commits > 0`, `learnings + retros == 0` | **FAIL (P0)** — P-001 violation risk; capture NOW |
+| `commits > 0`, non-trivial work, <2 learnings | WARN (P1) — propose handoff listing uncaptured topics |
+
+### 14e. Output (feeds §15 report)
+
+```markdown
+## Narrative coherence (§16)
+
+### Thread 1: <topic>
+- Files: N learnings, M retros, K handoffs
+- Chain integrity: <one-liner>
+- Sample issue (if any): "<quote>"
+- Score: <Excellent|Good|Fragmented|Incomplete>
+- Fix: <suggested arra_learn or retro to file, or handoff target>
+
+### Thread N: ...
+
+### Current session capture
+- Git commits (session window): N
+- Learnings written: M | Retros written: K
+- **Uncaptured changes:** <bullet list>
+- Severity: <P0|P1|P2>
+- Suggested handoff: <one-liner ready to paste into arra_handoff>
+```
+
+### 14f. Remediation
+
+Do **NOT** auto-fix threads. Instead:
+
+- For a `Fragmented`/`Incomplete` thread → file `arra_handoff` to the owning role (e.g., `technical-writer` for flow gaps) with: missing pieces, recommended structure, 2–3 line problem statement. Let the owning agent close the gap next session.
+- For a **P0 session-capture gap** (16d) → brew-ops writes the missing learnings + retro **before ending the audit session**. This is the one case where this read-only workflow is allowed to write more than an audit summary, because the alternative is losing durable state to P-001 erosion.
+
+---
+
+## Step 15 — Report output
 
 Produce a single markdown report with this structure:
 
@@ -486,7 +591,7 @@ Produce a single markdown report with this structure:
 | ...
 ```
 
-## Step 15 — Persist findings
+## Step 16 — Persist findings
 
 **Required:**
 
