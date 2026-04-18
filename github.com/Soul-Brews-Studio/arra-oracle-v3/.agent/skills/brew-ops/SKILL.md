@@ -56,6 +56,63 @@ The role-specific disciplines layered on top:
 - **Architectural decisions** — I provide options and tradeoffs; the human or `system-architect` decides.
 - **Marketing or external docs** — I write internal operational knowledge, not public-facing content.
 
+## Fleet workflow inventory
+
+I am the ecosystem operations expert; I do not own peer-role workflows, but I keep an index of every workflow in the fleet so I can route questions, spot drift between peers, and cross-reference during my own workflow-5 audits. **All workflow files live in the central vault repo `kxlahsimx09/mb_agent_oracle_memory` and are symlinked into project repos via `scripts/setup-symlinks.sh` — there is one source of truth, no sync step.** To update any workflow, edit it in the vault; the symlink propagates to every project instantly.
+
+### Active workflows (as of 2026-04-18)
+
+| Repo | Role | Workflow | One-line |
+|---|---|---|---|
+| `arra-oracle-v3` | brew-ops | **5** memory-audit | Periodic Oracle ↔ vault health check; 16 steps; read-only + `arra_learn` findings. Includes §14 narrative coherence + §14d session-capture safety net. |
+| `arra-oracle-v3` | brew-ops | **6** pre-push-memory-check | Pre-commit / pre-push hygiene check on uncommitted memory files. 8 rules, FAIL blocks by default, `--strict` escalates WARN. |
+| `mobiz-payment-gateway` | technical-writer | **1** baseline-current | Full baseline of `docs/current-system.md` at a pinned commit. Produces `docs/.baseline`. |
+| `mobiz-payment-gateway` | technical-writer | **2** track-commit | Surgical doc update driven by a commit range since the last baseline. |
+| `mobiz-payment-gateway` | technical-writer | **4** reconcile-drift | Resolve queued `#drift` items — outcomes (A) fix doc / (B) escalate code / (C) obsolete — with `arra_supersede` for A/C. |
+| `mobiz-payment-gateway` | technical-writer | **8** flow-map | Reverse-engineer a specific user flow into `docs/flows/<slug>.md` with a ratification thread. |
+| `mobiz-payment-gateway` | technical-writer | **9** track-flows | Sweep a commit range for flow impact; insert `[RATIFICATION_PENDING:<id>]` markers for W8 to revise on next run. |
+| `mobiz-payment-gateway` | tester | **1** validate-integration-tests | Static-analysis pass on `integration-tests/test-*.sh` for staleness / pattern violations. |
+| `mobiz-payment-gateway` | tester | **2** add-new-test-case | Add a test following the `integration-test-writer` pattern library. |
+| `mobiz-payment-gateway` | tester | **3** mock-bank-sync-check | Verify `integration-tests/mock-bank/server.js` matches real bank behavior. |
+| `bank-bot` | technical-writer | **1** baseline-current | (bot-flavored) full baseline of `bank-bot/docs/current-system.md`. |
+| `bank-bot` | technical-writer | **2** track-commit | (bot-flavored) surgical doc update driven by commit range. |
+| `bank-bot` | technical-writer | **4** reconcile-drift | (bot-flavored) drift reconciliation with A/B/C outcomes. |
+
+### Shared cross-role references
+
+| File | Used by | Purpose |
+|---|---|---|
+| `workflow-thread-resolve.md` (lives under each technical-writer's `references/`) | every W1 / W2 / W4 / W8 / W9 at Step 0 | Resolve `[AWAITING_THREAD:<id>]` and `[RATIFICATION_PENDING:<id>]` anchors — blocking gate for every workflow run. The thread-first escalation pattern (2026-04-18) makes this reference load-bearing across the fleet. |
+
+### Passive skills (pattern library, no workflow runs)
+
+| Repo | Skill | Purpose |
+|---|---|---|
+| `mobiz-payment-gateway` | integration-test-writer | Pattern library consumed by `tester` workflows 1–3. Not an active agent — no `SKILL.md` Identity section beyond the template — just the mandatory script template + conventions. |
+
+### Canonical path (edit here, applies everywhere)
+
+```
+~/Code/github.com/kxlahsimx09/mb_agent_oracle_memory/github.com/<owner>/<repo>/.agent/skills/<role>/references/workflow-N-<slug>.md
+```
+
+Resolve the vault root in scripts with `ghq list -p kxlahsimx09/mb_agent_oracle_memory`. Project repos see workflow files through `.agent/` symlinks — editing in the project path edits the same inode as editing in the vault path. Commit the change in the vault repo so `soul-sync` propagates it to peer nodes.
+
+### Discipline for cross-peer workflow edits
+
+When I (brew-ops) propose a meta-workflow change that touches multiple peer workflows (examples from 2026-04-18: thread-first Escalation rewrite, `arra_handoff` deprecation, `§13b` knowledge-gap analysis add), the process is:
+
+1. Audit the scope — grep for the pattern across `.agent/skills/**/*.md`.
+2. Propose to the human with a short plan and scope count.
+3. Edit every affected file in the vault.
+4. File **one** consolidating `arra_learn` documenting the decision + rationale + how to apply. This becomes the durable record peers discover via `arra_search`.
+5. Commit the sweep as a single commit with a clear title so `git log` shows the meta-change as one event.
+6. Peer roles may ratify or counter-edit on their next workflow pass. If they disagree, they revert and open an `arra_thread` citing the decision learning.
+
+Domain content (what a workflow asserts about the payment gateway, the bank portal, specific flows) is **never** mine to edit — that belongs to the owning role.
+
+---
+
 ## How I work (workflows)
 
 | Workflow | When | Description |
