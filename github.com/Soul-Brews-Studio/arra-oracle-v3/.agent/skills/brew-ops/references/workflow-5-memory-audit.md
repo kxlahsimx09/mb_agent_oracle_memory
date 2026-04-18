@@ -474,6 +474,76 @@ Categorize signals:
 
 **Output:** a ≤200-word synthesis paragraph grouping signals by category, with retro IDs cited (e.g., `retro@20.35_flow-deposit-qr-request-ratification`).
 
+## Step 13b — Knowledge gap analysis (demand side)
+
+§13 extracts signals from **what agents wrote** (retros). This step looks at the complement: **what agents tried to find and couldn't**. The Oracle logs every `arra_search` call in `search_log` with `results_count`. Rows where `results_count = 0` are *demand the vault didn't satisfy*.
+
+The oracle-studio UI surfaces this on the Activity page as the "⚠️ Knowledge Gaps" card (`searches.filter(s => s.results_count === 0)`). Workflow-5 should analyze the same signal but with more depth — classify gaps, not just count them.
+
+### 13b.1 Pull recent zero-result searches
+
+```bash
+bun --eval '
+const db = new (require("bun:sqlite").Database)(require("os").homedir() + "/.arra-oracle-v2/oracle.db");
+const since = Date.now() - 14 * 24 * 3600 * 1000;
+const rows = db.query(`
+  SELECT query, mode, project, COUNT(*) as n, MAX(created_at) as last_at
+  FROM search_log
+  WHERE results_count = 0 AND created_at > ?
+  GROUP BY LOWER(TRIM(query))
+  ORDER BY n DESC, last_at DESC
+`).all(since);
+console.log("Zero-result queries (past 14d, grouped):", rows.length);
+rows.forEach(r => console.log("  " + r.n + "× [" + r.mode + "] " + r.query.slice(0, 70)
+  + (r.project ? " (project=" + r.project.slice(-20) + ")" : "")));
+'
+```
+
+### 13b.2 Classify each recurring query
+
+For each query appearing ≥2 times (or ≥1 if the tester count is low), classify:
+
+| Category | Signal | Check |
+|---|---|---|
+| **real-gap** | Query mentions a real concept; no doc or learning covers it | `find $VAULT -path '*/ψ/memory/*' -exec grep -l "<term>" {} \;` returns empty |
+| **recall-issue** | Content exists but FTS missed it — query used synonyms / different phrasing | grep finds hits but `arra_search` returned 0 → FTS tokenization / stop-word issue |
+| **vector-drift** | Multiple recent queries fail while vault grew — check §3 results; if vector was down during the window, these are false gaps | Cross-reference with §3 findings |
+| **test-noise** | Debugging by brew-ops or the human (recognize your own patterns) | Compare to known audit probe queries; exclude from actionable list |
+| **typo / bad-craft** | Obvious typo (`thaibank` → `thai-bank` / `ktb` / etc.) | Unrelated single-word query with no plausible content match |
+
+### 13b.3 Acceptance
+
+| Recurring real-gaps (past 14d) | Severity |
+|---|---|
+| 0 | PASS |
+| 1-3 | WARN (P2) — surface in report; no blocking action |
+| 4-10 | WARN (P1) — suggests vault has a coverage blind spot |
+| >10 OR concentrated on one topic | FAIL (P0) — real knowledge gap or severe FTS/vector degradation |
+
+Vector-drift gaps should not fire the severity (those are P0-1 territory, not P2).
+
+### 13b.4 Remediation (read-only discipline)
+
+- **real-gap**: file `arra_handoff` to the role that would know (e.g. query about SCB scraper → bot-writer-oracle). Include the query, count, and suggestion to write a learning.
+- **recall-issue**: file `arra_learn` with a note + the missing synonym list under a `concepts:` field so next agent's search hits it. This is one of the few writes workflow-5 is allowed (informational, not fixing code).
+- **vector-drift**: escalate as P0-1 via §3 — do not categorize as a knowledge gap.
+- **test-noise / typo**: ignore, note in report under "Excluded".
+
+### 13b.5 Output (feeds §15 report)
+
+```markdown
+## Knowledge gaps (§13b)
+
+Recurring zero-result queries (past 14 days):
+- **N× real-gap**: "query text" — no content covers it; suggested handoff to <role>
+- **M× recall-issue**: "query text" — content exists under different terms (list); filing arra_learn with synonym bridge
+- **K× excluded**: test-noise / typos (list at end)
+
+Severity: <PASS|WARN|FAIL>
+```
+
+---
+
 ## Step 14 — Narrative coherence sampling
 
 Structural checks (§2–§8) verify that data is *consistent*. This step asks a different question:
