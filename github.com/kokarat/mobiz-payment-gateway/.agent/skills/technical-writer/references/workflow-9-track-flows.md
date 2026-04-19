@@ -337,6 +337,25 @@ arra_learn(
 
 If the whole pass produced zero affected flows, file **one** pass-level learning tagged `#flow-track + #no-drift-found` with the commit range and a note that the scan was clean.
 
+### Step 7b — Vault audit hard gate (mandatory pre-commit, 1 min)
+
+W9 writes `arra_learn` at up to **five** call sites per pass — Step 5b (C/E drift markers), Step 5d (F strength downgrade), Step 5e (cross-repo sync), §4 note (uncovered-surface handoff), Step 7 (per-flow session summary or `#no-drift-found`). Every single one carries a `project` field susceptible to the same recurring `<` typo pattern that hit W8 on 2026-04-18 (mobiz `kokarat/bank-bot<` literal `<` in directory name) and 2026-04-19 (bot-side `github.com/kokarat/bank-bot<` in the bot W8 first pass). See `learning_2026-04-19_recurring-pattern-stray-character-appears-in` for the pattern writeup.
+
+Make it a hard gate — run before the Step 8 commit, not after as a retro-time afterthought:
+
+```bash
+VAULT=$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)
+bash $VAULT/scripts/verify.sh | tee /tmp/w9-verify.txt
+grep -E "(✅ no double-wrap|✅ every indexed doc has a title:)" /tmp/w9-verify.txt || {
+  echo "FAIL: verify.sh frontmatter checks did not pass — fix before Step 8"
+  exit 1
+}
+```
+
+**Acceptance:** both `✅ no double-wrap` and `✅ every indexed doc has a title:` lines appear. If either is missing, one of this pass's `arra_learn` calls produced a corrupt frontmatter — the typical offender is a stray `<` or `>` in the `project` field that bled through from a template or prompt example. Fix at the source (re-run the offending `arra_learn` with corrected inputs, then `arra_supersede` the corrupt row per P-001), then re-run the gate. Do not proceed to Step 8 until both checks pass.
+
+The cost of skipping this gate is asymmetric: catching a typo here is a 1-minute re-run of `arra_learn`. Catching it post-commit (verify.sh as DoD checkbox only) means the corrupt row is already indexed and must be superseded instead of prevented — a 5–10 minute P-001-compliant cleanup every time it happens. The recurring-typo learning's root-cause hypothesis (template placeholder bleeding through) suggests this will keep happening until a server-side `project` validator lands on the `arra_learn` MCP tool. Until then, the per-workflow pre-commit gate is the mitigation.
+
 ### Step 8 — Commit + PR (3 min)
 
 Branch: `docs/flow-track-<flows-baseline-short>-<new-short>`.
@@ -420,7 +439,7 @@ PR body always lists the affected flows (or "none — range out of flow territor
 - [ ] Branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written with AI Diary + Honest Feedback.
 - [ ] Retro is the state carrier; no separate handoff step. Open thread ids + ratification-pending thread ids are listed in the PR body and anchored in the flow doc(s) via `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` — W8/W9 Step 0 picks them up on resolution.
-- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] **Vault audit hard gate passed (Step 7b)** — `verify.sh` ran **before** the Step 8 commit (not after, not as retro-time afterthought); both `✅ no double-wrap` and `✅ every indexed doc has a title:` present. Any `arra_learn` call this pass produced (up to 5 sites) that carried a corrupt `project` field was fixed at the source + old row superseded per P-001 before PR opens.
 
 ---
 
@@ -467,3 +486,4 @@ PR body always lists the affected flows (or "none — range out of flow territor
   - **Step 8 commit-message template** split by class-count: full per-class bullet list for multi-class passes; collapsed single-line form for single-class passes; one-liner for zero-drift passes. Padding `A: 0` next to `B: 1` buries the signal in `git log`.
   - **Fast-fix thresholds unchanged** — retro noted sample size of 2 flows is insufficient to stress-test ≤5-flow / ≤50%-step thresholds. Revisit when the portfolio reaches ~10 flows.
 - 2026-04-19 — **Step 3 extractor fix (P1, brew-ops audit).** The prior regex `// impl:\s*([^@[:space:]]+)@([a-f0-9]{7,12})` anchored on the `// impl:` annotation being a *prefix* of the pointer. Observed reality across all 6 flow docs in the portfolio: the pointer is backtick-wrapped `` `<path>[:<line>]@<shorthash>` `` and the `// impl:` annotation, when present, appears **after** it as a separately backtick-wrapped `` `// impl: <description>` `` comment (with a `·` separator). On the real portfolio the old regex returned **0 hits across 6 docs**; the new anchor-on-pointer regex returns **79 hits**. The two successful W9 passes in the retros (23.19 and 14.37) did not use the literal spec regex — they inferred the intersection from a human read of `## Implementation pointers`. The extractor has been rewritten to anchor on the pointer token, scope to the `## Implementation pointers` section only (excludes prose citations in §Purpose / §Actors / §Preconditions which use the same `@<hash>` syntax as anchored citations but are not verification targets), and includes a mandatory regex self-test that halts the pass on a non-empty portfolio that extracts zero pointers — so a future authoring-format drift surfaces as a `#workflow-bug` halt instead of a silent false "no-drift" cron result. P2 items (tag convention `flow:<slug>` vs bare `<slug>`; missing cron infrastructure; W8 Step 5 example format drifted from real docs) are documented in the brew-ops audit learning `2026-04-19_pattern-w9-step3-extractor-regex-fix` for follow-up — not fixed in this pass.
+- 2026-04-19 (GMT+7, brew-ops post-W8-calibration sync) — **Step 7b (Vault audit hard gate) added, parallel to W8 Step 9b/9d.** W9 writes `arra_learn` at up to 5 call sites per pass (Step 5b drift markers, Step 5d strength downgrade, Step 5e cross-repo sync, §4 uncovered-surface handoff, Step 7 per-flow summary). Each `project` field is susceptible to the same recurring `<` typo pattern that hit W8 on 2026-04-18 (`kokarat/bank-bot<` literal directory name) and 2026-04-19 (bot-side `github.com/kokarat/bank-bot<` in an arra_learn project field). verify.sh was previously a DoD checkbox only — W8's sibling calibration moved it to a hard pre-commit gate; W9 inherits the same discipline here. Fails the pass if `✅ no double-wrap` or `✅ every indexed doc has a title:` is missing. Cites `learning_2026-04-19_recurring-pattern-stray-character-appears-in` for pattern context. DoD line updated to reference Step 7b explicitly rather than leave verify.sh as an unscheduled check. Design notes / loop-representation / decomposition-asymmetry additions from the W8 sibling sync are **not** mirrored into W9 because W9 doesn't author flows or draw diagrams — only the verify.sh gate applies to both workflows.
