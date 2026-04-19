@@ -91,6 +91,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 6. Produce a runbook | An incident taught us something, or a new ops surface appears | `references/workflow-6-runbook.md` |
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
 | 8. Flow-map (bot side, cross-repo by nature) | Human asks to document a bot flow, or a mobiz-side `#cross-repo-sync` breadcrumb names an expected bot counterpart | `references/workflow-8-flow-map.md` |
+| 9. Track commits against flow map (daily cron alongside W2) | A code commit touches a file referenced by any `// impl:` pointer in `docs/flows/` | `references/workflow-9-track-flows.md` |
 | — Thread resolution (sub-procedure) | Step 0 of every main workflow; also on-demand when the wake-up ritual shows answered threads | `references/workflow-thread-resolve.md` |
 
 ## Vault path (the #1 trap)
