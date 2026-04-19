@@ -270,26 +270,64 @@ Same discipline as pg-writer's W8 Step 3, adapted for bot flows:
 
 ### Step 4 — Draw the sequence diagram (10–15 min)
 
-Same rules as pg-writer's W8 Step 4. Example skeleton for a bot-initiated flow:
+Same rules as pg-writer's W8 Step 4 + §Mermaid safety rules below. Example skeleton for a bot-initiated flow (hyphen-form aliases, ASCII-only labels — see safety rules):
 
 ````markdown
 ```mermaid
 sequenceDiagram
-    participant Scheduler as System:BankBot (Scheduler)
-    participant Scraper as System:BankBot (Scraper)
-    participant Bank as External:SCBPortal
-    participant Gateway as System:Gateway
+    participant Scheduler as System-BankBot-Scheduler
+    participant Scraper as System-BankBot-Scraper
+    participant Bank as External-SCBPortal
+    participant Gateway as System-Gateway
 
-    Scheduler->>Scraper: 1. tick (every 30s)
+    Scheduler->>Scraper: 1. tick every 30s
     Scraper->>Bank: 2. navigate + login (cached session)
     Bank-->>Scraper: 3. statement HTML
-    Scraper->>Scraper: 4. parse rows (Cheerio)
+    Scraper->>Scraper: 4. parse rows with Cheerio
     Scraper->>Gateway: 5. POST /api/v1/bot/bank-statements
-    Gateway-->>Scraper: 6. 200 OK (dedup + matcher kick)
+    Gateway-->>Scraper: 6. 200 OK, dedup + matcher kick
 ```
 ````
 
 Numbering must align with the mobiz-side breadcrumb's step references whenever the breadcrumb cites specific step numbers.
+
+#### Mermaid safety rules (binding — violating breaks GitHub render)
+
+Ported verbatim from pg-writer's workflow-8-flow-map.md §Step 4 (pg-writer originally adopted 2026-04-19 after `deposit-auto-match-from-statement` first-pass render-failed on submission). Re-confirmed on the bot side 2026-04-19 after `scb-dual-control-withdrawal` first-pass render-failed with the same class of bugs (unicode arrows `→` in message labels, colon-prefixed path params `:id`/`:acc`/`:ref`, comma-in-braces payload `{success,failed,waiting-to-review}`) — fixed in commit `08b116d` on PR #73 with the same "no content change — rendering safety sweep" discipline mobiz used on its own flows 2026-04-18. Mermaid's sequenceDiagram parser is stricter than the prose-rendering pipeline; a diagram that Claude generates from prose-style muscle memory will often fail silently in the GitHub PR preview (no diagram shown, no error shown). The DoD check — "Mermaid diagram parses (GitHub PR preview shows the rendered diagram; if not, fix before pushing)" — catches it, but costs a revision round. These rules prevent the round-trip:
+
+1. **Participant aliases — use hyphen, not colon.** Canonical form: `participant GW as System-Gateway` / `participant BB as External-BankBot` / `participant AD as User-Admin`. Colons (`System:Gateway`) parse *sometimes* and break *sometimes* — not worth the coin-flip. Mobiz's `deposit-qr-request.md` uses colon form and renders today, but the newer `withdrawal-queue-*` and `topup-approve-mdr-distribution` flows standardized on hyphen form after multiple colon-form breakages; bank-bot's `scb-dual-control-withdrawal` followed the hyphen convention from the start (and the participant-alias side was the one part of that diagram that did *not* need a post-fix). Follow the hyphen form on all new W8 writes on either repo.
+2. **No HTML inside `Note over`.** Specifically: **no `<br/>`, no `<br>`, no `<b>`, no `<i>`.** The SaaS-hosted mermaid renderer GitHub uses strips unknown tags and can crash the whole diagram on malformed HTML. If a note needs two ideas, write two `Note over` lines stacked. Example:
+   ```
+   ❌ Note over A,B: point one;<br/>point two
+   ✅ Note over A,B: point one
+   ✅ Note over A,B: point two
+   ```
+3. **ASCII-only in message text.** No `→`, no `…`, no `—` (em-dash) inside a `Step->>Other:` line. These *sometimes* render and *sometimes* crash depending on mermaid version + font shaping; the render failure mode is silent (no diagram). Use `->` (ASCII) or prose (`then`, `to`) instead. `Note over` lines tolerate unicode better in practice, but the safe default is ASCII everywhere. **Bot-side addendum** (2026-04-19 `scb-dual-control-withdrawal` fix): this rule also catches unicode arrows that creep in via em-dash-to-arrow substitution in editors — always grep your diagram for `→`, `—`, `…` before pushing.
+4. **Avoid `{...}` and `"..."` as inline struct/quote syntax in messages.** Both survive rendering *most* of the time but interact badly with colons later in the same line (mermaid's message-text grammar is line-delimited but colon-sensitive in some paths). Spell out the shape in prose: instead of `3. POST /foo {a, b, c}` write `3. POST /foo body=a+b+c`. Use the verb `body=` / `event=` / `returns=` to name the payload — matches `topup-approve-mdr-distribution` house style. **Bot-side addendum:** `{id}` alone (no commas inside) renders reliably in both mobiz's `payout-request.md:52` and other existing flows, but `{success,failed,waiting-to-review}` (commas-in-braces) broke the parser on `scb-dual-control-withdrawal` first-pass — use `/success or /failed or /waiting-to-review` (hyphen-separated alternation) instead.
+5. **Don't put a second `:` in a message's free-text tail.** The first `:` after the arrow is the message-delimiter; later colons are legal but fragile. Instead of `6. matchDeposit: KTB or SCB` write `6. matchDeposit by KTB or by SCB` or `6. matchDeposit using KTB full-account or SCB last4`. **Bot-side addendum:** this also catches **colon-prefixed path params** in URL segments — `/bot/queue/:id/...` renders unpredictably; mobiz's canonical form is `/bot/queue/id/...` (bare identifier, no colon). Applies to `:id`, `:acc`, `:ref`, and any other Go/Express-style route-pattern colons.
+6. **Don't use `;` as a sentence joiner in messages or notes.** Replace with `,` or split the line. Mermaid's message grammar treats `;` as benign in most cases but one failure class is the specific combination `word;<tag>` which breaks the Note parser outright.
+7. **Self-messages (`X->>X: ...`) are fine** but keep their text short. If you find yourself writing 15 words of self-message, the step is aggregating too much — break it up or move the detail to §Implementation pointers.
+8. **Non-ASCII script inside labels (Thai, Chinese, …) is a gamble.** Bot flows often *want* to cite a Thai literal (e.g. SCB's reject reason `"ยกเลิกคำขอ"`). Rendering is inconsistent across mermaid versions + the font stack GitHub serves — sometimes fine, sometimes missing glyphs, sometimes crashes the whole diagram. Rule: keep Thai/non-Latin strings out of `Note over` and message labels; put them in §Error paths or §Implementation pointers (plain markdown — no mermaid parser involved). Use the English gloss in the diagram and the Thai in the prose. Bot-side precedent: `scb-dual-control-withdrawal` step 9b originally had `reason "ยกเลิกคำขอ"` inside a `Note over`; fixed to `Cancel-request` with the Thai kept in prose below.
+
+Concrete "safe template" to copy when starting a new diagram (lifted from `topup-approve-mdr-distribution.md`):
+
+```
+sequenceDiagram
+    participant A as Role-Name
+    participant B as Role-Name
+    participant C as Role-Name
+
+    Note over A,B: 0. out-of-band context if needed
+    Note over B,C: 0b. second note if needed, as its own line
+
+    A->>B: 1. verb /endpoint body=field_a+field_b (auth context in parens)
+    B->>B: 2. atomic step — short enough to fit on one visual line
+    B-->>A: 3. verb status=ok body=returned_field+another
+```
+
+Where this stays strict: in the PR template (Step 10), add a test-plan line `[ ] Mermaid diagram renders in the GitHub PR preview — I visually confirmed the rendered diagram before pushing the final commit.` Do not check this box without actually opening the PR preview in a browser — the "eyeball the markdown source" shortcut has produced the current drift twice on the mobiz side plus once on bank-bot (`scb-dual-control-withdrawal` PR #73, 2026-04-19).
+
+**Pre-push mechanical check:** `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` — any hit is a candidate mermaid break. Review each; fix or accept with a comment. This does not replace the visual PR preview check, but it catches the exact classes of bugs that broke `scb-dual-control-withdrawal` in one shell-grep.
 
 ### Step 5 — Implementation pointers + per-step child traces (10 min)
 
@@ -521,6 +559,7 @@ PR body must include:
 - Link to each open thread.
 - Ratification-thread link (if reverse-engineered).
 - **Cross-repo breadcrumb learning id + Test 1–4 pass evidence (one-line each).**
+- Test-plan item: **`[ ] Mermaid diagram renders in the GitHub PR preview — I visually confirmed the rendered diagram before pushing the final commit.`** Do not check this box without actually opening the PR preview in a browser — the "eyeball the markdown source" shortcut has silently produced render-failed diagrams on bank-bot (`scb-dual-control-withdrawal` PR #73, 2026-04-19) and twice on mobiz.
 - The literal line: **"I will not merge this PR. Awaiting human review + thread resolution."**
 
 ### Step 11 — Retrospective (5 min)
@@ -562,7 +601,7 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 ## Definition of Done
 
 - [ ] `docs/flows/<slug>.md` exists with all nine sections.
-- [ ] Mermaid diagram parses (GitHub PR preview shows the rendered diagram).
+- [ ] Mermaid diagram parses AND visually renders in the GitHub PR preview (not just a markdown-source eyeball). Pre-push mechanical check run: `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` returned either zero hits or each hit was consciously accepted. §Mermaid safety rules (Step 4) all honoured.
 - [ ] Every numbered diagram step has an `// impl:` pointer, or `// ext: kokarat/mobiz-payment-gateway`, or `// ext: External:<Bank>Portal`, or `[UNIMPLEMENTED]` / `[DRIFT]` marker with a paired learning link.
 - [ ] Claim-strength label in the doc header matches the weakest individual claim.
 - [ ] At least one `arra_learn` tagged `technical-writer + repo:bank-bot + flow + flow:<slug>` landed (Step 9).
@@ -619,4 +658,5 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 
 ## Change log for this workflow file
 
+- 2026-04-19 (GMT+7, later) — **Ported §Mermaid safety rules from pg-writer's workflow-8-flow-map.md Step 4 to close a sibling-drift gap** (per AGENTS.md §5a: "When SKILL.md is updated in one instance's `.agent/skills/technical-writer/SKILL.md`, the change is mirrored to the sibling instances in the same session. Drift between copies is its own `#drift` learning."). The 7 pg-writer rules were added verbatim plus an 8th bot-side rule about non-ASCII script (Thai/Chinese) inside mermaid labels — lifted from the `scb-dual-control-withdrawal` first-pass incident where `reason "ยกเลิกคำขอ"` in a `Note over` crashed the diagram. Bot-side addenda added to rules 3, 4, 5 covering the specific breaks hit on that pass (unicode arrows `→` from em-dash auto-substitution, comma-in-braces payload `{success,failed,waiting-to-review}`, colon-prefixed path params `:id`/`:acc`/`:ref`). Step 4 example skeleton was rewritten to use hyphen-form participant aliases and ASCII-only labels (the old example used `System:BankBot (Scheduler)` — exactly the colon-with-parens anti-pattern the rules now forbid). Step 10 PR body template + §Definition of Done line both updated to require a visual GitHub PR preview confirmation, and DoD added a pre-push mechanical grep `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` that catches the exact classes of bugs that broke `scb-dual-control-withdrawal` in one shell call. Filed `#drift + #workflow-bug + repo:cross + technical-writer-drift` learning documenting the sibling gap itself so a future pass knows to diff the two workflow-8 copies on session start.
 - 2026-04-19 — Initial version. Scoped to `technical-writer` instance in `github.com/kokarat/bank-bot`. Mermaid-only diagrams. Hybrid authorship: strict transcription required for **new** flows (tier S1/S2/S2.5 claim mandatory); reverse-engineering allowed for **existing** flows but gated by `[RATIFICATION_PENDING]`. `queryType="pattern"`, `scope="cross-project"` default for the W8 root trace (every bot flow is cross-repo by nature). Adds two steps absent from pg-writer's W8: **Step 9b reciprocal breadcrumb** (mandatory, plus cross-repo index learning when mobiz counterpart exists) and **Step 9c self-test** (four queries that prove the cross-repo link is discoverable via both search and trace, blocking DoD on failure). Tag convention uses the prefixed `flow:<slug>` form per workflow-9's 2026-04-19 change log. Trace-chain slot discipline follows 2026-04-18 decision: intra-repo chain wins the `prev`/`next` slots; cross-repo sibling trace id captured in breadcrumb body. The `// ext:` marker family is expanded for bot-side use: `// ext: External:<BankName>Portal` (bank web UI) and `// ext: kokarat/mobiz-payment-gateway` (mobiz-owned territory); both are intentional and do not queue W4. Driven by brew-ops observation that 17 of 18 existing `#cross-repo-sync` learnings were written by the mobiz side alone, producing a one-way link that left bot-side queries blind to mobiz flows — the reciprocal breadcrumb + self-test discipline closes that gap by construction.
