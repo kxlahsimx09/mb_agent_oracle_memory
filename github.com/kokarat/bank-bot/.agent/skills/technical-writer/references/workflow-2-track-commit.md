@@ -244,6 +244,78 @@ No bot code behavior changes.
 
 PR body: list touched sections, link each new learning, include `**I will not merge this PR. Awaiting human review.**`
 
+### Step 6b — Telegram narrative summary (2–3 min)
+
+After the PR is open and all `arra_learn` entries are filed, publish a **Thai-language narrative summary** to the team's Telegram group via the `telegram_send` MCP tool (see `github.com/Soul-Brews-Studio/mcp-telegram`). The goal is a story, not a status report — readers should understand *what landed and why* after a 30-second glance.
+
+**Audience:** mixed. Both a developer scanning between PRs **and** a non-developer operator who wants to know whether today's change affects their workflow. Avoid jargon unless the message makes it self-explanatory on first read.
+
+**Length target:** ~500 chars. Hard cap 800 (one Telegram screen on mobile). Prefer denser prose over more bullets.
+
+**Composition — pull the story from memory, not just this pass's artifacts**
+
+1. **Extract the core (this pass's own outputs):**
+   - Commit range, PR link, affected `current-system.md` sections.
+   - Count of `arra_learn` entries filed + classification split (refresh / drift / undocumented).
+2. **Weave in the backstory (why this PR exists):**
+   - `arra_search query="<affected area> -technical-writer" type=all limit=10` — find earlier learnings or retros that led to this commit range. Often the story started days ago with a thread, a W8 flow-map pass, or a #drift escalation (for bot-side: frequently a bank-portal break — SCB UI change, OTP phase shift, scraper cursor reset — or a cross-repo contract change initiated by mobiz).
+   - If this pass *resolves* a thread, name the thread id and summarise the ratified decision.
+   - If this pass *discovers* drift, link to the upstream cause (the commit or PR that introduced it) if findable in the memory chain.
+3. **Cross-repo awareness (bot-side specialty):** most bot changes have implications for mobiz (via the `/bot/*` API contract). If this pass's drift affects that contract surface, call it out explicitly so a mobiz-side reader understands the ripple.
+4. **Rule of thumb:** reader should finish and feel "I know what changed and the reason — I do not need to open Oracle."
+
+**Structure (HTML, works inside Telegram's `parse_mode: "HTML"`)**
+
+Placeholders are in `{curly braces}` — substitute with real content before sending. Everything else (tags, bullets, labels) is literal.
+
+```html
+<b>🤖 W2 bank-bot — {หัวข้อหนึ่งบรรทัด}</b>
+
+{เล่าเรื่อง 2–3 ประโยค เริ่มจาก "ทำไมงานนี้เกิดขึ้น" (trace จาก memory),
+ ตามด้วย "แก้อะไร" (outputs ของ pass นี้),
+ ปิดด้วย "ส่งผลยังไงกับ stakeholder" หรือ "กระทบ contract กับ mobiz ตรงไหน"}
+
+<b>รายละเอียด</b>
+• Commits: <code>{old-short}..{new-short}</code> ({N} commits)
+• PR: <a href="{pr-url}">#{pr-number}</a>
+• Learnings: {N} refresh · {M} drift · {K} new
+• Cross-repo: {"กระทบ mobiz ที่..." หรือ "bot-internal only"}
+
+<i>กดลิงก์ PR เพื่อรีวิว — ยังไม่ merge จนกว่าจะได้รับอนุมัติ</i>
+```
+
+Use `<code>`, `<b>`, `<i>`, `<a href="url">link</a>` — no `<br>`, no `<hr>`, no custom CSS (Telegram strips them).
+
+**HTML escaping:** when interpolating, escape `<`, `>`, `&` in **text content** before substitution. Commit hashes, file paths, slugs are safe; user-authored prose occasionally isn't.
+
+**Tool call**
+
+```
+telegram_send(
+  text: "<composed HTML from template above>",
+  parse_mode: "HTML",
+  disable_web_page_preview: true   # keep the card compact
+)
+```
+
+`chat_id` is omitted — the MCP server uses `TELEGRAM_DEFAULT_CHAT_ID` env (set at `claude mcp add` time).
+
+**Acceptance**
+
+- `telegram_send` returned `{ ok: true, message_id: <N>, chat_id: <ID> }`.
+- Captured `message_id` in the Step 7 retro body so the message is traceable if edits are ever needed.
+- If the pass produced zero doc changes (empty commit range or all fast-path), still send a short note — "วันนี้ไม่มี drift ใน commit range, baseline bumped" — so the channel reflects activity cadence.
+
+**Fallback (Telegram unreachable)**
+
+If `telegram_send` returns `{ ok: false, error: ... }` or MCP itself is unreachable:
+
+1. Do **not** block the W2 pass; the commit + PR are already real and useful.
+2. File one `arra_learn` tagged `#telegram-failed + #workflow-bug + repo:cross` with the intended HTML body (full, unescaped) + the error string. Next session can re-send from there.
+3. Note the failure in the Step 7 retro.
+
+**Never** send Oracle-internal vocabulary (UUIDs, trace ids longer than 8 chars, file paths with stray quoting) unless wrapped in `<code>`. The Telegram reader wants story; Oracle reference ids are for the agent's own audit trail, which already lives in the `arra_learn` entries.
+
 ### Step 7 — Retrospective (3 min)
 
 `rrr` to `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_bot-track-<short>.md`. AI Diary + Honest Feedback mandatory.
@@ -260,6 +332,7 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] `arra_learn` entries landed for each durable fact (or retro notes "pure cosmetic, no learnings").
 - [ ] Each new `#drift` marker has its paired `arra_learn` for Workflow 4.
 - [ ] Branch pushed, PR opened; **not merged**.
+- [ ] **Telegram narrative summary posted (Step 6b)** — `telegram_send` returned `{ ok: true, message_id }`, or the fallback `#telegram-failed` learning was filed with the intended HTML body + error string. Message id recorded in the retro. For zero-doc-change passes, a short "no drift, baseline bumped" note was still sent to keep the channel cadence.
 - [ ] Retrospective written (session-level, not per-commit).
 - [ ] Retro is the state carrier for the next session; no separate handoff step. Open questions — if any — live in `arra_thread` with `[AWAITING_THREAD:<id>]` anchors per §Escalation.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
@@ -310,3 +383,4 @@ When this workflow produces a doc claim that needs **domain-expert verification*
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint, BOT_SECRET handshake). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no mobiz trace exists yet, defer — mobiz's W2 will link back. DoD added a check that refuses "forgot to look."
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate. Daily W2 cron is especially exposed to zombie threads because it runs every morning, so a single missed resolution ages 24h per cycle. Scoping via doc-anchored grep — see `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired `[AWAITING_THREAD]` marker.
 - 2026-04-18 — **Escalation rewritten thread-first** (mirror of mobiz W2 edit the same day). Prior version said "CC `security_auditor` when role exists; meanwhile, include human review as explicit reviewer on the PR" for security-sensitive areas. Same failure mode as mobiz: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body. Added a bank-bot-specific category for **cross-repo contract claims** that span mobiz ↔ bank-bot (shared payload / HMAC / MDR / OTP) — the thread is the joint ratification point so both sides agree at the same commit. Meta-workflow edit by `brew-ops` with human approval; peer roles can ratify or counter-edit on their next pass.
+- 2026-04-19 — **Step 6b (Telegram narrative summary) added** between Step 6 (Commit + PR) and Step 7 (Retrospective). Mirrors the mobiz W2 Step 8b that landed the same day (step numbering differs because bank-bot W2 has fewer steps). Requires composing a ~500-char Thai-language narrative that weaves *why this pass exists* (trace back through memory) with *what landed* (this pass's outputs), then sending via the `telegram_send` MCP tool (`github.com/Soul-Brews-Studio/mcp-telegram`). Bot-side specialty: the template includes a mandatory "Cross-repo: กระทบ mobiz ที่... หรือ bot-internal only" line because most bank-bot changes affect the `/bot/*` API contract surface mobiz consumes. Audience is mixed (dev + stakeholder), format is Telegram HTML, `chat_id` defaults to `TELEGRAM_DEFAULT_CHAT_ID` env. Fallback on MCP failure is `#telegram-failed` learning + continue — PR is the load-bearing artefact, Telegram is the delivery vehicle. DoD tightened with a Step 6b acceptance line.

@@ -294,6 +294,77 @@ PR body:
 
 Per `.agent/AGENTS.md` §9, **never** `gh pr merge`.
 
+### Step 8b — Telegram narrative summary (2–3 min)
+
+After the PR is open and all `arra_learn` entries are filed, publish a **Thai-language narrative summary** to the team's Telegram group via the `telegram_send` MCP tool (see `github.com/Soul-Brews-Studio/mcp-telegram`). The goal is a story, not a status report — readers should understand *what landed and why* after a 30-second glance.
+
+**Audience:** mixed. Both a developer scanning between PRs **and** a non-developer operator who wants to know whether today's change affects their workflow. Avoid jargon unless the message makes it self-explanatory on first read.
+
+**Length target:** ~500 chars. Hard cap 800 (one Telegram screen on mobile). Prefer denser prose over more bullets.
+
+**Composition — pull the story from memory, not just this pass's artifacts**
+
+1. **Extract the core (this pass's own outputs):**
+   - Commit range, PR link, affected doc sections.
+   - Count of `arra_learn` entries filed + classification split (refresh / drift / undocumented).
+2. **Weave in the backstory (why this PR exists):**
+   - `arra_search query="<affected area> -technical-writer" type=all limit=10` — find earlier learnings or retros that led to this commit range. Often the story started days ago with a thread, a W8 ratification, or a #drift escalation.
+   - If this pass *resolves* a thread, name the thread id and summarise the ratified decision. Do not just cite the thread — paraphrase the outcome so the reader understands without opening it.
+   - If this pass *discovers* drift, link to the upstream cause (the commit or PR that introduced it) if findable in the memory chain.
+3. **Rule of thumb:** reader should finish and feel "I know what changed and the reason — I do not need to open Oracle."
+
+**Structure (HTML, works inside Telegram's `parse_mode: "HTML"`)**
+
+Placeholders are in `{curly braces}` — substitute with real content before sending. Everything else (tags, bullets, labels) is literal.
+
+```html
+<b>📝 W2 mobiz-payment-gateway — {หัวข้อหนึ่งบรรทัด}</b>
+
+{เล่าเรื่อง 2–3 ประโยค เริ่มจาก "ทำไมงานนี้เกิดขึ้น" (trace จาก memory),
+ ตามด้วย "แก้อะไร" (outputs ของ pass นี้),
+ ปิดด้วย "ส่งผลยังไงกับ stakeholder" หรือ "ต้องระวังอะไรต่อ"}
+
+<b>รายละเอียด</b>
+• Commits: <code>{old-short}..{new-short}</code> ({N} commits)
+• PR: <a href="{pr-url}">#{pr-number}</a>
+• Learnings: {N} refresh · {M} drift · {K} new
+• Flow affected: {slug} (ถ้ามี, ไม่งั้นข้ามบรรทัดนี้)
+
+<i>กดลิงก์ PR เพื่อรีวิว — ยังไม่ merge จนกว่าจะได้รับอนุมัติ</i>
+```
+
+Use `<code>`, `<b>`, `<i>`, `<a href="url">link</a>` — no `<br>`, no `<hr>`, no custom CSS (Telegram strips them).
+
+**HTML escaping:** when interpolating, escape `<`, `>`, `&` in **text content** before substitution. Commit hashes, file paths, slugs are safe; user-authored prose occasionally isn't.
+
+**Tool call**
+
+```
+telegram_send(
+  text: "<composed HTML from template above>",
+  parse_mode: "HTML",
+  disable_web_page_preview: true   # keep the card compact
+)
+```
+
+`chat_id` is omitted — the MCP server uses `TELEGRAM_DEFAULT_CHAT_ID` env (set at `claude mcp add` time).
+
+**Acceptance**
+
+- `telegram_send` returned `{ ok: true, message_id: <N>, chat_id: <ID> }`.
+- Captured `message_id` in the Step 9 retro body so the message is traceable if edits are ever needed.
+- If the pass produced zero doc changes (empty commit range or all fast-path), still send a short note — "วันนี้ไม่มี drift ใน commit range, baseline bumped" — so the channel reflects activity cadence.
+
+**Fallback (Telegram unreachable)**
+
+If `telegram_send` returns `{ ok: false, error: ... }` or MCP itself is unreachable:
+
+1. Do **not** block the W2 pass; the commit + PR are already real and useful.
+2. File one `arra_learn` tagged `#telegram-failed + #workflow-bug + repo:cross` with the intended HTML body (full, unescaped) + the error string. Next session can re-send from there.
+3. Note the failure in the Step 9 retro.
+
+**Never** send Oracle-internal vocabulary (UUIDs, trace ids longer than 8 chars, file paths with stray quoting) unless wrapped in `<code>`. The Telegram reader wants story; Oracle reference ids are for the agent's own audit trail, which already lives in the `arra_learn` entries.
+
 ### Step 9 — Retrospective (3 min)
 
 Run `rrr`. A Workflow 2 retro is shorter than a Workflow 1 retro but the mandatory sections are the same: Outcome, What went well, What went slowly, Surprises, Honest Feedback, AI Diary, Next unanswered question.
@@ -340,6 +411,7 @@ This workflow is complete **only** when all are true:
 - [ ] `docs/.baseline` bumped **only** if no in-territory file was deferred; otherwise left at prior hash with deferral noted in retro.
 - [ ] At least one `arra_learn` entry filed per durable fact (or an explicit retro note that the range had no durable facts).
 - [ ] Git branch pushed; PR opened; **not merged**.
+- [ ] **Telegram narrative summary posted (Step 8b)** — `telegram_send` returned `{ ok: true, message_id }`, or the fallback `#telegram-failed` learning was filed with the intended HTML body + error string. Message id recorded in the retro. For zero-doc-change passes, a short "no drift, baseline bumped" note was still sent to keep the channel cadence.
 - [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback. The retro is the state carrier; no separate handoff step.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
@@ -401,3 +473,4 @@ When this workflow produces a doc claim that needs **domain-expert verification*
 - 2026-04-17 — Added Step 2c (cross-repo sibling link). Motivation: daily W2 cron runs in mobiz + bank-bot often cover related commits (shared contract, callback shape, signature helper, OTP endpoint). When that happens, the two W2 traces chain to each other via `arra_trace_link` and a paired `arra_learn` tagged `#cross-repo-sync` records the semantic reason. Link direction is temporal (older = prev); readers should not over-interpret it as causal. If you run first and no other-repo trace exists yet, defer — the other repo's W2 will link back. DoD added a check that refuses "forgot to look."
 - 2026-04-17 — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation especially acute for W2: the daily cron re-runs the workflow every morning, so a skipped thread check ages a zombie thread by 24h per cycle. Scoping via doc-anchored grep (not title prefix) — see `workflow-thread-resolve.md`. DoD added two items: Step 0 clears to zero, and every `arra_thread(...)` in the pass inserts a paired `[AWAITING_THREAD]` marker (anchor discipline).
 - 2026-04-18 — **Escalation rewritten thread-first.** Prior version said "CC `code_reviewer` in the PR description" for financial-behavior claims and "CC `security_auditor` via `arra_inbox`" for security. Both have the same failure mode: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this, and was asymmetrically underused. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body — the thread is the durable record, the PR is only the delivery vehicle. Meta-workflow edit by `brew-ops` with human approval (not a technical-writer session); peer roles can ratify or counter-edit on their next pass.
+- 2026-04-19 — **Step 8b (Telegram narrative summary) added** between Step 8 (Commit + PR) and Step 9 (Retrospective). W2 passes run daily and produce durable artefacts (PR, doc update, `arra_learn` entries, `#drift` learnings), but until this step existed the audience for each pass was implicit: the next agent, plus whoever happens to open the PR. There was no push channel where a human operator could passively keep up with the cadence. The step requires composing a ~500-char Thai-language narrative that weaves *why this pass exists* (trace back through memory for the upstream cause — thread, ratification, drift chain) with *what landed* (this pass's outputs), then sending via the `telegram_send` MCP tool (`github.com/Soul-Brews-Studio/mcp-telegram`). Audience is mixed (dev + stakeholder), format is Telegram HTML (`<b>`, `<i>`, `<code>`, `<a href>`), `chat_id` defaults to `TELEGRAM_DEFAULT_CHAT_ID` env set on MCP registration. Zero-doc-change passes still send a short "no drift, baseline bumped" note so the channel cadence reflects that the workflow actually ran. Fallback is `#telegram-failed` learning + continue — the PR is the load-bearing artefact; Telegram is the delivery vehicle. DoD tightened with a Step 8b acceptance line.
