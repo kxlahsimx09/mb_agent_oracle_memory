@@ -318,9 +318,52 @@ If `telegram_send` returns `{ ok: false, error: ... }` or MCP itself is unreacha
 
 ### Step 7 — Retrospective (3 min)
 
-`rrr` to `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_bot-track-<short>.md`. AI Diary + Honest Feedback mandatory.
+**Path discipline (load-bearing — see §The ψ/ trap).** Before writing, verify the vault symlink resolves:
+
+```bash
+readlink ~/.arra-oracle-v2/ψ | grep -q "mb_agent_oracle_memory/ψ$" \
+  || { echo "FAIL: ~/.arra-oracle-v2/ψ does not resolve to the canonical vault — halt"; exit 1; }
+```
+
+**Write to:**
+```
+~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_bot-track-<short>.md
+```
+
+**Never to any of these traps:**
+- ❌ `ψ/memory/retrospectives/...` — relative path, lands in your current cwd (worktree tree)
+- ❌ `./ψ/memory/retrospectives/...` — same
+- ❌ `<project-path>/ψ/memory/...` — absolute but wrong root; `project` is the product repo, not the vault
+- ❌ `.agent/../ψ/memory/...` — symlink traversal may misresolve through the vault's own project subdir
+
+AI Diary + Honest Feedback mandatory.
 
 If multiple commits were covered in one session, write **one session-level retrospective** covering the whole range — not one retro per commit. (Mirrors the tester's workflow-2 rule: per-test handoffs are fine, but the retro is session-level. Same principle applies here: per-commit updates are fine, per-commit retros are over-granular.)
+
+**After writing, verify no stray landed in the project tree:**
+
+```bash
+SLUG="<slug-you-used>"  # e.g., 15.40_bot-track-b423eca
+# This MUST return empty — any hit = stray leak, follow recovery below.
+find ~/Code/github.com/kokarat/bank-bot \
+  -path '*/ψ/memory/*' -name "*${SLUG}*" \
+  -not -path "*/.agent/*" 2>/dev/null
+# And the canonical location MUST exist:
+ls ~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/${SLUG}.md
+```
+
+**Recovery if stray found:**
+```bash
+STRAY="<stray-path-from-find>"
+VAULT_DEST=~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/
+mkdir -p "$VAULT_DEST"
+if [ -f "$VAULT_DEST/$(basename "$STRAY")" ]; then
+  diff -q "$STRAY" "$VAULT_DEST/$(basename "$STRAY")" && rm "$STRAY" || echo "differs — merge manually"
+else
+  mv "$STRAY" "$VAULT_DEST"
+fi
+(cd $(ghq list -p Soul-Brews-Studio/arra-oracle-v3) && bun run index)
+```
 
 ---
 
@@ -333,13 +376,36 @@ If multiple commits were covered in one session, write **one session-level retro
 - [ ] Each new `#drift` marker has its paired `arra_learn` for Workflow 4.
 - [ ] Branch pushed, PR opened; **not merged**.
 - [ ] **Telegram narrative summary posted (Step 6b)** — `telegram_send` returned `{ ok: true, message_id }`, or the fallback `#telegram-failed` learning was filed with the intended HTML body + error string. Message id recorded in the retro. For zero-doc-change passes, a short "no drift, baseline bumped" note was still sent to keep the channel cadence.
-- [ ] Retrospective written (session-level, not per-commit).
+- [ ] Retrospective written (session-level, not per-commit) at `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_bot-track-<short>.md` (**absolute path via vault symlink** — see Step 7 path discipline + §The ψ/ trap).
+- [ ] **Stray-check passed**: `find ~/Code/github.com/kokarat/bank-bot -path '*/ψ/memory/*' -name "*<slug>*" -not -path '*/.agent/*'` returned empty. The retro is NOT leaking into the bank-bot product repo's working tree.
 - [ ] Retro is the state carrier for the next session; no separate handoff step. Open questions — if any — live in `arra_thread` with `[AWAITING_THREAD:<id>]` anchors per §Escalation.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for `github.com/kokarat/bank-bot`, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a mobiz-payment-gateway W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
 - [ ] Step 0 ran to completion: Pass 1 left zero `answered`-status markers in bot-writer territory; Pass 2 returned zero bot-writer-territory threads not seen in Pass 1. Daily-cron W2 must clear same-day.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc in the same PR. Orphan thread count = 0.
+
+---
+
+## The ψ/ trap (why path discipline in Step 7 matters)
+
+`ψ/memory/` looks like a vault-relative path but is not. The **canonical vault** lives at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ
+```
+
+surfaced to agents via the symlink `~/.arra-oracle-v2/ψ → <vault>/ψ`. Writes going through that symlink land in the vault correctly.
+
+A **stray `ψ/` directory at the root of this bank-bot repo** would look identical to a vault path but:
+
+1. **Not indexed by Oracle** — `arra_search` can't find it.
+2. **Invisible to other agents** — including the mobiz-side pg-writer sibling that may need to cross-reference.
+3. **May get git-tracked accidentally** — `ψ/` is NOT in this repo's `.gitignore` as of 2026-04-19. Once `git add` catches it, it enters the bank-bot product repo's permanent history.
+
+Mobiz-payment-gateway (our sibling repo) has **21 files already committed** in its git history from this exact trap, across three failed cleanup-and-revert rounds. Bank-bot's smaller footprint (10 stray working-tree files as of audit) has not yet been committed, but the same leak path is open. The 2026-04-19 mobiz W2 retro leak (`15.06_w2-track-commit-admin-cancel-payout.md` landed in mobiz repo instead of vault) triggered this spec update.
+
+Step 7's pre-write symlink check + post-write stray-find is the fix. Both must pass. Retro is not "done" until the stray check returns empty.
 
 ---
 
@@ -384,3 +450,4 @@ When this workflow produces a doc claim that needs **domain-expert verification*
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate. Daily W2 cron is especially exposed to zombie threads because it runs every morning, so a single missed resolution ages 24h per cycle. Scoping via doc-anchored grep — see `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero, and every `arra_thread(...)` inserts a paired `[AWAITING_THREAD]` marker.
 - 2026-04-18 — **Escalation rewritten thread-first** (mirror of mobiz W2 edit the same day). Prior version said "CC `security_auditor` when role exists; meanwhile, include human review as explicit reviewer on the PR" for security-sensitive areas. Same failure mode as mobiz: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body. Added a bank-bot-specific category for **cross-repo contract claims** that span mobiz ↔ bank-bot (shared payload / HMAC / MDR / OTP) — the thread is the joint ratification point so both sides agree at the same commit. Meta-workflow edit by `brew-ops` with human approval; peer roles can ratify or counter-edit on their next pass.
 - 2026-04-19 — **Step 6b (Telegram narrative summary) added** between Step 6 (Commit + PR) and Step 7 (Retrospective). Mirrors the mobiz W2 Step 8b that landed the same day (step numbering differs because bank-bot W2 has fewer steps). Requires composing a ~500-char Thai-language narrative that weaves *why this pass exists* (trace back through memory) with *what landed* (this pass's outputs), then sending via the `telegram_send` MCP tool (`github.com/Soul-Brews-Studio/mcp-telegram`). Bot-side specialty: the template includes a mandatory "Cross-repo: กระทบ mobiz ที่... หรือ bot-internal only" line because most bank-bot changes affect the `/bot/*` API contract surface mobiz consumes. Audience is mixed (dev + stakeholder), format is Telegram HTML, `chat_id` defaults to `TELEGRAM_DEFAULT_CHAT_ID` env. Fallback on MCP failure is `#telegram-failed` learning + continue — PR is the load-bearing artefact, Telegram is the delivery vehicle. DoD tightened with a Step 6b acceptance line.
+- 2026-04-19 (later, brew-ops) — **Step 7 retro path discipline + §The ψ/ trap added** (sibling-synced with the mobiz W2 change the same day). Prior Step 7 had an absolute path in the body but no anti-trap warning or pre/post verification — agents could still slip to a relative `ψ/memory/...` path when writing. A live leak on 2026-04-19 15:06 in mobiz W2 (retro landed in `mobiz-payment-gateway/ψ/...` instead of vault) prompted the audit; mobiz had 21 already-committed stray files from this trap across three failed cleanup rounds. Bank-bot hasn't committed strays yet (10 working-tree files only, audit 2026-04-19) but the same leak path is open because `ψ/` isn't in `.gitignore`. Fix: Step 7 now mandates (a) pre-write `readlink` check on `~/.arra-oracle-v2/ψ`, (b) explicit list of the 4 traps NOT to take, (c) post-write stray-find that must return empty, (d) documented recovery recipe if a stray is found. New `§The ψ/ trap` section at end-of-file explains the topology (vault vs symlink vs stray) with cross-reference to the mobiz incident. DoD tightened: absolute-path retro line + stray-check line. Trap applies to all workflows that call `rrr` (W1/W4/W8/W9 also affected); this pass fixes only W2 per scope.

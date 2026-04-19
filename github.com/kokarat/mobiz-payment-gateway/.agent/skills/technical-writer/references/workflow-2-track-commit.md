@@ -367,6 +367,24 @@ If `telegram_send` returns `{ ok: false, error: ... }` or MCP itself is unreacha
 
 ### Step 9 — Retrospective (3 min)
 
+**Path discipline (load-bearing — see §The ψ/ trap).** Before writing, verify the vault symlink resolves:
+
+```bash
+readlink ~/.arra-oracle-v2/ψ | grep -q "mb_agent_oracle_memory/ψ$" \
+  || { echo "FAIL: ~/.arra-oracle-v2/ψ does not resolve to the canonical vault — halt"; exit 1; }
+```
+
+**Write to:**
+```
+~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_<slug>.md
+```
+
+**Never to any of these traps:**
+- ❌ `ψ/memory/retrospectives/...` — relative path, lands in your current cwd (worktree tree)
+- ❌ `./ψ/memory/retrospectives/...` — same
+- ❌ `<project-path>/ψ/memory/...` — absolute but wrong root; `project` is the product repo, not the vault
+- ❌ `.agent/../ψ/memory/...` — symlink traversal may misresolve through the vault's own project subdir
+
 Run `rrr`. A Workflow 2 retro is shorter than a Workflow 1 retro but the mandatory sections are the same: Outcome, What went well, What went slowly, Surprises, Honest Feedback, AI Diary, Next unanswered question.
 
 Retro must capture:
@@ -375,6 +393,57 @@ Retro must capture:
 - Which files were fast-fixed vs deferred to Workflow 4.
 - Any `[UNVERIFIED]` left in the docs and why.
 - The next expected Workflow 2 trigger (next PR, expected area of change).
+
+**After writing, verify no stray landed in the project tree:**
+
+```bash
+SLUG="<slug-you-used>"  # e.g., 15.06_w2-track-commit-admin-cancel-payout
+# This MUST return empty — any hit = stray leak, follow recovery below.
+find ~/Code/github.com/kokarat/mobiz-payment-gateway \
+  -path '*/ψ/memory/*' -name "*${SLUG}*" \
+  -not -path "*/.agent/*" 2>/dev/null
+# And the canonical location MUST exist:
+ls ~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/${SLUG}.md
+```
+
+**Recovery if stray found** (do NOT just delete — content may not be in vault yet):
+```bash
+STRAY="<stray-path-from-find>"
+VAULT_DEST=~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/
+mkdir -p "$VAULT_DEST"
+# If vault copy doesn't exist yet, move; if identical copy exists, delete stray after diff
+if [ -f "$VAULT_DEST/$(basename "$STRAY")" ]; then
+  diff -q "$STRAY" "$VAULT_DEST/$(basename "$STRAY")" && rm "$STRAY" || echo "differs — merge manually"
+else
+  mv "$STRAY" "$VAULT_DEST"
+fi
+# Re-index so Oracle picks it up
+(cd $(ghq list -p Soul-Brews-Studio/arra-oracle-v3) && bun run index)
+```
+
+---
+
+## The ψ/ trap (why path discipline in Step 9 matters)
+
+`ψ/memory/` looks like a vault-relative path but is not. The **canonical vault** lives at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ
+```
+
+surfaced to agents via the symlink `~/.arra-oracle-v2/ψ → <vault>/ψ`. Writes going through that symlink land in the vault correctly.
+
+A **stray `ψ/` directory at the root of this project repo** (`mobiz-payment-gateway/ψ/`) would look identical to a vault path but:
+
+1. **Not indexed by Oracle** — `arra_search` can't find it.
+2. **Invisible to other agents** — defeats the "shared memory" design.
+3. **May get git-tracked accidentally** — `ψ/` is NOT in this repo's `.gitignore` as of 2026-04-19. Once `git add` catches it, it enters the payment-gateway product repo's permanent history.
+
+Historical incidents:
+- **21 files** already committed to `mobiz-payment-gateway` git history from this trap, across three failed cleanup attempts (commits `414f568` / `2965cda` / `da4d13a`).
+- **2026-04-19 15:06**: W2 run wrote its retro to `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md` (stray) instead of `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/19/15.06_...` (vault). Recovered by manually moving to vault + re-indexing (see `arra_search "ψ-trap-retro-leak"`).
+
+Step 9's pre-write symlink check + post-write stray-find is the fix. Both must pass. Retro is not "done" until the stray check returns empty.
 
 ---
 
@@ -412,7 +481,8 @@ This workflow is complete **only** when all are true:
 - [ ] At least one `arra_learn` entry filed per durable fact (or an explicit retro note that the range had no durable facts).
 - [ ] Git branch pushed; PR opened; **not merged**.
 - [ ] **Telegram narrative summary posted (Step 8b)** — `telegram_send` returned `{ ok: true, message_id }`, or the fallback `#telegram-failed` learning was filed with the intended HTML body + error string. Message id recorded in the retro. For zero-doc-change passes, a short "no drift, baseline bumped" note was still sent to keep the channel cadence.
-- [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` with AI Diary + Honest Feedback. The retro is the state carrier; no separate handoff step.
+- [ ] Retrospective written at `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_slug.md` (**absolute path via vault symlink** — see Step 9 path discipline + §The ψ/ trap) with AI Diary + Honest Feedback. The retro is the state carrier; no separate handoff step.
+- [ ] **Stray-check passed**: `find ~/Code/github.com/kokarat/mobiz-payment-gateway -path '*/ψ/memory/*' -name "*<slug>*" -not -path '*/.agent/*'` returned empty. The retro is NOT leaking into the product repo's working tree.
 - [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a bank-bot W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
@@ -474,3 +544,4 @@ When this workflow produces a doc claim that needs **domain-expert verification*
 - 2026-04-17 — Added **Step 0 (Resolve answered threads in territory)** as a blocking gate before Step 1. Motivation especially acute for W2: the daily cron re-runs the workflow every morning, so a skipped thread check ages a zombie thread by 24h per cycle. Scoping via doc-anchored grep (not title prefix) — see `workflow-thread-resolve.md`. DoD added two items: Step 0 clears to zero, and every `arra_thread(...)` in the pass inserts a paired `[AWAITING_THREAD]` marker (anchor discipline).
 - 2026-04-18 — **Escalation rewritten thread-first.** Prior version said "CC `code_reviewer` in the PR description" for financial-behavior claims and "CC `security_auditor` via `arra_inbox`" for security. Both have the same failure mode: once the PR merges, the verification ask is buried — `arra_search` can't find it, next agent has no record, workflow Step 0 can't sweep it. The `[AWAITING_THREAD:*]` anchor + `arra_thread` infrastructure already exists for exactly this, and was asymmetrically underused. All verification-needed escalations now open a thread, anchor the doc, and carry a one-line pointer in the PR body — the thread is the durable record, the PR is only the delivery vehicle. Meta-workflow edit by `brew-ops` with human approval (not a technical-writer session); peer roles can ratify or counter-edit on their next pass.
 - 2026-04-19 — **Step 8b (Telegram narrative summary) added** between Step 8 (Commit + PR) and Step 9 (Retrospective). W2 passes run daily and produce durable artefacts (PR, doc update, `arra_learn` entries, `#drift` learnings), but until this step existed the audience for each pass was implicit: the next agent, plus whoever happens to open the PR. There was no push channel where a human operator could passively keep up with the cadence. The step requires composing a ~500-char Thai-language narrative that weaves *why this pass exists* (trace back through memory for the upstream cause — thread, ratification, drift chain) with *what landed* (this pass's outputs), then sending via the `telegram_send` MCP tool (`github.com/Soul-Brews-Studio/mcp-telegram`). Audience is mixed (dev + stakeholder), format is Telegram HTML (`<b>`, `<i>`, `<code>`, `<a href>`), `chat_id` defaults to `TELEGRAM_DEFAULT_CHAT_ID` env set on MCP registration. Zero-doc-change passes still send a short "no drift, baseline bumped" note so the channel cadence reflects that the workflow actually ran. Fallback is `#telegram-failed` learning + continue — the PR is the load-bearing artefact; Telegram is the delivery vehicle. DoD tightened with a Step 8b acceptance line.
+- 2026-04-19 (later, brew-ops) — **Step 9 retro path discipline + §The ψ/ trap added** after a live retro-leak observed on the 15:06 W2 pass. Prior Step 9 said only "Run `rrr`" — no path, no anti-trap warning. The agent wrote the retro to `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md` (stray in the product repo working tree) instead of `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/19/15.06_...` (vault via symlink). Not an agent failure — a spec ambiguity: `ψ/memory/...` looks like a vault path but resolves cwd-relative in a worktree. Observation triggered broader audit: 21 files already committed in mobiz git history from this exact trap across three failed cleanup-and-revert rounds (`414f568` / `2965cda` / `da4d13a`). Fix: Step 9 now mandates (a) pre-write `readlink` check on `~/.arra-oracle-v2/ψ`, (b) absolute-path-via-symlink for the destination, (c) explicit list of the 4 traps NOT to take, (d) post-write stray-find that must return empty, (e) documented recovery recipe if a stray is found. New `§The ψ/ trap` section at end-of-file explains the topology (vault vs symlink vs stray) + links the historical incidents. DoD tightened: one line for the absolute-path retro, one for the stray-check. Trap applies to all workflows that call `rrr` (W1/W4/W8/W9), but this pass fixes only W2 per scope; others inherit the same discipline on their next revision.
