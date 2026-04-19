@@ -192,6 +192,41 @@ Rules:
 - Use `->>` for requests, `-->>` for responses. Use `self-messages` (e.g., `Gateway->>Gateway: ...`) sparingly and only for state transitions material to the flow.
 - `participant <short> as <role-tagged-name>` — the short alias is for the diagram; the long name must match the Actors list.
 
+#### Mermaid safety rules (binding — violating breaks GitHub render)
+
+Adopted 2026-04-19 after `deposit-auto-match-from-statement` first-pass render-failed on submission. Mermaid's sequenceDiagram parser is stricter than the prose-rendering pipeline; a diagram that Claude generates from prose-style muscle memory will often fail silently in the GitHub PR preview (no diagram shown). The DoD check — "Mermaid diagram parses (GitHub PR preview shows the rendered diagram; if not, fix before pushing)" — catches it, but costs a revision round. These rules prevent the round-trip:
+
+1. **Participant aliases — use hyphen, not colon.** Canonical form: `participant GW as System-Gateway` / `participant BB as External-BankBot` / `participant AD as User-Admin`. Colons (`System:Gateway`) parse *sometimes* and break *sometimes* — not worth the coin-flip. `deposit-qr-request.md` uses colon form and renders today, but the newer `withdrawal-queue-*` and `topup-approve-mdr-distribution` flows standardized on hyphen form after multiple colon-form breakages. Follow the newer convention on all new W8 writes.
+2. **No HTML inside `Note over`.** Specifically: **no `<br/>`, no `<br>`, no `<b>`, no `<i>`.** The SaaS-hosted mermaid renderer GitHub uses strips unknown tags and can crash the whole diagram on malformed HTML. If a note needs two ideas, write two `Note over` lines stacked. Example:
+   ```
+   ❌ Note over A,B: point one;<br/>point two
+   ✅ Note over A,B: point one
+   ✅ Note over A,B: point two
+   ```
+3. **ASCII-only in message text.** No `→`, no `…`, no `—` (em-dash) inside a `Step->>Other:` line. These *sometimes* render and *sometimes* crash depending on mermaid version + font shaping; the render failure mode is silent (no diagram). Use `->` (ASCII) or prose (`then`, `to`) instead. `Note over` lines tolerate unicode better in practice, but the safe default is ASCII everywhere.
+4. **Avoid `{...}` and `"..."` as inline struct/quote syntax in messages.** Both survive rendering *most* of the time but interact badly with colons later in the same line (mermaid's message-text grammar is line-delimited but colon-sensitive in some paths). Spell out the shape in prose: instead of `3. POST /foo {a, b, c}` write `3. POST /foo body=a+b+c`. Use the verb `body=` / `event=` / `returns=` to name the payload — matches `topup-approve-mdr-distribution` house style.
+5. **Don't put a second `:` in a message's free-text tail.** The first `:` after the arrow is the message-delimiter; later colons are legal but fragile. Instead of `6. matchDeposit: KTB or SCB` write `6. matchDeposit by KTB or by SCB` or `6. matchDeposit using KTB full-account or SCB last4`.
+6. **Don't use `;` as a sentence joiner in messages or notes.** Replace with `,` or split the line. Mermaid's message grammar treats `;` as benign in most cases but one failure class is the specific combination `word;<tag>` which breaks the Note parser outright.
+7. **Self-messages (`X->>X: ...`) are fine** but keep their text short. If you find yourself writing 15 words of self-message, the step is aggregating too much — break it up or move the detail to §Implementation pointers.
+
+Concrete "safe template" to copy when starting a new diagram (lifted from `topup-approve-mdr-distribution.md`):
+
+```
+sequenceDiagram
+    participant A as Role-Name
+    participant B as Role-Name
+    participant C as Role-Name
+
+    Note over A,B: 0. out-of-band context if needed
+    Note over B,C: 0b. second note if needed, as its own line
+
+    A->>B: 1. verb /endpoint body=field_a+field_b (auth context in parens)
+    B->>B: 2. atomic step — short enough to fit on one visual line
+    B-->>A: 3. verb status=ok body=returned_field+another
+```
+
+Where this stays strict: in the PR template (Step 10), add a test-plan line `[ ] Mermaid diagram renders in the GitHub PR preview — I visually confirmed the rendered diagram before pushing the final commit.` Do not check this box without actually opening the PR preview in a browser — the "eyeball the markdown source" shortcut has produced the current drift twice.
+
 ### Step 5 — Implementation pointers + per-step child traces (10 min)
 
 For each numbered step, add a pointer under `## Implementation pointers`:
@@ -490,3 +525,4 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
   2. **`[RATIFICATION_PENDING]` decay rule (Step 7).** Added an age-based decay ladder: 7d bump, 30d `#missing-ratification` learning, 60d lapse. At lapse, the marker transitions to `[RATIFICATION_LAPSED]` (new terminal marker, informational/historical, not blocking). Keeps stale markers from living forever without acknowledgement. `[AWAITING_THREAD]` on individual claims is exempt — only whole-flow `[RATIFICATION_PENDING]` decays.
   3. **Stacked-PR clause (Step 10).** Documents the pattern retro 21.05 used successfully: when a new flow's `§Related flows` links to a sibling flow whose PR is still in-flight, branch off the sibling branch and PR `--base=<sibling-branch>`, with a §Stacked on section in the PR body. Stacking depth capped at 2 — 3+ deep stacks accumulate review-cycle bottlenecks and require `arra_inbox` escalation to flatten.
   4. **Dropped `// impl-level` marker (Step 8).** Original cross-link marker proved ambiguous (the marker name suggests "link target is impl-level" when the intent was the opposite). Dropped in favour of the bare `**Flow:** [<slug>](flows/<slug>.md)` line — path + label carry the meaning cleanly. Legacy `// impl-level` occurrences in existing `current-system.md` retained per P-001.
+- 2026-04-19 — **Mermaid safety rules (Step 4)** added after `deposit-auto-match-from-statement` first-pass render-failed in PR #229. Root causes: `<br/>` inside `Note over` (unique to the failing doc; every other flow doc never uses `<br>`), plus colon-form participant aliases (`System:Gateway`) being fragile on mermaid's current GitHub-hosted renderer while the newer hyphen-form (`System-Gateway`) introduced in `withdrawal-queue-*` + `topup-approve-mdr-distribution` renders reliably. The fix is two-layer: (1) seven concrete rules (hyphen aliases, no HTML in Notes, ASCII-only messages, no `{...}`/`"..."` struct syntax in messages, no second `:` in free-text tail, no `;` joiner, short self-messages) plus a safe-template example lifted from `topup-approve-mdr-distribution.md`; (2) an explicit PR-template test-plan line requiring the author to visually confirm the GitHub preview before pushing the final commit — eyeballing the markdown source has produced this class of drift twice.
