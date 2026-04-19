@@ -327,7 +327,40 @@ sequenceDiagram
 
 Where this stays strict: in the PR template (Step 10), add a test-plan line `[ ] Mermaid diagram renders in the GitHub PR preview — I visually confirmed the rendered diagram before pushing the final commit.` Do not check this box without actually opening the PR preview in a browser — the "eyeball the markdown source" shortcut has produced the current drift twice on the mobiz side plus once on bank-bot (`scb-dual-control-withdrawal` PR #73, 2026-04-19).
 
-**Pre-push mechanical check:** `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` — any hit is a candidate mermaid break. Review each; fix or accept with a comment. This does not replace the visual PR preview check, but it catches the exact classes of bugs that broke `scb-dual-control-withdrawal` in one shell-grep.
+**Pre-push mechanical checks (two-stage).** Run both before every `git push`:
+
+**Stage 1 — extract-then-grep inside the mermaid block only.** Searching the whole file gives false positives (prose can legally use `;`, `—`, `<br>`, etc). Scope the grep to the fenced `mermaid` block:
+
+```bash
+awk '/^```mermaid$/,/^```$/' docs/flows/<slug>.md | \
+  grep -nE '→|—|…|;|<br|<b>|<i>|\{[A-Za-z0-9_-]+,[A-Za-z0-9_,-]+\}|:[a-z]+[/}]|->>\w+:.*:' \
+  && echo "^^ mermaid break candidates — review each, fix or consciously accept"
+```
+
+Coverage map to the rules above:
+- `→`, `—`, `…` — Rule 3 (ASCII-only in message text)
+- `;` — Rule 6 (no semicolon sentence-joiner). **Added 2026-04-19 after `scb-dual-control-withdrawal` second-pass shipped with `;` in step 10** — the first-pass grep without `;` was the root cause of the second revision cycle on PR #73.
+- `<br`, `<b>`, `<i>` — Rule 2 (no HTML inside Note over)
+- `\{X,Y\}` — Rule 4 (no comma-in-braces payload)
+- `:[a-z]+[/}]` — Rule 5 addendum (no colon-prefixed path params like `:id/`)
+- `->>\w+:.*:` — Rule 5 primary (second `:` in message free-text tail)
+
+**Stage 2 — actually render the diagram locally.** The grep is cheap but lossy; the authoritative test is `mermaid-cli` (`mmdc`):
+
+```bash
+# Install once (Bun — preferred on this repo)
+bunx --bun @mermaid-js/mermaid-cli --help   # first run downloads, later runs reuse cache
+# Or npm if bun is unavailable: npm i -g @mermaid-js/mermaid-cli
+
+# Extract + render (swap the tool invocation if using mmdc directly)
+awk '/^```mermaid$/,/^```$/' docs/flows/<slug>.md | sed '1d;$d' > /tmp/flow.mmd
+bunx --bun @mermaid-js/mermaid-cli -i /tmp/flow.mmd -o /tmp/flow.svg
+# Expect: "Generating single mermaid chart" + a >10KB SVG at /tmp/flow.svg. No stderr, no crash.
+```
+
+If `mmdc` emits an error line or produces a 0-byte SVG, fix the diagram and re-run before pushing. **Do not substitute local-rendering for the GitHub PR preview visual check** — some rendering differences (fonts, CDN-served mermaid version) show up only on github.com, not in `mmdc` — but if `mmdc` *fails*, GitHub will too. `mmdc` success ≠ guaranteed GitHub success; `mmdc` failure = guaranteed GitHub failure.
+
+Neither check replaces the visual PR preview confirmation (DoD line below); together the three catch the classes of breaks that have actually hit on either repo so far.
 
 ### Step 5 — Implementation pointers + per-step child traces (10 min)
 
@@ -601,7 +634,7 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 ## Definition of Done
 
 - [ ] `docs/flows/<slug>.md` exists with all nine sections.
-- [ ] Mermaid diagram parses AND visually renders in the GitHub PR preview (not just a markdown-source eyeball). Pre-push mechanical check run: `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` returned either zero hits or each hit was consciously accepted. §Mermaid safety rules (Step 4) all honoured.
+- [ ] Mermaid diagram parses AND visually renders in the GitHub PR preview (not just a markdown-source eyeball). **Both pre-push mechanical checks ran cleanly:** (1) `awk '/^```mermaid$/,/^```$/' docs/flows/<slug>.md | grep -nE '→|—|…|;|<br|<b>|<i>|\{[A-Za-z0-9_-]+,[A-Za-z0-9_,-]+\}|:[a-z]+[/}]|->>\w+:.*:'` returned zero hits (or each hit consciously accepted); (2) `mmdc -i <extracted>.mmd -o /tmp/flow.svg` produced a >10KB SVG with zero stderr. §Mermaid safety rules (Step 4) all honoured.
 - [ ] Every numbered diagram step has an `// impl:` pointer, or `// ext: kokarat/mobiz-payment-gateway`, or `// ext: External:<Bank>Portal`, or `[UNIMPLEMENTED]` / `[DRIFT]` marker with a paired learning link.
 - [ ] Claim-strength label in the doc header matches the weakest individual claim.
 - [ ] At least one `arra_learn` tagged `technical-writer + repo:bank-bot + flow + flow:<slug>` landed (Step 9).
@@ -658,5 +691,6 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 
 ## Change log for this workflow file
 
+- 2026-04-19 (GMT+7, even later) — **Second iteration on the pre-push mechanical grep + added `mmdc` render stage.** After the first port of §Mermaid safety rules above, `scb-dual-control-withdrawal` PR #73 shipped a second revision cycle because the grep pattern I wrote on the first pass missed Rule 6 (`;` as sentence-joiner) — the diagram still had `;` in step 10 that rendered on mermaid-cli locally but the user caught it on GitHub preview. Root cause: my grep enumerated rules 3/4/5 addenda but forgot rule 6, and did not scope to the mermaid fence (so running it on the whole file would have been high-false-positive anyway). Fix: (a) replaced the single grep with a **two-stage check** — Stage 1 extracts only the fenced mermaid block with `awk '/^```mermaid$/,/^```$/'` then greps for every pattern that maps to a rule (added `;`, `<br`, `<b>`, `<i>`, and a second-colon-in-tail pattern `->>\\w+:.*:`); Stage 2 actually runs `mmdc` via `bunx --bun @mermaid-js/mermaid-cli` on the extracted block so we get a local render-test, not just a lexical scan. Neither replaces the visual GitHub PR preview; together the three catch everything that has actually broken so far. §Definition of Done line rewritten to require both stages, not just one grep.
 - 2026-04-19 (GMT+7, later) — **Ported §Mermaid safety rules from pg-writer's workflow-8-flow-map.md Step 4 to close a sibling-drift gap** (per AGENTS.md §5a: "When SKILL.md is updated in one instance's `.agent/skills/technical-writer/SKILL.md`, the change is mirrored to the sibling instances in the same session. Drift between copies is its own `#drift` learning."). The 7 pg-writer rules were added verbatim plus an 8th bot-side rule about non-ASCII script (Thai/Chinese) inside mermaid labels — lifted from the `scb-dual-control-withdrawal` first-pass incident where `reason "ยกเลิกคำขอ"` in a `Note over` crashed the diagram. Bot-side addenda added to rules 3, 4, 5 covering the specific breaks hit on that pass (unicode arrows `→` from em-dash auto-substitution, comma-in-braces payload `{success,failed,waiting-to-review}`, colon-prefixed path params `:id`/`:acc`/`:ref`). Step 4 example skeleton was rewritten to use hyphen-form participant aliases and ASCII-only labels (the old example used `System:BankBot (Scheduler)` — exactly the colon-with-parens anti-pattern the rules now forbid). Step 10 PR body template + §Definition of Done line both updated to require a visual GitHub PR preview confirmation, and DoD added a pre-push mechanical grep `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` that catches the exact classes of bugs that broke `scb-dual-control-withdrawal` in one shell call. Filed `#drift + #workflow-bug + repo:cross + technical-writer-drift` learning documenting the sibling gap itself so a future pass knows to diff the two workflow-8 copies on session start.
 - 2026-04-19 — Initial version. Scoped to `technical-writer` instance in `github.com/kokarat/bank-bot`. Mermaid-only diagrams. Hybrid authorship: strict transcription required for **new** flows (tier S1/S2/S2.5 claim mandatory); reverse-engineering allowed for **existing** flows but gated by `[RATIFICATION_PENDING]`. `queryType="pattern"`, `scope="cross-project"` default for the W8 root trace (every bot flow is cross-repo by nature). Adds two steps absent from pg-writer's W8: **Step 9b reciprocal breadcrumb** (mandatory, plus cross-repo index learning when mobiz counterpart exists) and **Step 9c self-test** (four queries that prove the cross-repo link is discoverable via both search and trace, blocking DoD on failure). Tag convention uses the prefixed `flow:<slug>` form per workflow-9's 2026-04-19 change log. Trace-chain slot discipline follows 2026-04-18 decision: intra-repo chain wins the `prev`/`next` slots; cross-repo sibling trace id captured in breadcrumb body. The `// ext:` marker family is expanded for bot-side use: `// ext: External:<BankName>Portal` (bank web UI) and `// ext: kokarat/mobiz-payment-gateway` (mobiz-owned territory); both are intentional and do not queue W4. Driven by brew-ops observation that 17 of 18 existing `#cross-repo-sync` learnings were written by the mobiz side alone, producing a one-way link that left bot-side queries blind to mobiz flows — the reciprocal breadcrumb + self-test discipline closes that gap by construction.
