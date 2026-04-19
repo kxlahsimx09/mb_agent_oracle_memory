@@ -177,25 +177,55 @@ File `arra_learn` tagged `#cross-repo-sync + #flow-track` naming both traces + t
 
 ### Step 3 — Build the file → flow map (5 min)
 
+**The stable anchor is the backtick-wrapped `` `<path>[:<line>[-<range>]]@<shorthash>` `` token** inside a flow doc's `## Implementation pointers` section. W8 authors optionally annotate steps with ``​`// impl: <description>`​`` comments, but the `// impl:` annotation is not the extraction anchor — it is free-form prose, appears on some lines and not others (sub-points and shared annotations are common), and has been observed on both sides of the pointer (before and after, with or without the `·` separator). Anchoring extraction on `// impl:` will miss real pointers. Anchor on the pointer token itself.
+
 ```bash
-# Extract every // impl: pointer from every flow doc.
-grep -rEn '// impl:\s*([^@[:space:]]+)@([a-f0-9]{7,12})' docs/flows/*.md \
-  | awk -F: -v OFS='|' '{
-      match($0, /\/\/ impl:\s*[^@[:space:]]+@[a-f0-9]+/)
-      # emit one line per (flow_path, line_in_doc, target_path, target_line_or_none, target_short)
-      # format left as an exercise — use your language of choice
-    }'
+# Canonical pointer extractor — scoped to § Implementation pointers only.
+# Output: one line per pointer token, pipe-delimited: flow_doc|path_with_optional_line|shorthash
+for flow in docs/flows/*.md; do
+  awk '
+    /^## Implementation pointers/ { in_section = 1; next }
+    /^## /                         { in_section = 0 }
+    in_section                     { print }
+  ' "$flow" \
+  | grep -oE '`[^@`]+@[a-f0-9]{7,12}`' \
+  | sed -E 's/^`//; s/`$//' \
+  | awk -F '@' -v flow="$flow" -v OFS='|' '{print flow, $1, $2}'
+done
 ```
 
-Or equivalent via `rg` / a small script. The output is a map:
+This scans only the `## Implementation pointers` section (stopping at the next `## ` heading), so inline `@<hash>` citations in §Purpose / §Actors / §Preconditions prose are excluded — those are anchored references but not W9 verification targets. The extractor is portable BSD-awk + GNU-grep + sed; no gawk-only features.
+
+Each output line parses as `(flow_doc, path_with_optional_line, shorthash)`. Derive `target_file` by stripping `:<line>[-<range>]`:
+
+```bash
+# Given: "routes/bot.go:50@76326c0" → target_file="routes/bot.go", target_line="50", target_short="76326c0"
+# Use the derived target_file for the commit-range intersection; keep target_line for Step 4 A-vs-B.
+```
+
+The output is a map:
 
 ```
-target_file → [ (flow_doc, flow_step_n, target_line, target_short), ... ]
+target_file → [ (flow_doc, target_path_with_line, target_short), ... ]
 ```
 
 Intersect this map with the list of files touched in the commit range (`git log ${flows_baseline}..HEAD --name-only | sort -u`). The intersection is the **affected pointer set** — the only things W9 needs to verify this pass.
 
-If the intersection is empty: record that in the retro, bump `.baseline` in Step 6, emit one `#flow-track` learning with `#no-drift-found` tag, skip Steps 4–5.
+**Regex self-test (mandatory before trusting an empty intersection).** If the extractor returns zero pointer rows on a portfolio where `docs/flows/*.md` is non-empty, the regex has regressed (or authoring drifted to a new format). Do **not** conclude "no drift" — emit a `#workflow-bug + #w9-extractor-regression` learning instead and halt the pass for human review.
+
+```bash
+pointer_count=$(for flow in docs/flows/*.md; do
+  awk '/^## Implementation pointers/{f=1;next} /^## /{f=0} f' "$flow" \
+    | grep -oE '`[^@`]+@[a-f0-9]{7,12}`'
+done | wc -l | tr -d ' ')
+flow_count=$(ls docs/flows/*.md 2>/dev/null | wc -l | tr -d ' ')
+if [ "$flow_count" -gt 0 ] && [ "$pointer_count" = "0" ]; then
+  echo "FAIL: 0 pointers extracted across $flow_count flow docs — regex regression"
+  exit 1
+fi
+```
+
+If the intersection is empty (pointer count > 0 but no touched file maps to any pointer's target): record that in the retro, bump `.baseline` in Step 6, emit one `#flow-track` learning with `#no-drift-found` tag, skip Steps 4–5.
 
 ### Step 4 — Per-pointer triage (5–15 min per pointer)
 
@@ -436,3 +466,4 @@ PR body always lists the affected flows (or "none — range out of flow territor
   - **Class D vs uncovered surface** — D applies **only** when the new actor-crossing sits inside territory an existing flow already covers. A brand-new endpoint/service/code path with no flow coverage is **not** D; file `#w8-handoff + #uncovered-surface + flow:<proposed-slug>` learning and hand off to W8 authoring. Step 4 table + §Rules + DoD all updated; live run correctly inferred this but spec was ambiguous.
   - **Step 8 commit-message template** split by class-count: full per-class bullet list for multi-class passes; collapsed single-line form for single-class passes; one-liner for zero-drift passes. Padding `A: 0` next to `B: 1` buries the signal in `git log`.
   - **Fast-fix thresholds unchanged** — retro noted sample size of 2 flows is insufficient to stress-test ≤5-flow / ≤50%-step thresholds. Revisit when the portfolio reaches ~10 flows.
+- 2026-04-19 — **Step 3 extractor fix (P1, brew-ops audit).** The prior regex `// impl:\s*([^@[:space:]]+)@([a-f0-9]{7,12})` anchored on the `// impl:` annotation being a *prefix* of the pointer. Observed reality across all 6 flow docs in the portfolio: the pointer is backtick-wrapped `` `<path>[:<line>]@<shorthash>` `` and the `// impl:` annotation, when present, appears **after** it as a separately backtick-wrapped `` `// impl: <description>` `` comment (with a `·` separator). On the real portfolio the old regex returned **0 hits across 6 docs**; the new anchor-on-pointer regex returns **79 hits**. The two successful W9 passes in the retros (23.19 and 14.37) did not use the literal spec regex — they inferred the intersection from a human read of `## Implementation pointers`. The extractor has been rewritten to anchor on the pointer token, scope to the `## Implementation pointers` section only (excludes prose citations in §Purpose / §Actors / §Preconditions which use the same `@<hash>` syntax as anchored citations but are not verification targets), and includes a mandatory regex self-test that halts the pass on a non-empty portfolio that extracts zero pointers — so a future authoring-format drift surfaces as a `#workflow-bug` halt instead of a silent false "no-drift" cron result. P2 items (tag convention `flow:<slug>` vs bare `<slug>`; missing cron infrastructure; W8 Step 5 example format drifted from real docs) are documented in the brew-ops audit learning `2026-04-19_pattern-w9-step3-extractor-regex-fix` for follow-up — not fixed in this pass.
