@@ -1,0 +1,622 @@
+# Workflow 8 — Flow Map (bank-bot side, behavior-level spec with sequence diagram)
+
+> Reference document for the `technical-writer` instance operating inside `github.com/kokarat/bank-bot`.
+> Read this file before running the workflow. Do not skim.
+
+W8 sits at a different layer than W1/W2. Those are **code → doc** (code is truth, doc is a claim about code). W8 is **intent → code** (intent is the claim, code is the verification target). The direction of citation flips, and so does the discipline.
+
+W8 on the bank-bot side carries one extra obligation beyond W8 on the pg-writer side: **every bot-owned flow spans two repos by nature** (the bot exists *because* something on mobiz-payment-gateway invokes it or consumes it), so every bank-bot W8 pass is a cross-repo pass. The `#cross-repo-sync` discipline is not optional — it is what turns a pair of single-repo docs into a searchable ecosystem.
+
+Output of a successful W8 pass: a markdown file in `docs/flows/<slug>.md` containing a mermaid sequence diagram plus prose, every numbered sequence step carrying an `// impl:` pointer (or `// ext: kokarat/mobiz-payment-gateway` or `[UNIMPLEMENTED]`/`[DRIFT]` with a paired learning), a W8 trace in Oracle, a reciprocal `#cross-repo-sync` breadcrumb learning that names the mobiz counterpart, a ratification thread for reverse-engineered flows, a validated post-pass self-test proving the two-way link survives `arra_search`, and `docs/flows/.baseline` seeded on the first pass.
+
+---
+
+## When to run this workflow
+
+Run when **any one** of:
+
+- A human explicitly asks to document a bot-side flow ("document the SCB approver flow", "เขียน flow OTP ให้หน่อย").
+- A mobiz-side W8 has landed a `#cross-repo-sync + bank-bot` breadcrumb learning naming an expected counterpart slug — that's the senior side saying "your turn." Find these via `arra_search query="cross-repo-sync bank-bot flow:<slug>" type=learning`.
+- A W1 or W2 pass on this repo surfaced a bot-owned code path that isn't covered by any existing `flows/*.md` AND crosses an actor boundary (bank portal, mobiz API, admin UI). Internal helpers don't qualify.
+- Monthly audit reveals a bot-facing endpoint (inbound HTTP from mobiz) or a scheduled bot scraper with no flow doc.
+
+Do **not** run:
+
+- To document an internal helper (belongs in `current-system.md`, not a flow).
+- To describe a target-system flow.
+- To edit an existing `flows/*.md` purely from code changes when authoritative claims exist — open an `arra_thread` against the ADR/claim first.
+- When the claim source for a **new** flow is only a PR body with no ADR, no human thread answer, and no mobiz-side breadcrumb — first seek a stronger claim (see §Claim strength hierarchy).
+
+---
+
+## Preconditions
+
+- [ ] `git status --porcelain` empty.
+- [ ] `docs/.baseline` exists and is parsable (W1 must have run on bank-bot).
+- [ ] If `docs/flows/.baseline` exists, it is parsable (informational — tells you when the whole flow portfolio was last verified by W9). If absent, this W8 pass will create it in Step 9a.
+- [ ] Oracle reachable (thread authoring + cross-repo-sync discipline require it).
+- [ ] At least **40 min** if reverse-engineering, **20 min** if transcribing from a ratified ADR/thread.
+- [ ] You can name the flow in one sentence. If you cannot, the scope is too broad — split first.
+- [ ] **Cross-repo check ran:** `arra_search query="cross-repo-sync <slug>" type=learning` executed and the result read. If a mobiz-side breadcrumb exists for this slug, it is pinned — this W8 pass must align with the step numbering and actor list the mobiz side declared.
+
+---
+
+## Inputs you will read
+
+1. The named flow (slug + short description). When a mobiz-side breadcrumb exists, reuse the same slug verbatim — **never invent a parallel name**.
+2. The claim source(s), in order of strength (§Claim strength hierarchy below).
+3. `docs/current-system.md` (bank-bot side) sections covering the scraper / adapter / scheduler code path the flow traverses.
+4. The Node.js source files implementing each sequence step — typically under `banks/<bank>/`, `services/`, `scheduler/`, `helpers/`, and the Playwright entry points — for `// impl:` pointers and behavior verification.
+5. Existing docs under `docs/flows/` (for house-style consistency).
+6. Oracle:
+   - `arra_search query="<slug> cross-repo-sync" type=learning` — any mobiz-side breadcrumb anchoring this flow.
+   - `arra_search query="technical-writer flow <slug> repo:bank-bot" type=all` — prior bot-side work on this slug.
+   - `arra_trace_list query="<slug>" queryType="pattern" limit=5` — prior W8 trace heads (bot or mobiz).
+7. Any open threads with `flow:<slug>` in the title. These include cross-repo ratification threads filed from the mobiz side that expect bot-side engagement.
+
+---
+
+## Outputs you will produce
+
+Required:
+
+- `docs/flows/<slug>.md` with all nine sections listed in §Document structure.
+- Every numbered step in the mermaid diagram has either an `// impl: <path>@<short>` pointer, **or** `// ext: kokarat/mobiz-payment-gateway` (mobiz-owned territory), **or** `// ext: <bank-portal>` (external bank UI with no code on our side), **or** is explicitly marked `[UNIMPLEMENTED]` / `[DRIFT]` with a paired `arra_learn`.
+- At least one `arra_learn` tagged `technical-writer + repo:bank-bot + current + flow + <slug>` with trace id.
+- **Reciprocal `#cross-repo-sync` breadcrumb** (Step 9b) — mandatory for every bot-side W8 pass, naming the mobiz counterpart slug and the mobiz W8 trace id (if one exists) or `#cross-repo-sync-bot-first` (if the bot pass is authoring this flow before mobiz).
+- W8 root trace opened at Step 2b with `queryType="pattern"`; per-step children for every `[UNIMPLEMENTED]` / `[DRIFT]`.
+- A one-line cross-link added to the relevant `current-system.md` section: `**Flow:** [<slug>](flows/<slug>.md)`.
+- **Self-test passed** (Step 9c) — the three cross-repo queries defined below all return the new learning(s), and `arra_trace_get <bot-W8-trace>` returns `foundLearnings` that include the reciprocal breadcrumb.
+
+Conditionally produced:
+
+- `arra_thread`(s) for each open question (Step 7). For a **reverse-engineered** flow, one ratification thread is mandatory.
+- `arra_supersede` against prior flow learning(s) when this pass revises an existing bot-side flow.
+
+Never produced in this workflow:
+
+- Code changes. Even typo fixes in comments. W8 is doc-only.
+- A new ADR. If the flow requires an architectural decision, pause W8 and escalate to the decision-writer / human.
+- Duplicate content that should live in `current-system.md`. Flow docs describe *what the system does for the actor*; `current-system.md` describes *how the code is shaped*.
+- **A solo bot-side W8 without the reciprocal breadcrumb.** A bot-side flow doc that doesn't tell the ecosystem "this connects to mobiz at X, Y, Z" is a half-closed loop — worse than no doc because it accumulates the same orphan-coverage problem that made this workflow necessary.
+
+---
+
+## Document structure (the nine sections of `flows/<slug>.md`)
+
+1. **Header** — slug, one-sentence purpose, claim-strength label (see §Claim strength hierarchy), ratification marker if reverse-engineered, **cross-repo counterpart** line pointing at `mobiz-payment-gateway/docs/flows/<slug>.md` (if one exists) or `[CROSS-REPO: mobiz counterpart not yet authored]`.
+2. **Purpose** — one paragraph at the intent level. "Bank bot authorises a withdrawal transfer via the bank's web portal" **not** "Playwright clicks the approve button."
+3. **Actors** — bulleted list. Each actor has a role tag: `User`, `System:<name>`, `External:<name>`. The same names must appear verbatim in the sequence diagram. For bot flows, `System:BankBot` is almost always one of the actors; `External:<BankPortal>` (SCB, KTB, KBank, etc.) typically another; `System:Gateway` (mobiz) a third when the flow crosses.
+4. **Preconditions** — one line each. What must be true before the flow starts (bank session state, cron cadence, queued work, BOT_SECRET configured).
+5. **Sequence** — mermaid `sequenceDiagram`. Numbered messages (`1.`, `2.`, …). No more than ~10 actor-crossing messages.
+6. **Success criteria** — observable and testable. "Transfer appears in bank statement within 30 s, `ts_withdrawal_queue.status = success`" **not** "bot is happy".
+7. **Error paths** — bulleted list. Each item names the error class + originating step + observable consequence. Bot-specific classes: `SESSION_EXPIRED`, `CAPTCHA_REQUIRED`, `POPUP_BLOCKED`, `OTP_TIMEOUT`, `AMBIGUOUS_APPROVAL_ROW`.
+8. **Postconditions** — state after successful completion. One line each. Typically covers both the bot-side (scraper cursor advanced, session cookie refreshed) and the implications for mobiz state (statements pushed, queue item resolved).
+9. **Implementation pointers** — per numbered step, a line linking the step to `path:line@commit-short`. `// ext:` / `[UNIMPLEMENTED]` / `[DRIFT]` markers go here too, each with a paired learning link where applicable.
+
+Headers at fixed casing. No decorative prose between sections. The document is both human- and agent-parseable.
+
+---
+
+## Cross-repo-sync discipline (the reason this workflow exists as a separate doc)
+
+The pattern the ecosystem needs is: **any query for `<slug>` or `cross-repo-sync` surfaces both sides of the pair, from either direction.** One-way links (only mobiz breadcrumbs exist) are common today and leave bot-writer's own sessions blind to the senior side's context. Every bot-side W8 must close the loop.
+
+### What "the loop is closed" means concretely
+
+After a W8 pass for slug `<S>` on the bank-bot side, these four queries must all return both the mobiz and the bot learnings (where applicable):
+
+| Query | Should return | Why |
+|---|---|---|
+| `arra_search query="flow:<S> cross-repo-sync" type=learning` | Both bot's reciprocal breadcrumb **and** mobiz's breadcrumb (if authored) | The tag `cross-repo-sync` is the shared bridge across projects. |
+| `arra_search query="<S> bank-bot"` from any project context | Bot's flow doc learning + bot's reciprocal breadcrumb + mobiz's breadcrumb | Concept-level search, not tag-level — tests that the slug + repo-names co-occur enough to rank. |
+| `arra_search query="<S> mobiz"` or `"<S> mobiz-payment-gateway"` from any project context | Mobiz's flow learning + mobiz's breadcrumb + bot's reciprocal breadcrumb (which names `mobiz-payment-gateway` in its body) | Symmetric to the above; makes sure a bot-side query for "how does mobiz handle this" finds the senior side. |
+| `arra_trace_get <bot-W8-trace>` | `foundLearnings` field includes the reciprocal breadcrumb's learning id | Trace-side anchor — surfaces via `arra_trace_chain` even if search ranking is cold. |
+
+If any of these returns empty or misses the expected side, **the loop is not closed** — the pass has failed DoD and must be redone before merge. See Step 9c for the exact bash.
+
+### Tag convention (three repo scopes on both sides)
+
+Every reciprocal breadcrumb carries a dual-repo tag set so searches from either project surface it:
+
+```yaml
+tags:
+  - technical-writer
+  - repo:bank-bot              # primary (where the file lives)
+  - repo:cross                 # signals "belongs to both"
+  - repo:mobiz-payment-gateway # for symmetric reverse queries
+  - current
+  - flow
+  - flow:<slug>                # prefixed convention — canonical since 2026-04-19
+  - cross-repo-sync
+  - mobiz-payment-gateway      # concept name of the counterpart
+```
+
+The mobiz side's breadcrumb carries the mirror:
+
+```yaml
+tags:
+  - technical-writer
+  - repo:mobiz-payment-gateway
+  - repo:cross
+  - repo:bank-bot
+  - current
+  - flow
+  - flow:<slug>
+  - cross-repo-sync
+  - bank-bot
+```
+
+The `flow:<slug>` prefix (not bare `<slug>`) is canonical — see `workflow-9-track-flows.md` change log 2026-04-19 for why standardisation on the prefix form matters.
+
+### Trace-chain discipline (linked-list constraint)
+
+`arra_trace` rows have a single `prev_trace_id` and a single `next_trace_id` — the chain is a linked list, not a DAG. A bot W8 pass on a slug that has both (a) a prior bot W8 pass on the same slug (revision) and (b) a mobiz W8 counterpart cannot call `arra_trace_link` for both siblings in the trace table itself. The convention established 2026-04-18 is:
+
+- **Intra-repo chain wins the trace `prev`/`next` slots** — bot's prior W8 for this slug chains to the new one via `arra_trace_link`.
+- **Cross-repo sibling goes in the reciprocal breadcrumb's body** — the breadcrumb learning names the mobiz W8 trace id and the bot W8 trace id explicitly, so `arra_trace_chain(bot-W8)` traverses within bank-bot history and the cross-repo jump is made by reading the breadcrumb's text.
+
+This is a limitation of the current schema, not a recommendation. A future trace-schema migration may add a `siblings` field; until then, capture the cross-repo link in prose inside the breadcrumb.
+
+---
+
+## Steps
+
+### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
+
+Before opening any W8 work, run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2) to completion.
+
+- **Pass 1 (primary)** — `grep` for both `[AWAITING_THREAD:<id>]` and `[RATIFICATION_PENDING:<id>]` across bank-bot territory, with extra attention to `docs/flows/`. For `answered` threads, run the 4-step resolution block. **Ratification threads** have an additional test in Step 2 of the resolution block: a neutral "looks good" answer is *insufficient* — require explicit engagement with the spec. Downgrade and follow up if the answer is vague.
+- **Pass 2 (safety-net)** — `arra_threads(status="answered", limit=50)`; any bank-bot-territory id not seen in Pass 1 = leaked anchor → file `#workflow-bug + #thread-orphan`.
+
+**Gate:** Step 1 does not start until Pass 1 = 0 answered markers and Pass 2 = 0 unfiled orphans.
+
+### Step 1 — Grounding (3 min)
+
+```
+arra_search query="technical-writer flow <slug> repo:bank-bot" type=all limit=10
+arra_search query="cross-repo-sync <slug>" type=learning limit=10
+arra_trace_list query="<slug>" queryType="pattern" limit=5
+arra_threads status="answered" limit=10
+```
+
+If a prior bot W8 trace for this slug exists, this pass is a **revision** — use the existing `flows/<slug>.md` file and chain traces in Step 2b. Do not start a new file when one already exists; supersede its learnings, don't delete them (P-001).
+
+If a mobiz-side `#cross-repo-sync` breadcrumb exists for this slug, **read it in full** — it tells you the step numbering the mobiz side expects, the contract points the bot must honour, and (often) the mobiz W8 trace id you will reference in Step 9b.
+
+### Step 2 — Identify the flow + claim source (5 min)
+
+Write down (scratchpad or retro), before opening any diagram tool:
+
+- **Slug** — kebab-case, stable identifier. If a mobiz-side breadcrumb exists, reuse its slug verbatim.
+- **Scope** — always `cross-repo` for bot-side W8. Every bot flow touches mobiz or a bank portal or both by definition.
+- **Actors** — the list you'll repeat verbatim in the diagram.
+- **Is the flow new or existing?**
+  - **New** — no code yet implements it (greenfield PR).
+  - **Existing** — code already runs it; you're documenting after the fact.
+- **Claim source(s)**, ranked from strongest available:
+  1. Committed ADR (bank-bot or mobiz)
+  2. Human answer thread id
+  3. **Mobiz-side `#cross-repo-sync` breadcrumb** — treat as equivalent to tier-2 for step numbering and contract points, but does not substitute for ratification of the bot-owned steps.
+  4. PR / issue body + link
+  5. Reverse-engineered from code
+
+**Branching on source strength:**
+
+- If the flow is **new** and the strongest claim is tier 4 or lower → **halt the W8 pass.** Open `arra_thread` citing the PR, ask the human to ratify the intent before the spec is authored.
+- If the flow is **new** and you have a tier-1 or tier-2 claim → proceed as **transcription**. No ratification marker needed.
+- If the flow is **existing** → proceed as **reverse-engineering allowed, but with a ratification thread**. Doc carries `[RATIFICATION_PENDING:<threadId>]` in its header (Step 7 opens the thread).
+
+### Step 2b — Open the W8 root trace
+
+```
+arra_trace(
+  query="flow-map — <slug>",
+  queryType="pattern",
+  scope="cross-project",
+  project="github.com/kokarat/bank-bot",
+  foundFiles=[
+    { path: "docs/flows/<slug>.md", confidence: "high", matchReason: "authoring target", type: "other" },
+    ...for each claim-source file (ADR, mobiz breadcrumb if on disk, bot code entry points)
+  ]
+)
+# store returned trace_id as W8_TRACE_BOT
+```
+
+If revising an existing bot flow:
+
+```
+arra_trace_list(query="<slug>", queryType="pattern", project="github.com/kokarat/bank-bot", limit=3)
+arra_trace_link(prevTraceId="<prior bot W8 trace for this slug>", nextTraceId=W8_TRACE_BOT)
+```
+
+If a mobiz W8 trace for this slug exists (read its id from the mobiz breadcrumb body), **do not** attempt to `arra_trace_link` into it from this pass — the trace schema is a linked list (see §Cross-repo-sync discipline). Note the mobiz trace id in scratchpad; it goes into Step 9b's breadcrumb body.
+
+### Step 2c — Cross-repo-sync lookup (new, 2 min)
+
+This step is dedicated to the cross-repo mechanism; failing to run it means the reciprocal breadcrumb in Step 9b flies blind.
+
+```bash
+# Find the mobiz counterpart breadcrumb — run BOTH tag-form queries because the
+# tag convention changed 2026-04-19. Older mobiz breadcrumbs tag bare <slug>;
+# newer ones tag flow:<slug>. Both are live in the vault and won't be retagged
+# retroactively (P-001). Union the results.
+arra_search query="cross-repo-sync flow:<slug>" type=learning limit=5
+arra_search query="cross-repo-sync <slug> bank-bot" type=learning limit=5
+
+# Find the mobiz W8 trace id for this slug (if any)
+arra_trace_list query="flow-map — <slug>" queryType="pattern" project="github.com/kokarat/mobiz-payment-gateway" limit=3
+```
+
+Record in scratchpad:
+
+- `MOBIZ_BREADCRUMB_ID` — the learning id of the mobiz-side breadcrumb, or `null` if this is a bot-first flow
+- `MOBIZ_W8_TRACE` — the mobiz W8 trace id for this slug, or `null` if mobiz hasn't authored the counterpart yet
+- `EXPECTED_SLUG` — the slug the mobiz breadcrumb named; must match the slug this pass uses
+
+If `MOBIZ_BREADCRUMB_ID` is non-null and `EXPECTED_SLUG` differs from the slug you intended to use, **pause and reconcile**. Open an `arra_thread` asking the human to pick the canonical slug, or accept the mobiz side's slug and rename.
+
+### Step 3 — Author Purpose / Actors / Preconditions (5 min)
+
+Same discipline as pg-writer's W8 Step 3, adapted for bot flows:
+
+- **Purpose** — one paragraph at intent level. Remove the paragraph mentally; could a reader still guess what the flow is from the rest? If yes, the purpose was empty; rewrite.
+- **Actors** — bulleted list with role tags. For a typical bot flow:
+  - `System:BankBot` — this repo. Owns Playwright sessions, scrapers, schedulers.
+  - `External:<BankName>Portal` — bank web UI (SCB, KTB, KBank, etc.). No code.
+  - `System:Gateway` — mobiz. Owns the HTTP endpoint the bot calls (`/api/v1/bot/*`).
+  - `User:Admin` — only if the flow involves a human operator approving in the bank UI (dual-control banks).
+- **Preconditions** — one-liner per condition. Flag `[UNVERIFIED]` on any precondition you cannot ground in code or ADR.
+
+### Step 4 — Draw the sequence diagram (10–15 min)
+
+Same rules as pg-writer's W8 Step 4. Example skeleton for a bot-initiated flow:
+
+````markdown
+```mermaid
+sequenceDiagram
+    participant Scheduler as System:BankBot (Scheduler)
+    participant Scraper as System:BankBot (Scraper)
+    participant Bank as External:SCBPortal
+    participant Gateway as System:Gateway
+
+    Scheduler->>Scraper: 1. tick (every 30s)
+    Scraper->>Bank: 2. navigate + login (cached session)
+    Bank-->>Scraper: 3. statement HTML
+    Scraper->>Scraper: 4. parse rows (Cheerio)
+    Scraper->>Gateway: 5. POST /api/v1/bot/bank-statements
+    Gateway-->>Scraper: 6. 200 OK (dedup + matcher kick)
+```
+````
+
+Numbering must align with the mobiz-side breadcrumb's step references whenever the breadcrumb cites specific step numbers.
+
+### Step 5 — Implementation pointers + per-step child traces (10 min)
+
+For each numbered step, add a pointer under `## Implementation pointers`:
+
+```markdown
+## Implementation pointers
+- **Step 1** — `scheduler/statement.js:42@abc1234` · `// impl: cron entry for SCB scraper tick`
+- **Step 2** — `banks/scb/login.js:28@abc1234` · `// impl: Playwright session restore + navigate`
+- **Step 3** — `// ext: External:SCBPortal` — bank-owned HTML, no code on our side.
+- **Step 4** — `banks/scb/statement.js:89@abc1234` · `// impl: Cheerio row parser`
+- **Step 5** — `services/backendClient.js:55@abc1234` · `// impl: POST /api/v1/bot/bank-statements (BotBackendAPI)`
+- **Step 6** — `// ext: kokarat/mobiz-payment-gateway` — handler owned by mobiz at `controllers/BotConfigController.go:494-640`; see cross-repo breadcrumb learning `<mobiz breadcrumb id>`.
+```
+
+**Marker disambiguation for non-impl steps** (bot-side flavoured):
+
+| Marker | Meaning | Is it drift? | Action |
+|---|---|---|---|
+| `// ext: External:<Bank>Portal` | Step happens in a bank's web UI, no code on any side we own | **No** | No learning needed beyond the pointer. Bank UI drift is handled by scraper maintenance, not flow drift. |
+| `// ext: kokarat/mobiz-payment-gateway` | Step is owned by mobiz side; bot either calls into or is called by mobiz | **No** | File (or confirm) a `#cross-repo-sync` breadcrumb at Step 9b. Do not queue W4. |
+| `[UNIMPLEMENTED]` | Flow claims a step exists in code, but no repo we own has the implementation. Genuine gap. | **Yes** | File `#drift + #unimplemented + flow:<slug>` learning + child trace; queue W4. |
+| `[DRIFT]` | Code for the step exists but its behavior diverges from the flow claim. | **Yes** | File `#drift + #flow-divergence + flow:<slug>` learning + child trace; queue W4. |
+
+For `[UNIMPLEMENTED]` and `[DRIFT]` steps, open a W8 child trace under `W8_TRACE_BOT` with `parentTraceId=W8_TRACE_BOT`, `queryType="pattern"`, `foundLearnings` pointing at the paired learning.
+
+### Step 6 — Success criteria + error paths + postconditions (5 min)
+
+Same discipline as pg-writer's W8. Bot-specific error classes worth calling out by name in the §Error paths bullets:
+
+- `SESSION_EXPIRED` — bank cookie no longer valid; scraper must re-login before retry.
+- `CAPTCHA_REQUIRED` — bank presented a captcha the bot cannot solve; escalate to admin.
+- `POPUP_BLOCKED` — unexpected MuiDialog / success-popup blocks the flow; see retro `2026-04-18/efa9077` and learning `#gotcha-scb-success-popup-is-itself-a-muidialog` for precedent.
+- `OTP_TIMEOUT` — admin didn't enter OTP within the bank's window; dual-control flows must state the timeout.
+- `AMBIGUOUS_APPROVAL_ROW` — multiple matching rows for a single pending item; approver must halt rather than guess.
+
+### Step 7 — Open questions → `arra_thread` (varies)
+
+For each ambiguity still standing after Steps 3–6:
+
+```
+arra_thread(
+  title="flow:<slug> — <short question, ≤ 50 chars>",
+  message="Context: authoring flows/<slug>.md (bot side)
+           Ambiguity: <cite + reading A vs reading B>
+           Need: <what decides between them>
+           Current placeholder: <what I wrote tentatively>"
+)
+```
+
+Record each `threadId` inline in the doc as `[AWAITING_THREAD:<id>]` next to the affected claim.
+
+**Ratification thread (reverse-engineered flows only).** Open one additional thread:
+
+```
+arra_thread(
+  title="flow:<slug> — ratify reverse-engineered bot-side spec",
+  message="I reverse-engineered docs/flows/<slug>.md at <commit-short> from bot code alone.
+           <If MOBIZ_BREADCRUMB_ID is set: 'The mobiz side has already filed a cross-repo
+           breadcrumb at <MOBIZ_BREADCRUMB_ID> naming this slug and the contract points
+           the bot must honour; this doc aligns with that contract.'>
+           <If MOBIZ_BREADCRUMB_ID is null: 'The mobiz side has not yet authored a
+           counterpart; this bot-first pass carries extra uncertainty.'>
+           Please confirm the intent matches, or flag divergence. See [link to doc] + [link to W8_TRACE_BOT]."
+)
+```
+
+Put the returned id in the doc header: `[RATIFICATION_PENDING:<threadId>]`.
+
+**Ratification decay** follows the pg-writer W8 rule (7d bump, 30d `#missing-ratification`, 60d lapse → `[RATIFICATION_LAPSED:<id>]`). See pg-writer's `workflow-8-flow-map.md` §Step 7 for the age-based ladder.
+
+### Step 8 — Cross-link to `current-system.md` (bank-bot)
+
+Find the `docs/current-system.md` section covering the code path the flow crosses most heavily. Add:
+
+```markdown
+> **Flow:** [`<slug>`](flows/<slug>.md)
+```
+
+No additional marker. The path carries the meaning.
+
+### Step 9 — Learn + finalize (5 min)
+
+Primary flow learning:
+
+```
+arra_learn(
+  pattern="<one paragraph summarizing the flow's intent — not its implementation>",
+  concepts=["technical-writer", "repo:bank-bot", "current", "flow", "flow:<slug>"],
+  source="docs/flows/<slug>.md@<new-short>",
+  project="github.com/kokarat/bank-bot"
+)
+```
+
+If this is a revision and a prior `arra_learn` for the same slug exists:
+
+```
+arra_supersede(
+  oldId="<prior bot flow learning id>",
+  newId="<new bot flow learning id>",
+  reason="W8 revision pass <date>: <1-line what changed>"
+)
+```
+
+### Step 9a — Initialize `docs/flows/.baseline` (1 min, first-run only)
+
+Same as pg-writer's Step 9a — seeds the W9 (once bank-bot gets W9) commit-range anchor on the very first W8 pass in the repo.
+
+```bash
+# Only if docs/flows/.baseline does NOT already exist:
+CURRENT_HEAD=$(git rev-parse HEAD)
+ISO_DATE=$(TZ=Asia/Bangkok date -Iseconds)
+cat > docs/flows/.baseline <<EOF
+flows-baseline: ${CURRENT_HEAD}
+last-verified-at: ${ISO_DATE}
+EOF
+```
+
+If the file already exists, leave it alone.
+
+### Step 9b — Reciprocal `#cross-repo-sync` breadcrumb (mandatory, 3 min)
+
+This is the step that closes the loop. Without it, a bot-side W8 produces a half-silent flow that mobiz queries will not discover.
+
+```
+arra_learn(
+  pattern="flow cross-repo breadcrumb (bot side) — <slug> crosses from bank-bot into
+    mobiz-payment-gateway territory at step(s) <N, M>. <1-2 sentence summary of what
+    the bot owns vs what mobiz owns, mirroring the step numbering in docs/flows/<slug>.md>.
+    <If MOBIZ_BREADCRUMB_ID is set: 'Counterpart: <mobiz-breadcrumb-id> names the
+    reciprocal view from the mobiz side.' Else: 'No mobiz-side counterpart authored yet
+    — when mobiz W8 runs on this slug, it should file the symmetric breadcrumb and
+    arra_trace_link(prev=<MOBIZ_W8_TRACE or null>, next=<W8_TRACE_BOT>).'>
+    Contract points the bot exposes to mobiz: <list HTTP endpoints with path@commit>.
+    Contract points mobiz exposes to the bot: <list endpoints / response shapes / auth headers>.
+    Bot W8 trace: <W8_TRACE_BOT>. Mobiz W8 trace: <MOBIZ_W8_TRACE or 'not yet authored'>.",
+  concepts=["technical-writer", "repo:bank-bot", "repo:cross", "repo:mobiz-payment-gateway",
+            "current", "flow", "flow:<slug>", "cross-repo-sync", "mobiz-payment-gateway"],
+  source="docs/flows/<slug>.md@<new-short> + <mobiz-side code paths referenced>",
+  project="github.com/kokarat/bank-bot"
+)
+# store returned learning id as BOT_BREADCRUMB_ID
+```
+
+Add to the W8 trace's `foundLearnings`:
+
+```
+# After the learning lands, attach it to the trace so arra_trace_get surfaces it.
+# This is how the self-test in Step 9c finds the breadcrumb via the trace.
+# If your Oracle build does not expose an update-trace-foundLearnings tool directly,
+# the breadcrumb is already discoverable by search — the trace attachment is belt-and-suspenders.
+```
+
+If `MOBIZ_BREADCRUMB_ID` is set, file a second, very small `arra_learn` pointing each side at the other — a tombstone/index learning that makes reverse-search reliable even when the primary breadcrumbs are buried in longer content:
+
+```
+arra_learn(
+  pattern="Cross-repo index — flow:<slug>. Bot side: <BOT_BREADCRUMB_ID>, W8 trace <W8_TRACE_BOT>.
+    Mobiz side: <MOBIZ_BREADCRUMB_ID>, W8 trace <MOBIZ_W8_TRACE>. This is a minimal
+    index learning so arra_search on slug + 'cross-repo-index' surfaces both sides
+    directly.",
+  concepts=["technical-writer", "repo:cross", "flow:<slug>", "cross-repo-sync", "cross-repo-index"],
+  source="index entry, not a primary doc",
+  project="github.com/kokarat/bank-bot"
+)
+```
+
+### Step 9c — Self-test the cross-repo link (mandatory, 2 min)
+
+Run all three queries. Expected results are defined in §Cross-repo-sync discipline; verify each.
+
+```bash
+SLUG="<slug>"
+
+echo "=== Test 1: tag-level bridge ==="
+# Expected: BOT_BREADCRUMB_ID in results. If MOBIZ_BREADCRUMB_ID is set, it too.
+arra_search query="flow:${SLUG} cross-repo-sync" type=learning limit=5
+
+echo "=== Test 2: bot-context forward lookup ==="
+# Expected: Bot's flow learning + BOT_BREADCRUMB_ID. If mobiz counterpart exists, its learnings too.
+arra_search query="${SLUG} bank-bot" limit=5
+
+echo "=== Test 3: symmetric reverse lookup ==="
+# Expected: BOT_BREADCRUMB_ID (because its body names mobiz-payment-gateway).
+# If MOBIZ_BREADCRUMB_ID is set, it ranks high.
+arra_search query="${SLUG} mobiz-payment-gateway" limit=5
+
+echo "=== Test 4: trace-side anchor ==="
+# Expected: foundLearnings includes BOT_BREADCRUMB_ID.
+arra_trace_get traceId="${W8_TRACE_BOT}"
+```
+
+**Acceptance (tolerance-based — FTS ranking is noisy on compound queries):**
+
+- Test 1 returns `BOT_BREADCRUMB_ID` within the top **10**. If older mobiz breadcrumbs exist for this slug under the bare-slug tag form, they may outrank or interleave — that is expected and fine as long as both sides appear somewhere in the 10.
+- Test 2 returns `BOT_BREADCRUMB_ID` within the top 5. The `<slug> bank-bot` query is high-signal because the slug is usually distinctive; if this one fails, the slug is too generic (pick a more specific name at Step 2) or the breadcrumb's body doesn't name the slug in its first sentence.
+- Test 3 returns `BOT_BREADCRUMB_ID` within the top 10. Reverse-direction queries rank lower because `mobiz-payment-gateway` is a common concept across mobiz learnings; if the target isn't in top 10, the breadcrumb's body is under-naming the counterpart — rewrite to mention `mobiz-payment-gateway` in the first two sentences of the pattern body, not just as a tag.
+- Test 4 returns the trace with `BOT_BREADCRUMB_ID` in `foundLearnings` (or, if the Oracle build cannot update trace attachments post-hoc, verify the breadcrumb is findable by search alone and note the limitation in the retro).
+
+**Known retrieval limitation (2026-04-19).** Hybrid search ranking on compound queries like `flow:<slug> cross-repo-sync` sometimes buries the exact match under unrelated breadcrumbs that share one of the terms. This is an Oracle retrieval-quality issue, not a mechanism failure — the learning is in the index and findable; it just doesn't always rank first. The belt-and-suspenders is the index learning (Step 9b tombstone) which names the ids of both sides directly; a `arra_read <index-learning-id>` always returns the pair. Test 1/2/3 acceptance uses "top 10" rather than "top 5" to tolerate this ranking noise without failing real passes.
+
+**If any test fails**, do not proceed to Step 10. Root-cause — usually one of:
+
+- Tags on the breadcrumb missed `flow:<slug>` prefix (must use the prefixed form, see `workflow-9-track-flows.md` change log 2026-04-19).
+- Breadcrumb body never named `mobiz-payment-gateway` as plain text (the concept tag alone doesn't always rank high enough in Test 3).
+- `arra_learn` returned `embedding: "failed"` — re-run after the MCP process has warmed up, or restart the MCP pane and retry. See thread #9 + `learning_2026-04-19_arralearn-first-call-race-fixed-in-commit-4eb6cf1`.
+
+### Step 10 — Commit + PR (3 min)
+
+Branch: `docs/flow-<slug>`.
+
+```
+docs(flow): <slug> — <one-line purpose> (bot side)
+
+- New docs/flows/<slug>.md (<N> sequence steps, <M> impl pointers,
+  <K> // ext: markers, <U> unimplemented, <D> drift)
+- Cross-link from current-system.md §<n>
+- <Z> open questions threaded
+- [RATIFICATION_PENDING:<tid>] set (reverse-engineered) OR not-applicable (transcribed)
+- Reciprocal cross-repo-sync breadcrumb filed: <BOT_BREADCRUMB_ID>
+- Cross-repo self-test (Step 9c) passed: <brief summary>
+
+No code behavior changes.
+```
+
+PR body must include:
+
+- Link to the flow doc.
+- Link to each open thread.
+- Ratification-thread link (if reverse-engineered).
+- **Cross-repo breadcrumb learning id + Test 1–4 pass evidence (one-line each).**
+- The literal line: **"I will not merge this PR. Awaiting human review + thread resolution."**
+
+### Step 11 — Retrospective (5 min)
+
+`rrr` to `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_flow-<slug>.md`.
+
+**AI Diary** must cover:
+
+- Claim-source tier actually used.
+- Transcription vs reverse-engineering mode.
+- Count of `[UNIMPLEMENTED]` / `[DRIFT]` steps.
+- Open thread ids including the ratification thread.
+- `MOBIZ_BREADCRUMB_ID` state (existed-and-read, existed-and-diverged, or bot-first).
+- **Self-test outcome (Step 9c) — which tests passed, any retries, any tag fixes.**
+
+**Honest Feedback** must answer:
+
+- Was the flow boundary clear, or did scope creep across into a neighboring flow?
+- Are numbered sequence steps actually usable for impl pointers, or did a step aggregate too much?
+- Did the mobiz-side breadcrumb (if any) accurately predict the bot-side step boundaries? If not, which step numbers differ and why?
+- Did the self-test surface any tag-ranking issues? What would make future passes faster?
+
+---
+
+## Claim strength hierarchy
+
+From strongest to weakest. A flow doc carries the weakest strength of any claim it contains — one reverse-engineered step drags the whole doc down to S4.
+
+| Tier | Source | How to cite in the doc |
+|---|---|---|
+| S1 | Committed ADR (bank-bot or mobiz) | `// per-adr: <repo>/docs/adr/NNNN-title.md` |
+| S2 | Human-ratified thread answer | `// verified-via-thread: <id>` |
+| S2.5 | Mobiz-side `#cross-repo-sync` breadcrumb for this slug | `// per-cross-repo-breadcrumb: <mobiz learning id>` — valid for step numbering + contract points; does **not** satisfy ratification for bot-owned steps |
+| S3 | PR body / issue body (intent claim) | `// per-claim: PR#<n>` |
+| S4 | Reverse-engineered from code | `// reverse-engineered: <path>@<short>` — doc carries `[RATIFICATION_PENDING:<thread>]` header |
+
+---
+
+## Definition of Done
+
+- [ ] `docs/flows/<slug>.md` exists with all nine sections.
+- [ ] Mermaid diagram parses (GitHub PR preview shows the rendered diagram).
+- [ ] Every numbered diagram step has an `// impl:` pointer, or `// ext: kokarat/mobiz-payment-gateway`, or `// ext: External:<Bank>Portal`, or `[UNIMPLEMENTED]` / `[DRIFT]` marker with a paired learning link.
+- [ ] Claim-strength label in the doc header matches the weakest individual claim.
+- [ ] At least one `arra_learn` tagged `technical-writer + repo:bank-bot + flow + flow:<slug>` landed (Step 9).
+- [ ] **Reciprocal `#cross-repo-sync` breadcrumb filed** (Step 9b) with dual-repo tag set + `mobiz-payment-gateway` named as plain text in the body.
+- [ ] **Cross-repo index learning** filed (Step 9b tombstone) if `MOBIZ_BREADCRUMB_ID` is set.
+- [ ] W8 root trace opened (Step 2b) with `queryType="pattern"`; every `[UNIMPLEMENTED]` / `[DRIFT]` has a child trace with `parentTraceId=W8_TRACE_BOT`.
+- [ ] If revising, `arra_trace_link(prev, next)` called on the **intra-repo** prior bot W8 trace; cross-repo sibling id captured in breadcrumb body only.
+- [ ] `current-system.md` (bank-bot) has a one-line cross-link to the new flow doc.
+- [ ] Reverse-engineered flows: ratification thread opened, `[RATIFICATION_PENDING:<id>]` in doc header.
+- [ ] Branch pushed, PR opened; **not merged**.
+- [ ] Retrospective written (AI Diary + Honest Feedback, mandatory). `MOBIZ_BREADCRUMB_ID` state + Step 9c outcome documented.
+- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] Step 0 ran to completion: Pass 1 + Pass 2 both zero.
+- [ ] **Anchor discipline**: every `arra_thread(...)` call inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md`. Orphan thread count = 0.
+- [ ] **Self-test passed (Step 9c)** — all four tests return the expected learnings/trace attachments, or the failure + rewrite cycle is documented in the retro.
+- [ ] `docs/flows/.baseline` exists. On the very first W8 pass in this repo, Step 9a created it.
+
+---
+
+## Common pitfalls
+
+- **Describing code, not intent.** A flow doc that reads like a paraphrased `current-system.md` is worthless. Test: delete every `// impl:` line; does the prose still describe *what the system does for the actor*?
+- **Diagram granularity wrong.** 3 steps = useless; 20 = drowning in internals. Aim 6–10 actor-crossing messages.
+- **Silent reverse-engineering.** Building a flow from code alone and not flagging `[RATIFICATION_PENDING]` is worse than no doc.
+- **Missing the reciprocal breadcrumb.** This is the most common bot-side W8 failure. A bot flow doc without a `#cross-repo-sync` breadcrumb is a half-closed loop. DoD blocks the PR.
+- **Wrong tag form on the breadcrumb.** Use `flow:<slug>` (prefix form), not bare `<slug>`. The workflow-9 change log 2026-04-19 documents why — mixed forms make arra_search filtering unreliable.
+- **Breadcrumb body under-names mobiz.** Test 3 in Step 9c relies on `mobiz-payment-gateway` appearing as plain text in the body, not just as a tag. If Test 3 misses the breadcrumb, rewrite the body to name the counterpart repo in the first sentence.
+- **Skipping Step 9c.** The self-test is the only verification that the mechanism *works for this flow*. Skipping it means shipping a flow that may be invisible to reverse queries and not knowing until a sibling session hits the gap.
+- **Mislabelling `// ext: kokarat/mobiz-payment-gateway` as `[UNIMPLEMENTED]`.** Mobiz-owned steps are *intentional territory boundary*, not drift. Do not queue them for W4.
+- **Inventing a ratification.** Do not close `[RATIFICATION_PENDING]` yourself after the thread answers if the human's answer raised new questions — open a follow-up thread first.
+
+---
+
+## Escalation
+
+- **Security-sensitive flow** (auth, OTP, credential storage, BOT_SECRET handshake, approval-state bypass) → open the ratification thread **and** CC `security_auditor`. `[RATIFICATION_PENDING]` does not drop until both sign off.
+- **Financial flow** (withdrawals, approvals that move money) → CC `code_reviewer` on the PR.
+- **Bank-portal behaviour change** (bank updates its UI, our scraper breaks) → this is ops-level, not W8-level; file an `arra_inbox` to ops and continue the W8 pass describing the pre-change state.
+- **Mobiz-side breadcrumb contradicts bot code** → file `#drift + flow:<slug>` against whichever side diverges from the ratified claim; let W4 resolve. Do not silently accommodate either side.
+- **Oracle unreachable for threading** → degrade to inline `[UNVERIFIED]` + `arra_inbox` handoff + retro note. Do not proceed past Step 7 without threads on a reverse-engineered flow.
+- **Step 9c self-test fails after two rewrite attempts** → halt and file `#workflow-bug + #cross-repo-sync-sniff` naming the slug + which tests failed. Ask brew-ops for a mechanism review before merging a flow whose reverse-query doesn't surface.
+
+---
+
+## Relationship to other workflows
+
+- **Before W8**: W1 on bank-bot must have produced a valid `current-system.md` and a current `.baseline`. Without them, `// impl:` pointers have nothing to resolve against.
+- **W8 output feeds W4**: every `[UNIMPLEMENTED]` or `[DRIFT]` step is a W4 queue item. Do not attempt to reconcile in W8.
+- **W2 may spawn W8**: if a commit range reveals a bot-owned flow not yet documented, file a `#flow` learning queueing W8 as a follow-up.
+- **W8 cooperates with mobiz-side W8**: each pair of slug-matched W8 passes produces two breadcrumbs, one index learning, and a verifiable reverse-query loop. When mobiz files first, bot's Step 2c picks up the breadcrumb; when bot files first, the bot breadcrumb's body says so and mobiz's future W8 closes the loop.
+- **Future W9 on bank-bot** (not yet implemented): will consume `docs/flows/.baseline` seeded by Step 9a and scan commit ranges for bot-side pointer drift, mirroring pg-writer's W9 track-flows.
+
+---
+
+## Change log for this workflow file
+
+- 2026-04-19 — Initial version. Scoped to `technical-writer` instance in `github.com/kokarat/bank-bot`. Mermaid-only diagrams. Hybrid authorship: strict transcription required for **new** flows (tier S1/S2/S2.5 claim mandatory); reverse-engineering allowed for **existing** flows but gated by `[RATIFICATION_PENDING]`. `queryType="pattern"`, `scope="cross-project"` default for the W8 root trace (every bot flow is cross-repo by nature). Adds two steps absent from pg-writer's W8: **Step 9b reciprocal breadcrumb** (mandatory, plus cross-repo index learning when mobiz counterpart exists) and **Step 9c self-test** (four queries that prove the cross-repo link is discoverable via both search and trace, blocking DoD on failure). Tag convention uses the prefixed `flow:<slug>` form per workflow-9's 2026-04-19 change log. Trace-chain slot discipline follows 2026-04-18 decision: intra-repo chain wins the `prev`/`next` slots; cross-repo sibling trace id captured in breadcrumb body. The `// ext:` marker family is expanded for bot-side use: `// ext: External:<BankName>Portal` (bank web UI) and `// ext: kokarat/mobiz-payment-gateway` (mobiz-owned territory); both are intentional and do not queue W4. Driven by brew-ops observation that 17 of 18 existing `#cross-repo-sync` learnings were written by the mobiz side alone, producing a one-way link that left bot-side queries blind to mobiz flows — the reciprocal breadcrumb + self-test discipline closes that gap by construction.

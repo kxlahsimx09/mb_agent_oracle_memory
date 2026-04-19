@@ -90,6 +90,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 5. Write an ADR | A reversible-with-effort decision is made | `references/workflow-5-adr.md` |
 | 6. Produce a runbook | An incident taught us something, or a new ops surface appears | `references/workflow-6-runbook.md` |
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
+| 8. Flow-map (bot side, cross-repo by nature) | Human asks to document a bot flow, or a mobiz-side `#cross-repo-sync` breadcrumb names an expected bot counterpart | `references/workflow-8-flow-map.md` |
 | — Thread resolution (sub-procedure) | Step 0 of every main workflow; also on-demand when the wake-up ritual shows answered threads | `references/workflow-thread-resolve.md` |
 
 ## Vault path (the #1 trap)

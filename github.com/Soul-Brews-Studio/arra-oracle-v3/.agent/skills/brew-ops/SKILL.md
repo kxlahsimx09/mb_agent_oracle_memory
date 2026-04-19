@@ -77,6 +77,7 @@ I am the ecosystem operations expert; I do not own peer-role workflows, but I ke
 | `bank-bot` | technical-writer | **1** baseline-current | (bot-flavored) full baseline of `bank-bot/docs/current-system.md`. |
 | `bank-bot` | technical-writer | **2** track-commit | (bot-flavored) surgical doc update driven by commit range. |
 | `bank-bot` | technical-writer | **4** reconcile-drift | (bot-flavored) drift reconciliation with A/B/C outcomes. |
+| `bank-bot` | technical-writer | **8** flow-map | (bot side, cross-repo by nature) reverse-engineer bot-owned user flows into `docs/flows/<slug>.md`. Adds two steps absent from pg-writer's W8: §9b reciprocal `#cross-repo-sync` breadcrumb (mandatory, plus index learning when mobiz counterpart exists) and §9c four-query self-test proving the cross-repo link is discoverable via search + trace. Created 2026-04-19 to close the one-way-breadcrumb asymmetry (17 of 18 existing `#cross-repo-sync` learnings were mobiz-only). |
 
 ### Shared cross-role references
 
