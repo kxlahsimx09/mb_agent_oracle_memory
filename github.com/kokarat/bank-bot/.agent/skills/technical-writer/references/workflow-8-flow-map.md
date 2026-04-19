@@ -98,6 +98,78 @@ Headers at fixed casing. No decorative prose between sections. The document is b
 
 ---
 
+## Design notes (read before drafting)
+
+Two observations from empirical W8 passes that shape how to scope + structure a bot-side flow doc. Neither is a hard rule — both are mental models that keep a first-time author from fighting the format.
+
+### Decomposition asymmetry (1:N step expansion at cross-repo boundaries)
+
+Observed empirically on the first bot W8 pass (`scb-dual-control-withdrawal`, 2026-04-19): mobiz-side `withdrawal-queue-dispatch-and-claim.md` step 5 was a single `// ext: kokarat/bank-bot` line — one marker saying "bot does the transfer, not our concern." The bot-side W8 on the same conceptual operation unpacked step 5 into **8 of 11 total bot steps** (steps 2, 3, 5, 6, 8, 8a, 9b, 9c). A 1:8 expansion ratio for a single boundary step.
+
+This is not a bug in either doc. It is the natural shape of an abstraction boundary:
+
+- **Caller / consumer side** (mobiz here) sees a black box at the boundary. The contract is what matters — payload in, payload out, failure modes. Internal mechanics are explicitly not its territory.
+- **Implementor / provider side** (bot here) *is* the internals. What the caller sees as one marker is the whole subject of the implementor's flow doc.
+
+Same pattern as any client-library relationship: caller writes `db.Query(sql)` — one line — while the engine behind `Query` is thousands of lines of parse + plan + optimize + execute. Both are "the same operation" at one level of abstraction and radically different at another. The asymmetry is information-theoretic, not a writing flaw.
+
+**What this means for scoping at Step 2:**
+
+- Expect **1:N expansion** at every `// ext:` boundary on the sibling's flow, where N is typically 5-10 on the consumer/implementor side. If the sibling has 7 numbered steps and one of them is `// ext: kokarat/bank-bot`, anticipate that your bot-side flow will end up with roughly 11-14 steps, not 7.
+- Step count mismatch between siblings is not evidence the boundary is wrong. It is evidence the abstraction is doing its job.
+- The sibling's breadcrumb tells you *where* the boundary is (which of its steps is yours). It does not tell you *how many* of your steps will cover that boundary — that is determined by your territory's mechanics.
+
+**Anti-patterns to avoid:**
+
+- ❌ Compress the bot doc to match the mobiz step count. Loses real content that downstream readers need.
+- ❌ Inflate the mobiz doc to match bot granularity. Exposes internals that should stay opaque from the caller's perspective.
+- ❌ Panic during Step 2 when the bot flow feels "too big relative to what mobiz said." The W8 spec's 6-10 actor-crossing cap is on the bot flow's own story, not on the ratio between sibling docs.
+
+**Useful framing for the reciprocal breadcrumb in Step 9b:** when writing the breadcrumb body, explicitly name the expansion: *"mobiz's step 5 unpacks into our steps 2, 3, 5, 6, 8, 8a, 9b, 9c."* Future readers jumping between the two docs benefit from seeing the mapping stated, not inferred.
+
+### Loop representation — linear vs `loop`-wrapped (decision framework)
+
+Bank-bot code is mostly long-lived process: schedulers tick, queue consumers claim-process-release, scrapers poll. A flow doc can represent this in two ways, and the choice has structural consequences the spec didn't previously call out.
+
+**Linear (document one iteration, loop nature in prose):** numbered steps 1..N flow top-to-bottom; loop cadence / backoff / init phase live in `§Preconditions`, `§Postconditions`, and arrow-label prose. This is what the 2026-04-19 `scb-dual-control-withdrawal` first draft did.
+
+**Loop-wrapped:** same numbered steps, but wrapped in explicit Mermaid `loop <condition>` and `alt/else` blocks. Init phase sits before the outer `loop`; per-iteration work sits inside it; periodic / post-batch actions sit after it.
+
+Rendered side-by-side on the same underlying flow (see the retro for `scb-dual-control-withdrawal` and the PR #73 preview), the two produce visually very different docs:
+
+| Aspect | Linear | Loop-wrapped |
+|---|---|---|
+| Height (rendered) | Compact (~300px for 11 steps) | ~2× taller due to nested blocks |
+| Loop visibility | Invisible — reads as one-shot | Explicit container, reader sees "bot runs this forever" |
+| Init vs iteration | Mixed in sequence | Separated (init before `loop`, iteration inside) |
+| Empty-queue / backoff branch | Not shown in diagram | `alt Queue empty / else` visible |
+| Nested polling (e.g. OTP every 10s) | Prose in one step's arrow label | Nested `loop` block, unfolded visually |
+| Mapping to `// impl:` pointers | Easier — flat 1:1 numbering | Hierarchical — sub-steps (8a, 8b) need sub-pointers |
+| 10-crossing cap pressure | Higher — compressed steps aggregate sub-actions | Lower — loop blocks don't consume crossing slots, sub-actions can unfold |
+| Reader mental model | "one request path" | "process lifetime" |
+
+**When to use loop-wrapping:**
+
+- Cadence, backoff, or empty-case behavior is correctness-relevant (queue-claim loops, approver polling, session-refresh schedulers).
+- A step contains a nested polling / retry loop of its own (OTP polling at step 8a is the canonical case).
+- Init and steady-state phases differ enough that mixing them flattens a real structural distinction (long-lived Playwright session + per-batch work).
+- A step keeps ballooning to aggregate 5+ sub-actions in one crossing to avoid the 10-crossing cap — `loop` block can relieve this because containers don't consume crossing slots.
+
+**When to stay linear:**
+
+- The flow is a single request-response path with no long-running component (most mobiz-side flows).
+- The loop is external scheduling with no per-iteration state affecting the contract (a cron that fires a one-shot handler every N seconds; describe the handler, not the cron).
+- Flow stays under 7 crossings and the reader is not confused by the "one pass" framing.
+- Downstream readers will consume the flow doc alongside `current-system.md`, which already documents the loop machinery — the flow can then safely focus on one iteration.
+
+**Example (both variants of the same flow):**
+
+The 2026-04-19 first bot W8 flow doc (`scb-dual-control-withdrawal.md@466d56e`) shipped the linear variant. The retro noted step 3 ("per item — addRecipient + setAmount + ...") and step 8 ("Approve + wait OTP + poll + fill + Confirm") both "aggregate too much" because of cap pressure — a signal that loop-wrapping would have served better for that flow. A rendered comparison lives in `learning_2026-04-19_loop-vs-linear-mermaid-comparison-scb-dual` (if authored) or the PR #73 discussion thread. Use it as teaching reference when uncertain.
+
+This is a framework, not a mandate. Neither form is universally right. Pick per flow; write the choice + reasoning into the retro's Honest Feedback so the next pass has precedent.
+
+---
+
 ## Cross-repo-sync discipline (the reason this workflow exists as a separate doc)
 
 The pattern the ecosystem needs is: **any query for `<slug>` or `cross-repo-sync` surfaces both sides of the pair, from either direction.** One-way links (only mobiz breadcrumbs exist) are common today and leave bot-writer's own sessions blind to the senior side's context. Every bot-side W8 must close the loop.
@@ -556,7 +628,7 @@ arra_trace_get traceId="${W8_TRACE_BOT}"
 **Acceptance (tolerance-based — FTS ranking is noisy on compound queries):**
 
 - Test 1 returns `BOT_BREADCRUMB_ID` within the top **10**. If older mobiz breadcrumbs exist for this slug under the bare-slug tag form, they may outrank or interleave — that is expected and fine as long as both sides appear somewhere in the 10.
-- Test 2 returns `BOT_BREADCRUMB_ID` within the top 5. The `<slug> bank-bot` query is high-signal because the slug is usually distinctive; if this one fails, the slug is too generic (pick a more specific name at Step 2) or the breadcrumb's body doesn't name the slug in its first sentence.
+- Test 2 returns `BOT_BREADCRUMB_ID` within the top **10**. (Raised from top-5 after the first W8 pass on 2026-04-19 showed that common-word slugs — `bank-bot`, `withdrawal`, `scb` — are over-represented across the vault and ranking-noise dilutes even distinctive slugs. If the target is not in top 10 by the time this test runs, the slug is too generic, or the breadcrumb body doesn't name the slug in its first sentence.)
 - Test 3 returns `BOT_BREADCRUMB_ID` within the top 10. Reverse-direction queries rank lower because `mobiz-payment-gateway` is a common concept across mobiz learnings; if the target isn't in top 10, the breadcrumb's body is under-naming the counterpart — rewrite to mention `mobiz-payment-gateway` in the first two sentences of the pattern body, not just as a tag.
 - Test 4 returns the trace with `BOT_BREADCRUMB_ID` in `foundLearnings` (or, if the Oracle build cannot update trace attachments post-hoc, verify the breadcrumb is findable by search alone and note the limitation in the retro).
 
@@ -567,6 +639,25 @@ arra_trace_get traceId="${W8_TRACE_BOT}"
 - Tags on the breadcrumb missed `flow:<slug>` prefix (must use the prefixed form, see `workflow-9-track-flows.md` change log 2026-04-19).
 - Breadcrumb body never named `mobiz-payment-gateway` as plain text (the concept tag alone doesn't always rank high enough in Test 3).
 - `arra_learn` returned `embedding: "failed"` — re-run after the MCP process has warmed up, or restart the MCP pane and retry. See thread #9 + `learning_2026-04-19_arralearn-first-call-race-fixed-in-commit-4eb6cf1`.
+
+### Step 9d — Vault audit gate (mandatory pre-commit, 1 min)
+
+Run `verify.sh` before Step 10 — not after, not as part of the retro. A pattern observed on 2026-04-19 (first bot W8 pass): the writer's `arra_learn` project field carried a stray `<` character (`github.com/kokarat/bank-bot<`), which produced a corrupt `source_file` path (`github.com/kokarat/bank-bot</ψ/memory/learnings/...`). `verify.sh` would have caught this, but it only ran as a DoD checkbox after the fact, at which point the corrupt row was already indexed. This mirrors the 2026-04-18 mobiz-side incident (`kokarat/bank-bot<` literal `<` in directory name) — the same `<` typo recurs across roles because nothing gates on it between the write and the commit.
+
+Make it a hard gate:
+
+```bash
+VAULT=$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)
+bash $VAULT/scripts/verify.sh | tee /tmp/w8-verify.txt
+grep -E "(✅ no double-wrap|✅ every indexed doc has a title:)" /tmp/w8-verify.txt || {
+  echo "FAIL: verify.sh frontmatter checks did not pass — fix before Step 10"
+  exit 1
+}
+```
+
+**Acceptance:** both `✅ no double-wrap` and `✅ every indexed doc has a title:` lines appear. If either is missing, the recent writes (this pass's learnings or the flow doc frontmatter) have issues — fix at the source (re-run `arra_learn` with corrected inputs, then `arra_supersede` the corrupt row per P-001) before committing the PR branch.
+
+Per the recurring-typo-in-project-field pattern learning (`learning_2026-04-19_recurring-project-field-typo-path-corruption` or whatever successor id), this gate is the single highest-leverage defense against path corruption entering the vault. Running it after commit means a corrupt row is already indexed and must be superseded rather than prevented.
 
 ### Step 10 — Commit + PR (3 min)
 
@@ -650,6 +741,7 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 - [ ] Step 0 ran to completion: Pass 1 + Pass 2 both zero.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md`. Orphan thread count = 0.
 - [ ] **Self-test passed (Step 9c)** — all four tests return the expected learnings/trace attachments, or the failure + rewrite cycle is documented in the retro.
+- [ ] **Vault audit hard gate passed (Step 9d)** — `verify.sh` ran **before** the Step 10 commit (not after, not as a retro-time afterthought); both `✅ no double-wrap` and `✅ every indexed doc has a title:` present. Any failure fixed at the source + old row superseded per P-001 before PR opens.
 - [ ] `docs/flows/.baseline` exists. On the very first W8 pass in this repo, Step 9a created it.
 
 ---
@@ -691,6 +783,7 @@ From strongest to weakest. A flow doc carries the weakest strength of any claim 
 
 ## Change log for this workflow file
 
+- 2026-04-19 (GMT+7, brew-ops post-first-pass calibration) — **Four adjustments from the first real W8 pass on `scb-dual-control-withdrawal` (retro 09.55_flow-scb-dual-control-withdrawal.md) + empirical rendered comparison.** (1) Step 9c Test 2 target raised from top-5 to top-10 straight — no more "tolerance escape" clause — because common-word slugs (`bank-bot`, `withdrawal`, `scb`) are over-represented across the vault and the first pass hit rank 8-9 legitimately, not as a failure. (2) Added **Step 9d** as a mandatory pre-commit gate running `verify.sh` and checking for both `✅ no double-wrap` and `✅ every indexed doc has a title:` — motivated by the 2026-04-19 writer-caught `github.com/kokarat/bank-bot<` typo in an `arra_learn` project field that produced a corrupt `source_file` path and mirrored the 2026-04-18 mobiz-side `kokarat/bank-bot<` incident. verify.sh was in DoD but as a post-hoc checkbox; the gate moves it pre-Step-10 so path corruption is prevented, not superseded after the fact. (3) Added **§Design notes** subsection (before §Cross-repo-sync discipline): *Decomposition asymmetry* — empirical 1:N expansion ratio at cross-repo boundaries, documented with the `scb-dual-control-withdrawal` case (1 mobiz `// ext:` line expanded to 8 of 11 bot steps), plus anti-patterns for writers who expect sibling-doc symmetry. (4) Added §Design notes *Loop representation — linear vs loop-wrapped* decision framework, with empirical rendered comparison of the `scb-dual-control-withdrawal` first draft (linear, 305px) vs a loop-wrapped variant (637px with explicit `loop Per batch` + `alt queue empty` + nested `loop 8a. OTP polling`) — finding that loop-wrapping relieves the 10-crossing cap because containers don't consume crossing slots. Framework is permissive (P-003): neither form is mandated; writer picks per flow and writes the choice into the retro. Cross-repo sibling edits to follow in pg-writer's workflow-8-flow-map.md (§Design notes applies universally; Step 9d verify.sh gate is bot-specific numbering but the discipline applies both sides).
 - 2026-04-19 (GMT+7, even later) — **Second iteration on the pre-push mechanical grep + added `mmdc` render stage.** After the first port of §Mermaid safety rules above, `scb-dual-control-withdrawal` PR #73 shipped a second revision cycle because the grep pattern I wrote on the first pass missed Rule 6 (`;` as sentence-joiner) — the diagram still had `;` in step 10 that rendered on mermaid-cli locally but the user caught it on GitHub preview. Root cause: my grep enumerated rules 3/4/5 addenda but forgot rule 6, and did not scope to the mermaid fence (so running it on the whole file would have been high-false-positive anyway). Fix: (a) replaced the single grep with a **two-stage check** — Stage 1 extracts only the fenced mermaid block with `awk '/^```mermaid$/,/^```$/'` then greps for every pattern that maps to a rule (added `;`, `<br`, `<b>`, `<i>`, and a second-colon-in-tail pattern `->>\\w+:.*:`); Stage 2 actually runs `mmdc` via `bunx --bun @mermaid-js/mermaid-cli` on the extracted block so we get a local render-test, not just a lexical scan. Neither replaces the visual GitHub PR preview; together the three catch everything that has actually broken so far. §Definition of Done line rewritten to require both stages, not just one grep.
 - 2026-04-19 (GMT+7, later) — **Ported §Mermaid safety rules from pg-writer's workflow-8-flow-map.md Step 4 to close a sibling-drift gap** (per AGENTS.md §5a: "When SKILL.md is updated in one instance's `.agent/skills/technical-writer/SKILL.md`, the change is mirrored to the sibling instances in the same session. Drift between copies is its own `#drift` learning."). The 7 pg-writer rules were added verbatim plus an 8th bot-side rule about non-ASCII script (Thai/Chinese) inside mermaid labels — lifted from the `scb-dual-control-withdrawal` first-pass incident where `reason "ยกเลิกคำขอ"` in a `Note over` crashed the diagram. Bot-side addenda added to rules 3, 4, 5 covering the specific breaks hit on that pass (unicode arrows `→` from em-dash auto-substitution, comma-in-braces payload `{success,failed,waiting-to-review}`, colon-prefixed path params `:id`/`:acc`/`:ref`). Step 4 example skeleton was rewritten to use hyphen-form participant aliases and ASCII-only labels (the old example used `System:BankBot (Scheduler)` — exactly the colon-with-parens anti-pattern the rules now forbid). Step 10 PR body template + §Definition of Done line both updated to require a visual GitHub PR preview confirmation, and DoD added a pre-push mechanical grep `grep -nE "→|—|…|:[a-z]+[/}]|\{[a-zA-Z0-9_-]+,[a-zA-Z0-9_,-]+\}" docs/flows/<slug>.md` that catches the exact classes of bugs that broke `scb-dual-control-withdrawal` in one shell call. Filed `#drift + #workflow-bug + repo:cross + technical-writer-drift` learning documenting the sibling gap itself so a future pass knows to diff the two workflow-8 copies on session start.
 - 2026-04-19 — Initial version. Scoped to `technical-writer` instance in `github.com/kokarat/bank-bot`. Mermaid-only diagrams. Hybrid authorship: strict transcription required for **new** flows (tier S1/S2/S2.5 claim mandatory); reverse-engineering allowed for **existing** flows but gated by `[RATIFICATION_PENDING]`. `queryType="pattern"`, `scope="cross-project"` default for the W8 root trace (every bot flow is cross-repo by nature). Adds two steps absent from pg-writer's W8: **Step 9b reciprocal breadcrumb** (mandatory, plus cross-repo index learning when mobiz counterpart exists) and **Step 9c self-test** (four queries that prove the cross-repo link is discoverable via both search and trace, blocking DoD on failure). Tag convention uses the prefixed `flow:<slug>` form per workflow-9's 2026-04-19 change log. Trace-chain slot discipline follows 2026-04-18 decision: intra-repo chain wins the `prev`/`next` slots; cross-repo sibling trace id captured in breadcrumb body. The `// ext:` marker family is expanded for bot-side use: `// ext: External:<BankName>Portal` (bank web UI) and `// ext: kokarat/mobiz-payment-gateway` (mobiz-owned territory); both are intentional and do not queue W4. Driven by brew-ops observation that 17 of 18 existing `#cross-repo-sync` learnings were written by the mobiz side alone, producing a one-way link that left bot-side queries blind to mobiz flows — the reciprocal breadcrumb + self-test discipline closes that gap by construction.

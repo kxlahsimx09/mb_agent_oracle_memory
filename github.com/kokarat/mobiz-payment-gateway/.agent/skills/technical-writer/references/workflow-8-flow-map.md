@@ -90,6 +90,55 @@ Headers at fixed casing. No decorative prose between sections. The document is b
 
 ---
 
+## Design notes (read before drafting)
+
+Two observations from empirical W8 passes (surfaced from the first bank-bot-side W8 on 2026-04-19, ported here as a sibling-drift fix per AGENTS.md §5a). Neither is a hard rule — both are mental models that keep a first-time author from fighting the format.
+
+### Decomposition asymmetry (1:N step expansion at cross-repo boundaries)
+
+When a mobiz flow marks step N with `// ext: kokarat/bank-bot`, that single marker will typically expand into **5-10 numbered steps** on the bot-side flow doc for the same operation. Observed empirically: `withdrawal-queue-dispatch-and-claim.md` step 5 (`// ext: kokarat/bank-bot`) unpacked into 8 of 11 steps on the bot's `scb-dual-control-withdrawal.md` flow (steps 2, 3, 5, 6, 8, 8a, 9b, 9c). A 1:8 expansion for a single boundary step.
+
+This is not a bug in either doc. It is the natural shape of an abstraction boundary:
+
+- **Caller / consumer side** (mobiz, for any `// ext: kokarat/bank-bot` marker) sees a black box at the boundary. The contract matters — payload in, payload out, failure modes. Internal mechanics are explicitly not our territory.
+- **Implementor / provider side** (bot, for any marker pointing to it) *is* the internals. What we see as one marker is the whole subject of its flow doc.
+
+Same pattern as any client-library relationship: `db.Query(sql)` — one line for the caller — while the engine behind `Query` is thousands of lines. Both are "the same operation" at one level of abstraction and radically different at another. The asymmetry is information-theoretic, not a writing flaw.
+
+**What this means for mobiz-side W8 authors:**
+
+- Do not feel compelled to match the bot-side flow's step count, or vice versa. A mobiz flow with 7 steps may legitimately have a bot sibling with 14 steps.
+- When a mobiz flow has `// ext: kokarat/bank-bot` at a step, the reciprocal bot-side flow (when authored) will be one visible step in our doc but may be the entire subject on theirs. Do not inline bot internals into the mobiz doc to "fill in the opaque step" — that breaks abstraction and inflates maintenance.
+- When reading a bot-side flow doc that covers the sibling territory of one of our `// ext:` markers, anticipate its step count will be several multiples of ours at that boundary. Do not read the step-count mismatch as evidence that the boundary is wrong.
+
+### Loop representation — linear vs `loop`-wrapped (decision framework)
+
+Most mobiz-side flows are request-response: HTTP in → business logic → HTTP out. The natural diagram form is linear — numbered steps 1..N top to bottom, no explicit loop constructs. That is the default and what most mobiz W8 passes produce.
+
+But some mobiz flows cross into long-lived process territory: dispatchers / reconcilers / cron-tickers / async queue drainers (`scheduler/withdrawal_dispatcher.go`, the statement-matcher retry ticker, the maintenance-cancel scheduler). For those, a linear diagram can hide correctness-relevant behavior — cadence, backoff, empty-case, init vs steady-state.
+
+**When to stay linear (mobiz default):**
+
+- Flow is a single request-response path with no long-running component.
+- Loop is external scheduling with no per-iteration state (a cron that fires a one-shot handler every N seconds — describe the handler, not the cron).
+- Flow stays under ~7 crossings.
+- Downstream readers will consume the flow doc alongside `current-system.md` which already documents the loop machinery.
+
+**When to use Mermaid `loop` / `alt` wrapping:**
+
+- Cadence, backoff, or empty-case behavior is correctness-relevant (queue-drainers, reconcile schedulers).
+- A step contains a nested polling / retry loop of its own (dispatcher backoff, retry ticker).
+- Init and steady-state phases differ enough that mixing them flattens a real structural distinction.
+- A step keeps ballooning to aggregate 5+ sub-actions in one crossing to avoid the 10-crossing cap — `loop` block can relieve this because containers don't consume crossing slots.
+
+**Rendered comparison (2026-04-19, bot side, `scb-dual-control-withdrawal`):**
+
+The bot-side first draft of this flow shipped linear (305px tall). Retro flagged that step 3 (6 sub-actions in one crossing) and step 8 (6 sub-actions) "aggregate too much" due to cap pressure. An alternate loop-wrapped variant of the same flow was rendered (637px tall) — the same 11 logical steps but with explicit `loop Per batch (continuous, backoff when queue empty)`, `alt Queue has work / else 204 → sleep(backoff_ms)`, and a nested `loop 8a. OTP polling (every 10s, Phase 1 SMS then Phase 2 email, IMAP fallback)`. The loop-wrapped form doubled the height but made init-vs-iteration, empty-case, and nested polling visible rather than hidden in prose. It also relieved the 10-crossing cap pressure because the nested `loop` on step 8a does not count against the cap.
+
+Neither form is universally right. Pick per flow; write the choice + reasoning into the retro's Honest Feedback so the next pass has precedent.
+
+---
+
 ## Steps
 
 ### Step 0 — Resolve answered threads in territory (blocking, 3–10 min)
@@ -382,6 +431,23 @@ Semantic of the baseline: *"as of this commit, all flow docs' `// impl:` pointer
 
 **Do not bump on W8 revisions.** A revision refreshes *one* flow's pointers to HEAD while other flows may still be at older commits; the global `.baseline` would lie if it advanced. W9 is the only workflow that can honestly bump `.baseline` because W9 is the only workflow that verifies the whole portfolio against a commit range.
 
+### Step 9b — Vault audit gate (mandatory pre-commit, 1 min)
+
+Run `verify.sh` before Step 10 — not after, not as a retro-time afterthought. A pattern observed across both sibling instances on 2026-04-18 (`kokarat/bank-bot<` literal `<` in directory name) and 2026-04-19 (`github.com/kokarat/bank-bot<` in an `arra_learn` project field producing a corrupt `source_file` path): `<` typos enter the vault in `project` fields at `arra_learn` time, and nothing lexical between the write and the commit catches them. `verify.sh` would have caught both, but was previously only a DoD checkbox after the fact — by that point the corrupt row was already indexed.
+
+Make it a hard gate:
+
+```bash
+VAULT=$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)
+bash $VAULT/scripts/verify.sh | tee /tmp/w8-verify.txt
+grep -E "(✅ no double-wrap|✅ every indexed doc has a title:)" /tmp/w8-verify.txt || {
+  echo "FAIL: verify.sh frontmatter checks did not pass — fix before Step 10"
+  exit 1
+}
+```
+
+**Acceptance:** both `✅ no double-wrap` and `✅ every indexed doc has a title:` lines appear. If either is missing, the recent writes (this pass's learnings or the flow doc frontmatter) have issues — fix at the source (re-run `arra_learn` with corrected inputs, then `arra_supersede` the corrupt row per P-001) before committing the PR branch. Running verify.sh after commit means a corrupt row is already indexed and must be superseded rather than prevented.
+
 ### Step 10 — Commit + PR (3 min)
 
 Branch: `docs/flow-<slug>`.
@@ -476,7 +542,7 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
 - [ ] Branch pushed, PR opened; **not merged**.
 - [ ] Retrospective written (AI Diary + Honest Feedback, mandatory).
 - [ ] Retro is the state carrier for the next session; no separate handoff step. Open thread ids + ratification thread id are listed in the PR body and anchored in the flow doc via `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` so next W8/W9 Step 0 sweeps them on resolution.
-- [ ] Vault audit clean: `bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep -A 3 frontmatter` shows `✅ no double-wrap` + `✅ every indexed doc has a title:`.
+- [ ] **Vault audit hard gate passed (Step 9b)** — `verify.sh` ran **before** the Step 10 commit (not after, not as retro-time afterthought); both `✅ no double-wrap` and `✅ every indexed doc has a title:` present. Any failure fixed at the source + old row superseded per P-001 before PR opens.
 - [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep, including `[RATIFICATION_PENDING]`) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero unfiled orphans. Any ratification thread whose answer was judged insufficient stays open with a follow-up message — not closed prematurely.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass (both question threads and the mandatory ratification thread for reverse-engineered flows) inserted a paired `[AWAITING_THREAD:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into `docs/flows/<slug>.md` in the same PR. Orphan thread count = 0. Count check: `grep -cE '\[(AWAITING_THREAD|RATIFICATION_PENDING):' docs/flows/<slug>.md` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.
 - [ ] `docs/flows/.baseline` exists with the two-line format (`flows-baseline: <hash>` + `last-verified-at: <ISO date>`). On the very first W8 pass in this repo, Step 9a created it at current HEAD. On subsequent W8 passes, the file is unchanged — W9 is the sole writer of baseline bumps.
@@ -526,3 +592,4 @@ Header of the doc records the aggregate strength label: `Claim strength: S1 (all
   3. **Stacked-PR clause (Step 10).** Documents the pattern retro 21.05 used successfully: when a new flow's `§Related flows` links to a sibling flow whose PR is still in-flight, branch off the sibling branch and PR `--base=<sibling-branch>`, with a §Stacked on section in the PR body. Stacking depth capped at 2 — 3+ deep stacks accumulate review-cycle bottlenecks and require `arra_inbox` escalation to flatten.
   4. **Dropped `// impl-level` marker (Step 8).** Original cross-link marker proved ambiguous (the marker name suggests "link target is impl-level" when the intent was the opposite). Dropped in favour of the bare `**Flow:** [<slug>](flows/<slug>.md)` line — path + label carry the meaning cleanly. Legacy `// impl-level` occurrences in existing `current-system.md` retained per P-001.
 - 2026-04-19 — **Mermaid safety rules (Step 4)** added after `deposit-auto-match-from-statement` first-pass render-failed in PR #229. Root causes: `<br/>` inside `Note over` (unique to the failing doc; every other flow doc never uses `<br>`), plus colon-form participant aliases (`System:Gateway`) being fragile on mermaid's current GitHub-hosted renderer while the newer hyphen-form (`System-Gateway`) introduced in `withdrawal-queue-*` + `topup-approve-mdr-distribution` renders reliably. The fix is two-layer: (1) seven concrete rules (hyphen aliases, no HTML in Notes, ASCII-only messages, no `{...}`/`"..."` struct syntax in messages, no second `:` in free-text tail, no `;` joiner, short self-messages) plus a safe-template example lifted from `topup-approve-mdr-distribution.md`; (2) an explicit PR-template test-plan line requiring the author to visually confirm the GitHub preview before pushing the final commit — eyeballing the markdown source has produced this class of drift twice.
+- 2026-04-19 (GMT+7, brew-ops post-first-bot-W8 sibling sync) — **§Design notes section added + Step 9b (Vault audit hard gate) inserted.** Two changes ported from / parallel to the bank-bot sibling workflow-8-flow-map.md (per AGENTS.md §5a sibling-drift discipline). (1) New **§Design notes** subsection before §Steps, carrying two observations that the first bank-bot W8 pass (`scb-dual-control-withdrawal`, 2026-04-19) surfaced but were not specific to either side: (a) *Decomposition asymmetry* — a mobiz `// ext: kokarat/bank-bot` marker at one step typically unpacks into 5-10 numbered steps on the bot side (observed ratio: 1:8 for `withdrawal-queue-dispatch-and-claim` step 5 → 8 of 11 bot steps in `scb-dual-control-withdrawal`). This resets mobiz-side expectations: step-count mismatch between sibling flows is not a boundary error, it is the natural shape of an abstraction gap. Also tells mobiz-side authors not to inline bot internals to "fill in" opaque `// ext:` steps. (b) *Loop representation decision framework* — linear vs Mermaid `loop`-wrapped, with an empirical rendered comparison of the 2026-04-19 bot-side first draft. Most mobiz flows should stay linear (default). Some mobiz surfaces — dispatcher, reconciler, cron-driven schedulers — are long-lived process territory and benefit from `loop` / `alt` wrapping; the framework documents when to pick which. Neither form is mandated; choice gets documented in the retro. (2) New **Step 9b (Vault audit gate)** — `verify.sh` is now a mandatory pre-Step-10 hard gate, not a DoD checkbox. Motivated by two recurring `<` typo incidents in `project` fields (2026-04-18 `kokarat/bank-bot<` literal directory name; 2026-04-19 bot-side `github.com/kokarat/bank-bot<` in an `arra_learn` project field producing a corrupt `source_file` path). Both would have been caught by verify.sh at the right moment; both were instead caught post-hoc and required supersede cleanup under P-001. The gate fails the pass if either `✅ no double-wrap` or `✅ every indexed doc has a title:` is missing. DoD line was already present but too lenient — strengthened to cite Step 9b explicitly.
