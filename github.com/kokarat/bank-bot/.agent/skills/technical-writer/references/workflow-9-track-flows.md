@@ -371,7 +371,56 @@ grep -E "(✅ no double-wrap|✅ every indexed doc has a title:)" /tmp/w9-bot-ve
 
 Cost asymmetry (same rationale as mobiz W9 Step 7b): catching the typo here is a 1-minute re-run. Catching it post-commit means the corrupt row is already indexed and must be superseded — a 5–10 minute P-001-compliant cleanup every time. Until a server-side validator lands on the `arra_learn` MCP tool, the per-workflow pre-commit gate is the mitigation.
 
-### Step 8 — Commit + PR (3 min)
+### Step 8 — Commit + PR (3 min new / 4 min amend)
+
+W9 runs parallel to W2 on the daily cron (currently manual — cron infra is a P2 follow-up per the 2026-04-19 brew-ops audit, see Change log). When the cron does land, the same stack-up risk that hit W2 overnight 2026-04-19→20 applies: multiple settled-cycle firings while a previous PR sits unmerged stack fresh PRs against a static `.baseline`. Step 8 is split detect → amend / new — same shape as W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory commit `0357769`), with the `docs/flow-track-` branch prefix that distinguishes W9 PRs from W2's `docs/track-`.
+
+#### 8.0 — Detect open W9 PR (run first)
+
+```bash
+existing_pr=$(gh pr list --search "head:docs/flow-track- state:open" --author "@me" \
+  --json number,headRefName,title --jq '.[0]')
+```
+
+- empty → continue with **8.B** (new PR path).
+- non-empty → switch to **8.A** (amend path).
+
+#### 8.A — Amend path (existing W9 PR open)
+
+```bash
+branch=$(jq -r .headRefName <<< "$existing_pr")
+pr_num=$(jq -r .number <<< "$existing_pr")
+
+git fetch origin
+git checkout "$branch"
+git merge --no-edit origin/main    # absorb new main commits
+# Conflicts in docs/flows/* → resolve manually (rare, single-author docs).
+# Conflicts elsewhere → out-of-territory; abort + retro note.
+```
+
+Layer the new pointer updates on top with an "extend" subject:
+
+```
+docs(flows): extend track to <new-short> (W9 amend; cumulative <orig-baseline>..<new-short>)
+
+Adds <N> commits to PR #<pr_num>. Updated:
+- <flow-slug> step <n>: <pointer change summary>
+
+Filed <N> new arra_learn entries (PR cumulative now: N+M).
+```
+
+Push + rewrite PR metadata to reflect the **cumulative** range:
+
+```bash
+git push origin "$branch"
+gh pr edit "$pr_num" \
+  --title "docs(flows): track <orig-baseline-short>..<new-short> — <N> flows affected (W9, amended)" \
+  --body "<regenerated body — list ALL commits cumulatively, ALL flow updates per class, ALL arra_learn ids; link prior W9 trace and the new one (chain continuation per Step 2b); end with 'I will not merge this PR. Awaiting human review.'>"
+```
+
+Skip to Step 9. Do **not** open a second PR.
+
+#### 8.B — New PR path (no existing W9 PR)
 
 Branch: `docs/flow-track-<flows-baseline-short>-<new-short>`.
 
@@ -421,7 +470,25 @@ PR body always lists the affected flows (or "none — range out of flow territor
 
 ### Step 9 — Retrospective (3 min)
 
-`rrr` to `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_flow-track-<short>.md`.
+**Path discipline (load-bearing — see §The ψ/ trap).** Before writing, verify the vault symlink resolves:
+
+```bash
+readlink ~/.arra-oracle-v2/ψ | grep -q "mb_agent_oracle_memory/ψ$" \
+  || { echo "FAIL: ~/.arra-oracle-v2/ψ does not resolve to the canonical vault — halt"; exit 1; }
+```
+
+**Write to:**
+```
+~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_flow-track-<short>.md
+```
+
+**Never to any of these traps:**
+- ❌ `ψ/memory/retrospectives/...` — relative path, lands in your current cwd (worktree tree)
+- ❌ `./ψ/memory/retrospectives/...` — same
+- ❌ `<project-path>/ψ/memory/...` — absolute but wrong root; `project` is the product repo, not the vault
+- ❌ `.agent/../ψ/memory/...` — symlink traversal may misresolve through the vault's own project subdir
+
+`rrr` template (AI Diary + Honest Feedback mandatory; the section bullets below are W9-specific):
 
 **AI Diary** must cover:
 
@@ -437,6 +504,55 @@ PR body always lists the affected flows (or "none — range out of flow territor
 - Are `// impl:` pointers granular enough to decide A vs B vs C reliably? If you had to guess, the pointer may be too coarse.
 - Did the file→flow map produce false positives (files touched but no semantic relationship to the flow step)? If yes, the pointer's line number may be drifting from the real "contract line".
 - For Step 5e: does the cross-repo-sync learning feel actionable to mobiz's next W4 pass, or just informational? If the latter, the boundary description in the breadcrumb body needs to be sharper.
+
+**After writing, verify no stray landed in the project tree:**
+
+```bash
+SLUG="<slug-you-used>"  # e.g., 14.37_flow-track-90425ba-b886cc4
+# This MUST return empty — any hit = stray leak, follow recovery in §The ψ/ trap.
+find ~/Code/github.com/kokarat/bank-bot \
+  -path '*/ψ/memory/*' -name "*${SLUG}*" \
+  -not -path "*/.agent/*" 2>/dev/null
+# And the canonical location MUST exist:
+ls ~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/${SLUG}.md
+```
+
+**Recovery if stray found** (do NOT just delete — content may not be in vault yet):
+```bash
+STRAY="<stray-path-from-find>"
+VAULT_DEST=~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/
+mkdir -p "$VAULT_DEST"
+if [ -f "$VAULT_DEST/$(basename "$STRAY")" ]; then
+  diff -q "$STRAY" "$VAULT_DEST/$(basename "$STRAY")" && rm "$STRAY" || echo "differs — merge manually"
+else
+  mv "$STRAY" "$VAULT_DEST"
+fi
+(cd $(ghq list -p Soul-Brews-Studio/arra-oracle-v3) && bun run index)
+```
+
+---
+
+## The ψ/ trap (why path discipline in Step 9 matters)
+
+`ψ/memory/` looks like a vault-relative path but is not. The **canonical vault** lives at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ
+```
+
+surfaced to agents via the symlink `~/.arra-oracle-v2/ψ → <vault>/ψ`. Writes going through that symlink land in the vault correctly.
+
+A **stray `ψ/` directory at the root of this project repo** (`bank-bot/ψ/`) would look identical to a vault path but:
+
+1. **Not indexed by Oracle** — `arra_search` can't find it.
+2. **Invisible to other agents** — defeats the "shared memory" design.
+3. **May get git-tracked accidentally** — `ψ/` is NOT in this repo's `.gitignore` as of 2026-04-19. Once `git add` catches it, it enters the bank-bot product repo's permanent history.
+
+Historical incidents (cross-repo — same trap shape applies here):
+- **21 files** committed to `mobiz-payment-gateway` git history from this trap, across three failed cleanup attempts. Bank-bot has not been bitten yet but the path-shape is identical.
+- **2026-04-19 15:06**: a mobiz W2 run wrote its retro to `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md` (stray) instead of the canonical vault path. Recovered by manually moving + re-indexing. The same trap applies to bank-bot W9 — only mobiz W2 was bitten that day because bank-bot W9 had not run.
+
+Step 9's pre-write symlink check + post-write stray-find is the fix. Both must pass. Retro is not "done" until the stray check returns empty.
 
 ---
 
@@ -469,6 +585,9 @@ Symmetric discipline for mobiz W9 Step 5e is weaker (mobiz flows are mostly sing
 - [ ] Step 0 ran to completion: Pass 1 left zero `answered`-status markers in bank-bot territory; Pass 2 returned zero unfiled orphans.
 - [ ] **Anchor discipline**: every `arra_thread(...)` in this pass (D and F classes) inserted a paired `[UNDOCUMENTED-STEP:<id>]` or `[RATIFICATION_PENDING:<id>]` marker into the relevant flow doc in the same PR. Orphan thread count = 0.
 - [ ] **Vault audit hard gate passed (Step 7b)** — `verify.sh` ran **before** the Step 8 commit (not after, not as a retro-time afterthought); both `✅ no double-wrap` and `✅ every indexed doc has a title:` present. Any `arra_learn` call this pass produced that carried a corrupt `project` field was fixed at the source + old row superseded per P-001 before PR opens.
+- [ ] **One open W9 PR per repo:** Step 8.0 ran (`gh pr list --search "head:docs/flow-track- state:open" --author "@me"`). If non-empty → this pass took 8.A (amend); if empty → 8.B (new). At end of pass, count of open `docs/flow-track-*` PRs by `@me` on this repo ≤ 1. Independent of the W2 PR gate (different branch prefix).
+- [ ] **Retro path discipline (pre-write):** Step 9 ran the `readlink ~/.arra-oracle-v2/ψ` check; the canonical vault symlink resolved; retro written via the absolute `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/...` path (NOT a relative `ψ/memory/...` path).
+- [ ] **Stray-check passed (post-write):** `find ~/Code/github.com/kokarat/bank-bot -path '*/ψ/memory/*' -name "*<slug>*" -not -path '*/.agent/*'` returned empty. The retro is NOT leaking into the bank-bot product repo's working tree.
 - [ ] No code files changed. No `docs/current-system.md` changes. No new `docs/flows/<slug>.md` files created (those are W8). Diff is exclusively pointer refreshes + marker insertions + baseline bump + `#drift`/`#flow-track`/`#cross-repo-sync` learnings.
 - [ ] Branch pushed; PR opened; **not merged**.
 - [ ] Retrospective written with AI Diary + Honest Feedback.
@@ -486,6 +605,7 @@ Symmetric discipline for mobiz W9 Step 5e is weaker (mobiz flows are mostly sing
 - **Scanning only touched files, not also their callers.** A scraper helper in `helpers/` may be called from a `banks/*/statement.js` the flow's step 2 pointer targets. If the helper's behavior changed, the caller's behavior changed too — same drift surface.
 - **Forgetting that W9 is read-only against code.** W9 never edits `.js` / `.ts` files. If a drift appears to warrant a code fix, the fix is *outside* W9's scope; the `#drift` learning is its only output.
 - **Not chaining W9 passes.** Like W2, W9 forms an evolution chain. A W9 pass that didn't call `arra_trace_link(prev=<head>, next=W9_TRACE_BOT)` will fork the chain and lose the narrative. Step 2b's link is mandatory except on bootstrap.
+- **`arra_learn(pattern=...)` expects prose, not a pre-wrapped markdown doc.** arra_learn wraps its own `---\ntitle: ...\n---` around whatever you pass as `pattern`. Passing a document that already contains a frontmatter block (e.g. an earlier arra_learn output, or hand-authored markdown starting with `---\ntitle: ...`) produces the nested **double-wrap** bug: filename begins `_title-*`, outer `title: ---`, two frontmatter blocks, `verify.sh` flags it (Step 7b hard gate). Bot W9 fires `arra_learn` at up to 5 call sites per pass (Step 5b drift markers, Step 5d strength downgrade, Step 5e cross-repo sync, §4 uncovered-surface handoff, Step 7 per-flow summary) — each carries the same exposure. A tool-side strip-and-warn guard (`stripFrontmatterWrap` in Soul-Brews-Studio/arra-oracle-v3 `src/tools/learn.ts`, landed in arra-oracle-v3 commit `b816ca0` on `local/all-prs` 2026-04-20) catches it, but keep `pattern` as 1–2 paragraphs of plain prose and rely on the guard only as a safety net. Pass metadata via the separate `concepts`, `source`, and `project` arguments; the first line of `pattern` seeds both the title and the filename slug.
 
 ---
 
@@ -516,3 +636,7 @@ Symmetric discipline for mobiz W9 Step 5e is weaker (mobiz flows are mostly sing
 ## Change log for this workflow file
 
 - 2026-04-19 — Initial version. Scoped to `technical-writer` instance in `github.com/kokarat/bank-bot`. Mirrors mobiz-side W9 structure (daily cron alongside W2, pointer-level verification unit, six outcome classes A/B/C/D/E/F, fast-fix thresholds ≤5 flows / ≤50% per-flow step drift, global `docs/flows/.baseline`, bootstrap via oldest `// impl:` hash). Inherits three corrections landed on the mobiz side within the last 48 hours: (a) Step 3 extractor regex anchors on backtick-wrapped `` `<path>@<hash>` `` tokens inside `## Implementation pointers` sections with mandatory regex self-test (2026-04-19 brew-ops audit fix); (b) Step 7b verify.sh hard gate against recurring `<` typo in `project` field (2026-04-19 post-W8 calibration); (c) tag convention uses prefixed `flow:<slug>` form (2026-04-19 workflow-9 standardization). Three bot-specific adaptations: (1) Step 2c flips direction — looks for mobiz W2 traces to chain into, not bank-bot W2 like the mobiz side does. (2) Step 5e cross-repo-sync learning is mandatory on most bot passes because bot flows are cross-repo by construction (per bot W8 Design notes on decomposition asymmetry — one mobiz `// ext: kokarat/bank-bot` marker typically expands to 5-10 bot steps, so a drift inside those steps is invisible to mobiz W9 without an explicit breadcrumb). §Cross-repo-sync discipline section added after §Steps to document this primary bot-to-mobiz drift propagation channel. (3) Examples are bot-flavored — selector changes, OTP phase reordering, bank-portal UI breaks, scraper cursor resets — rather than the Go/MongoDB examples on the mobiz side. Expected usage: bank-bot flow portfolio is 1 as of this writing (`scb-dual-control-withdrawal` at `466d56e`); W9 passes will mostly be zero-drift no-ops until the portfolio grows. First real W9 pass on bank-bot is expected when code commits after `466d56e` touch files referenced by the flow's pointer set.
+- 2026-04-20 (brew-ops, W9 audit cross-cutting sync) — **Three sibling-synced fixes propagated from W2's 2026-04-19→20 evolution into W9** (mobiz + bank-bot identical changes):
+  1. **§Common pitfalls: `arra_learn(pattern=...)` prose-only rule added** — W9 fires arra_learn at up to 5 sites per pass (same exposure as W4/W8 which got this rule on 2026-04-19); the bullet was missing here. Tool-side `stripFrontmatterWrap` guard (arra-oracle-v3 `b816ca0`) catches violations, but spec-side prose-only discipline keeps agents from relying on the guard.
+  2. **Step 9 path discipline + §The ψ/ trap section added** — port from W2's 2026-04-19 fix after the live retro-leak incident at `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md`. Step 9 now mandates pre-write `readlink` check + absolute-path-via-symlink + post-write stray-find + recovery recipe. New §The ψ/ trap section (inserted between Step 9 and §Cross-repo-sync discipline) explains the topology + cites historical incidents — bank-bot has not been bitten yet but the path shape is identical, so the discipline is preemptive. DoD adds two lines (pre-write check passed, post-write stray-check empty).
+  3. **Step 8 split into 8.0 (detect) → 8.A (amend) / 8.B (new), with a new DoD line "one open W9 PR per repo".** Mirrors W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory `0357769`) using the `docs/flow-track-` branch prefix. Independent gate from W2's `docs/track-` PR gate. Important caveat: the daily W9 cron infrastructure does NOT yet exist (P2 follow-up flagged in the 2026-04-19 brew-ops audit, learning `2026-04-19_pattern-w9-step3-extractor-regex-fix`); when it lands, this Step 8 split prevents the same overnight stack-up that hit W2. Until then, manual W9 runs benefit from the same gate when humans run W9 multiple times in a day.
