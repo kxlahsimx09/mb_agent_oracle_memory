@@ -73,6 +73,47 @@ We operate inside a three-layer mesh. Every agent must understand what each laye
 
 ---
 
+## 3a. `.agent/` files: central memory + per-repo symlinks
+
+**This trips up every new agent that tries to "edit a workflow spec" by opening the file via a project-repo path.** The truth: `.agent/` directories in product repos (`arra-oracle-v3`, `mobiz-payment-gateway`, `bank-bot`, …) are **symlinks** into the central `mb_agent_oracle_memory` repo. There is one source of truth; the symlinks are the lens each repo gets.
+
+**Layout:**
+
+```
+ghq/kxlahsimx09/mb_agent_oracle_memory/        ← central repo (the source)
+├── github.com/
+│   ├── Soul-Brews-Studio/
+│   │   └── arra-oracle-v3/.agent/...          ← lives here
+│   └── kokarat/
+│       ├── mobiz-payment-gateway/.agent/...   ← lives here
+│       └── bank-bot/.agent/...                ← lives here
+├── ψ/                                          ← canonical vault root
+│   └── memory/{learnings,retrospectives,traces,resonance}/
+└── scripts/                                    ← verify.sh, etc.
+
+ghq/Soul-Brews-Studio/arra-oracle-v3/.agent → mb_agent_oracle_memory/github.com/Soul-Brews-Studio/arra-oracle-v3/.agent
+ghq/kokarat/mobiz-payment-gateway/.agent → mb_agent_oracle_memory/github.com/kokarat/mobiz-payment-gateway/.agent
+ghq/kokarat/bank-bot/.agent → mb_agent_oracle_memory/github.com/kokarat/bank-bot/.agent
+```
+
+**Implications when editing `.agent/` files:**
+
+- Edits made through any path land in `mb_agent_oracle_memory`. Commit there, not in the product repo. (The product repo's `.gitignore` excludes `.agent/`.)
+- `mb_agent_oracle_memory` is **append-only and single-author** (the human). Convention: commit-to-`main` directly is acceptable here, exempt from §9's "branch → PR → review" rule. Other repos still follow §9.
+- Sibling-syncing (e.g., propagating an `arra_learn` pitfall to W2/W4/W8 across mobiz + bank-bot) is one logical change but touches multiple files in the same central repo — bundle into one commit with a clear theme line.
+- `~/.arra-oracle-v2/ψ` symlink → `mb_agent_oracle_memory/ψ` is the canonical retro/learning destination (see W2/W4/W8 Step 9 path discipline + the §The ψ/ trap section in those workflow specs).
+- An `.agent.bak-<timestamp>` directory next to the symlink is a stale backup from before the symlink was set up. Leave it; do not edit it; do not commit it as `.agent/` content.
+
+**Sanity check before editing:**
+
+```bash
+ls -la <repo>/.agent  # must show 'lrwxr-xr-x ... .agent → ...mb_agent_oracle_memory/...'
+```
+
+If the target is missing or points elsewhere, stop and ask before writing.
+
+---
+
 ## 4. Oracle / Shadow philosophy (non-negotiable)
 
 Every agent abides by the root principles stored in the Oracle vault under `type: principle, tags: [soul-brews-core]`. These are **not restated here** — the Oracle is the single source of truth.
