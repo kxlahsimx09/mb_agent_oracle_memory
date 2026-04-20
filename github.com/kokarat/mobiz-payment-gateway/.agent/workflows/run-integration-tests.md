@@ -29,6 +29,7 @@ The user can specify which test to run. If the user does not specify a test, **c
 - `test-payout-confirm-completed.sh` — admin ยืนยัน payout ที่ bot mark failed ว่าโอนสำเร็จจริง (PUT /payouts/:id/confirm-completed) → status failed→completed, wallet หัก amount+fee, distribute MDR, WQ success, double-confirm guard rejects
 - `test-payout-auto-reconcile.sh` — auto-reconcile: ระบบ flip payout failed→completed เองเมื่อ bank_statement matched กับ WQ ก่อน MarkFailed (goroutine tryReconcileAfterMarkFailed, PR #161+#172) → ผลเหมือน manual confirm แต่ confirmed_by=system:auto-reconcile, cross-boundary guard reject admin manual call ที่มาทีหลัง
 - `test-payout-expiry.sh` — 15-min pending-payout auto-cancel scheduler (scheduler/payout_expiry.go, commit 5b83546) → back-date payout.createdAt 20 นาที, รอ ≤120s ให้ scheduler tick มาเจอ + cancel + refund wallet (amount+fee), assert WQ.cancelled, change_log payout_refund/changed_by=payout_expiry_scheduler
+- `test-payout-ktb-post-otp-waiting-to-review.sh` — KTB post-OTP ambiguity → waiting_to_review (Oracle thread #16 forward-looking). Uses mock-bank POST /admin/ktb/break-otp-confirm (PR #232) → window.close() in confirmTransferOTP → bot throws KTB_POST_OTP → assert WQ.status=waiting_to_review + wallet NOT refunded. **Expected RED at HEAD** until bank-bot dispatcher fix lands (adds `else if (r.status === 'waiting_to_review')` branch at app.js:1601-1631 / :1832-1838).
 
 ## Mandatory Steps
 

@@ -220,17 +220,27 @@ Append a new row for the test with:
 
 For anything surprising in the feature being tested (e.g., an undocumented
 status transition, a validation rule only visible in a middleware), file
-an `arra_learn` tagged `#tester #repo:mobiz-payment-gateway #current` +
-the feature tag. These are free signal for `technical_writer`.
+an `arra_learn` via the MCP tool. These are free signal for `technical_writer`.
 
-```yaml
-tags:
-  - tester
-  - repo:mobiz-payment-gateway
-  - current
-  - <feature>
-  - discovered-while-testing
-source: <controller/service file>:L<line>@<commit> + integration-tests/test-<name>.sh:L<line>
+**Do NOT include markdown frontmatter in the `pattern` body** — arra_learn
+wraps its own `---\ntitle: ...\n---` around whatever you pass. Pre-wrapped
+input produces the nested double-wrap bug (filename `_title-*`, outer
+`title: ---`, caught by verify.sh). Metadata goes in the separate
+`concepts`, `source`, and `project` parameters; the first line of `pattern`
+is the headline and seeds the slug.
+
+```
+arra_learn(
+  pattern="<one-line headline: what the surprise is and where>
+
+<1–3 paragraph explanation of the behaviour: what the code actually does,
+why it matters for tests and docs, and any hidden invariant the reader
+should carry forward>.",
+  concepts=["tester", "repo:mobiz-payment-gateway", "current",
+            "<feature>", "discovered-while-testing"],
+  source="<controller/service file>:L<line>@<commit> + integration-tests/test-<name>.sh:L<line>",
+  project="github.com/kokarat/mobiz-payment-gateway"
+)
 ```
 
 ## Step 9 — Commit + PR
@@ -373,7 +383,26 @@ trap)" and `AGENTS.md` §11. The indexer only scans the v2 path.
   never appears in the UI. `technical_writer` may ask why the docs list
   only 35 tests when 36 exist in the tree. That is drift. Register all
   three places or don't ship.
+- **`arra_learn(pattern=...)` expects prose, not a pre-wrapped markdown
+  doc.** arra_learn wraps its own `---\ntitle: ...\n---` around whatever
+  you pass as `pattern`. Passing a document that already contains a
+  frontmatter block (e.g. an earlier arra_learn output, or hand-authored
+  markdown starting with `---\ntitle: ...`) produces the nested
+  **double-wrap** bug: filename begins `_title-*`, outer `title: ---`,
+  two frontmatter blocks, `verify.sh` flags it. A tool-side strip-and-warn
+  guard landed 2026-04-19 (Soul-Brews-Studio/arra-oracle-v3
+  `stripFrontmatterWrap`), and the Step 8 template above was rewritten
+  the same day to use the `arra_learn(pattern=..., concepts=..., ...)`
+  function-call form. Keep `pattern` as 1–2 paragraphs of plain prose
+  and rely on the guard only as a safety net.
 
 ---
 
 **Created:** 2026-04-16 (GMT+7) · workflow owner: `tester` agent.
+**Revised:** 2026-04-19 (GMT+7) — Step 8 `arra_learn` template
+rewritten from YAML-frontmatter-blob form to `arra_learn(pattern=...,
+concepts=..., source=..., project=...)` function-call form (sibling-
+synced with workflow-1 Step 5 and workflow-3 Step 7 the same day).
+The earlier template was isomorphic to the arra_learn "double-wrap"
+corruption signature recovered from technical-writer territory on
+2026-04-19. Common pitfall bullet added.

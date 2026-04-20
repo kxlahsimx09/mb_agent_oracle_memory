@@ -280,46 +280,43 @@ One subsection per bank adapter.
 ## Step 7 — File `arra_learn` per drift
 
 One learning per non-MATCHED row (excluding DEAD-CODE-IN-MOCK unless
-user asked for cleanup). Template:
+user asked for cleanup). File via the arra_learn MCP tool.
 
-```yaml
-title: "drift — mock-bank <surface> <class>"
-tags:
-  - tester
-  - repo:mobiz-payment-gateway
-  - current
-  - drift
-  - mock-bank
-  - <bank: scb | ktb | …>
-  - <sub-class: bot-contract | fixture | doc-vs-impl>
-source: >
-  integration-tests/mock-bank/server.js:L<line>
-  + bank-bot/src/<adapter>.ts:L<line>@<commit>
-related:
-  - <prior mock-bank drift learnings if continuing a thread>
-project: github.com/kokarat/mobiz-payment-gateway
----
+**Do NOT include markdown frontmatter in the `pattern` body** — arra_learn
+wraps its own `---\ntitle: ...\n---` around whatever you pass. Pre-wrapped
+input produces the nested double-wrap bug (filename `_title-*`, outer
+`title: ---`, caught by verify.sh). Metadata goes in the separate
+`concepts`, `source`, and `project` parameters; the first line of `pattern`
+is the headline and seeds the slug.
 
-## Drift class
-MISSING-IN-MOCK | SHAPE-DRIFT | SELECTOR-DRIFT | TIMING-DRIFT
+```
+arra_learn(
+  pattern="drift — mock-bank <surface> <class>
 
-## Consumer
-<bank-bot adapter path + line | test script path + line>
+Drift class: MISSING-IN-MOCK | SHAPE-DRIFT | SELECTOR-DRIFT | TIMING-DRIFT.
 
-## Expectation
-<what the consumer expects: URL, selector, payload shape, status, timing>
+Consumer: <bank-bot adapter path + line | test script path + line>.
 
-## Reality in mock
-<what mock actually does or does not do at that spot>
+Expectation: <what the consumer expects: URL, selector, payload shape, status, timing>.
 
-## Root cause commit
-<sha> <one-line message>   # may be in bank-bot/ OR in mock-bank/ — either side can drift
+Reality in mock: <what mock actually does or does not do at that spot>.
 
-## Remediation (proposed; not applied)
-<what change to server.js (or, rarely, to the bot adapter) would restore MATCHED status>
+Root cause commit: <sha> <one-line message>. (May be in bank-bot/ OR in
+mock-bank/ — either side can drift.)
 
-## Blast radius
-<which tests currently rely on this and may silently mispass/fail>
+Remediation (proposed; not applied): <what change to server.js — or, rarely,
+to the bot adapter — would restore MATCHED status>.
+
+Blast radius: <which tests currently rely on this and may silently mispass/fail>.
+
+Related: <prior mock-bank drift learning ids if continuing a thread; omit line if none>.",
+  concepts=["tester", "repo:mobiz-payment-gateway", "current",
+            "drift", "mock-bank",
+            "<bank: scb | ktb | …>",
+            "<sub-class: bot-contract | fixture | doc-vs-impl>"],
+  source="integration-tests/mock-bank/server.js:L<line> + bank-bot/src/<adapter>.ts:L<line>@<commit>",
+  project="github.com/kokarat/mobiz-payment-gateway"
+)
 ```
 
 ## Step 8 — PR (proposals only, no server.js edits)
@@ -431,6 +428,18 @@ Only after user approves a specific proposal in the PR from Step 8:
 - **SELECTOR-DRIFT looks like latency.** If the bot's
   `waitForSelector` times out and the mock's response time is fine,
   the first suspect is a renamed/removed selector — not a timing bug.
+- **`arra_learn(pattern=...)` expects prose, not a pre-wrapped markdown
+  doc.** arra_learn wraps its own `---\ntitle: ...\n---` around whatever
+  you pass as `pattern`. Passing a document that already contains a
+  frontmatter block (e.g. an earlier arra_learn output, or hand-authored
+  markdown starting with `---\ntitle: ...`) produces the nested
+  **double-wrap** bug: filename begins `_title-*`, outer `title: ---`,
+  two frontmatter blocks, `verify.sh` flags it. A tool-side strip-and-warn
+  guard landed 2026-04-19 (Soul-Brews-Studio/arra-oracle-v3
+  `stripFrontmatterWrap`), and the Step 7 template above was rewritten
+  the same day to use the `arra_learn(pattern=..., concepts=..., ...)`
+  function-call form. Keep `pattern` as 1–2 paragraphs of plain prose
+  and rely on the guard only as a safety net.
 
 ---
 
@@ -438,3 +447,10 @@ Only after user approves a specific proposal in the PR from Step 8:
 **Revised:** 2026-04-16 (GMT+7) — architecture corrected: removed the
 false "backend ↔ mock-bank" premise; the only live contract is
 mock-bank ↔ bank-bot. Human correction; logged in vault.
+**Revised:** 2026-04-19 (GMT+7) — Step 7 `arra_learn` template
+rewritten from YAML-frontmatter-blob form to `arra_learn(pattern=...,
+concepts=..., source=..., project=...)` function-call form (sibling-
+synced with workflow-1 Step 5 and workflow-2 Step 8 the same day).
+The earlier template was isomorphic to the arra_learn "double-wrap"
+corruption signature recovered from technical-writer territory on
+2026-04-19. Common pitfall bullet added.

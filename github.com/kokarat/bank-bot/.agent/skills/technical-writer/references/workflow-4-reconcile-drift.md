@@ -213,42 +213,33 @@ This step has **two halves**. The `arra_supersede` call is non-negotiable for (A
 
 #### 7a. Write the resolution learning (one per A and C; one per B per Step 4)
 
-Template for (A) and (C):
+Template for (A) and (C) — call `arra_learn` via MCP. **Do NOT embed `---\ntitle: ...\n---` in the `pattern` body** — arra_learn wraps its own frontmatter around `pattern`, and a pre-wrapped input produces the nested double-wrap bug (filename `_title-*`, outer `title: ---`, caught by verify.sh). Pass metadata via the separate `concepts`, `source`, and `project` arguments; the first line of `pattern` seeds both the title and the filename slug.
 
-```yaml
-title: "resolution — <feature>/<topic> drift closed"
-tags:
-  - technical-writer
-  - repo:bank-bot
-  - current
-  - <feature>
-  - resolution
-source: <doc-path>:<line>@<new-short> + <code-path>:<line>@<new-short>
-supersedes:
-  - <original-drift-learning-id>
-related:
-  - <any sibling drift learnings resolved in the same edit>
-project: github.com/kokarat/bank-bot
----
+```
+arra_learn(
+  pattern="resolution — <feature>/<topic> drift closed
 
-## Drift class (original)
-<verbatim copy of the original drift's description, one paragraph>
+Drift class (original): <verbatim copy of the original drift's description, one paragraph>.
 
-## Resolution path (taken)
-(A) fix-doc | (B) fix-code-escalated | (C) obsolete-or-duplicate
+Resolution path (taken): (A) fix-doc | (B) fix-code-escalated | (C) obsolete-or-duplicate.
 
-## What changed
+What changed:
 - Doc: <section heading> rewritten to match code at <short-hash>.
 - Code: unchanged. (Always, for A/C. For B: see linked issue and the regression-candidate learning.)
 
-## How I verified
-<2–3 sentences — which file I read, which specific line numbers, what the new `// verified:` cite points at>
+How I verified: <2–3 sentences — which file I read, which specific line numbers, what the new `// verified:` cite points at>.
 
-## Residual risk
-<one sentence — any sibling drift still open, any doc section with a new [UNVERIFIED] because of this change, or "none">
+Residual risk: <one sentence — any sibling drift still open, any doc section with a new [UNVERIFIED] because of this change, or 'none'>.
+
+Supersedes: <original-drift-learning-id>. Related: <any sibling drift learnings resolved in the same edit — omit line if none>.",
+  concepts=["technical-writer", "repo:bank-bot", "current",
+            "<feature>", "resolution"],
+  source="<doc-path>:<line>@<new-short> + <code-path>:<line>@<new-short>",
+  project="github.com/kokarat/bank-bot"
+)
 ```
 
-The `supersedes:` frontmatter field is informational (human-readable); the actual machine-readable link lives in the `oracle_documents.superseded_by` column, populated by the `arra_supersede` call in 7c.
+The "Supersedes:" line inside the prose body is informational (human-readable); the machine-readable link lives in the `oracle_documents.superseded_by` column and is populated by the `arra_supersede` call in 7c.
 
 #### 7b. Verify the resolution learning is indexed
 
@@ -417,6 +408,7 @@ This workflow is complete **only** when all are true:
 - **Skipping `arra_supersede` because "the resolution learning explains it".** The resolution learning is prose; `superseded_by` is machine-readable. `arra_search` and `/api/search` surface the `superseded_by` / `superseded_at` / `superseded_reason` fields to callers, but only if `arra_supersede` was actually called. Without the call, old drift learnings look open to future agents and may be re-opened or re-resolved. This was the #1 gap observed in the first live Workflow 4 run (2026-04-16) — workflow prose prescribed supersede but indexer lag blocked it, and the operator didn't treat "defer supersede" as a pending task.
 - **Calling `arra_supersede` before the resolution learning is indexed.** The MCP tool rejects unknown `newId`. With PR #754 (inline vector embedding + direct INSERT) the new learning is available immediately; without PR #754 the indexer may lag. Always run the 7b verify query before 7c. On old Oracle builds, fall back to a `#pending-supersede` tag + handoff.
 - **Filing standalone `arra_trace` per drift without chaining.** A W4 session that closes N drifts but leaves N disconnected traces loses the session narrative. Next agent `arra_trace_list` sees N root-depth raw traces with no indication they're from one session. Always run Step 7e's `arra_trace_link(prev, next)` to build a chain. Session's first trace is the chain head; paste `arra_trace_chain(head)` into the retro.
+- **`arra_learn(pattern=...)` expects prose, not a pre-wrapped markdown doc.** arra_learn wraps its own `---\ntitle: ...\n---` around whatever you pass as `pattern`. Passing a document that already contains a frontmatter block (e.g. an earlier arra_learn output, or hand-authored markdown starting with `---\ntitle: ...`) produces the nested **double-wrap** bug: filename begins `_title-*`, outer `title: ---`, two frontmatter blocks, `verify.sh` flags it. A tool-side strip-and-warn guard landed 2026-04-19 (Soul-Brews-Studio/arra-oracle-v3 `stripFrontmatterWrap`), and the Step 7a template above was rewritten the same day from a YAML-blob form that literally prescribed this pattern. Keep `pattern` as 1–2 paragraphs of plain prose and use the function-call form shown in Step 7a; rely on the guard only as a safety net.
 
 ---
 
@@ -435,3 +427,4 @@ This workflow is complete **only** when all are true:
 - 2026-04-17 — Step 7 expanded to 7a/7b/7c/7d after the first live run (`ψ/memory/retrospectives/2026-04/16/17.00_workflow-4-first-live-run.md`) observed that `arra_supersede` was silently deferred due to indexer lag, leaving drift learnings without machine-readable successor pointers. New sub-steps make the verify/call/confirm cycle explicit, add a `#pending-supersede` escape hatch for indexer outages, and add two pitfalls (skipping supersede because the prose explains it; calling supersede before the resolution is indexed). DoD checklist tightened to require the 7d verify query to return the `newId` before the box is checked.
 - 2026-04-17 (later) — Added Step 7e (arra_trace + arra_trace_link) so per-drift resolutions form a **session chain** instead of disconnected traces. Without the chain, a future agent running `arra_trace_list` sees N raw traces with no indication they're from one session. With the chain, `arra_trace_chain(<head>)` returns the narrative of the session's reconcile pass — pasteable into retro. New pitfall entry.
 - 2026-04-17 (later) — Added **Step 0 (Resolve answered threads in territory)**. Motivation for W4: a `[AWAITING_THREAD:<id>]` whose thread is now answered may pre-resolve a queued drift — miss it and you do redundant W4 work or contradict the human's answer. Scoping via doc-anchored grep. See `workflow-thread-resolve.md`. DoD added: Step 0 clears to zero; thread anchors opened during W4 (B-class escalations) live in §9 or the resolution learning's `related:` in the same PR.
+- 2026-04-19 (later, user) — **Step 7a `arra_learn` template rewritten from YAML-blob form to function-call form** (sibling-synced with mobiz W4 the same day). Backstory: the earlier template showed a `---\ntitle: ...\n---` + body structure that an agent would literally put in `pattern=...`. That input pattern is isomorphic to the arra_learn "double-wrap" corruption signature — eleven such learnings were recovered from technical-writer territory on 2026-04-19 (W2 + W8 passes), which prompted the audit that found this template was equally exposed even though it hadn't been triggered yet on the W4 path. New template uses `arra_learn(pattern="<prose>", concepts=[...], source=..., project=...)` form with `title:` removed from the body entirely (arra_learn derives title from the first line of `pattern`). The in-body "Supersedes:" line is labelled as informational-only and decoupled from the machine-readable `oracle_documents.superseded_by` column populated by 7c. Common pitfall bullet added. Cross-agent sweep on 2026-04-19 also touched technical-writer W2/W8 + tester W1/W2/W3.

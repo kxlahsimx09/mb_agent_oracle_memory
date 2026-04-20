@@ -248,37 +248,31 @@ See `docs/test-coverage-gaps.md` for what is **not** tested.
 
 ## Step 5 — File one `arra_learn` per non-VALID finding
 
-For every STALE / WRONG-SETUP / FLAKY row, emit one learning. Template:
+For every STALE / WRONG-SETUP / FLAKY row, emit one learning via the arra_learn MCP tool. **Do NOT include markdown frontmatter in the `pattern` body** — arra_learn wraps its own `---\ntitle: ...\n---` around whatever you pass, and a pre-wrapped input produces the nested double-wrap bug (filename `_title-*`, outer `title: ---`, caught by verify.sh). Pass metadata via the separate `concepts`, `source`, and `project` arguments; let the first line of `pattern` carry the headline.
 
-```yaml
-title: "<STALE|WRONG-SETUP|FLAKY> — <test-name> — <one-line-cause>"
-tags:
-  - tester
-  - repo:mobiz-payment-gateway
-  - current
-  - <stale-test | wrong-setup | flaky-test>
-  - <feature tag, e.g. deposit / payout / settlement / bank-bot>
-  # add #drift if the cause is a mock-bank or endpoint rename
-source: >
-  integration-tests/<test>.sh:L<line>  +
-  <production file>:L<line>@<commit>
-related:
-  - <prior tester learnings if continuing a thread>
-project: github.com/kokarat/mobiz-payment-gateway
----
-
-## What's wrong
-<1–3 sentences>
-
-## Why this is wrong
-<cite the rule from integration-test-writer SKILL.md or the changed commit>
-
-## Minimal fix (proposed, not applied)
-<one paragraph, or a diff-style snippet>
-
-## Impact if unfixed
-<what false-signal this test emits today>
 ```
+arra_learn(
+  pattern="<STATUS> — <test-name> — <one-line-cause>
+
+What's wrong: <1–3 sentences>.
+
+Why this is wrong: <cite the rule from integration-test-writer SKILL.md or the changed commit>.
+
+Minimal fix (proposed, not applied): <one paragraph, or a diff-style snippet>.
+
+Impact if unfixed: <what false-signal this test emits today>.
+
+Related: <prior tester learning ids if continuing a thread; omit line if none>.",
+  concepts=["tester", "repo:mobiz-payment-gateway", "current",
+            "<stale-test | wrong-setup | flaky-test>",
+            "<feature tag e.g. deposit / payout / settlement / bank-bot>"
+            /* add "drift" if the cause is a mock-bank or endpoint rename */],
+  source="integration-tests/<test>.sh:L<line> + <production file>:L<line>@<commit>",
+  project="github.com/kokarat/mobiz-payment-gateway"
+)
+```
+
+Substitute `<STATUS>` with `STALE`, `WRONG-SETUP`, or `FLAKY` on the first line of `pattern` — arra_learn derives both the title and the filename slug from those first ~50–80 characters, so lead with the status + test name for searchable filenames like `2026-04-19_stale-test-payout-foo-endpoint-removed-.md`.
 
 Do not batch these at the end — emit as each test is assigned its status.
 Batching risks forgetting nuance.
@@ -395,7 +389,29 @@ AI Diary and Honest Feedback are mandatory (AGENTS.md §7). Cover:
 - **Auto-tagging FLAKY without evidence.** A `sleep 3` is not flaky on
   its own. Only tag FLAKY if the assertion outcome can plausibly change
   on a different host — not merely if the test takes a long time.
+- **`arra_learn(pattern=...)` expects prose, not a pre-wrapped markdown
+  doc.** arra_learn wraps its own `---\ntitle: ...\n---` around whatever
+  you pass as `pattern`. Passing a document that already contains a
+  frontmatter block (e.g. an earlier arra_learn output, or hand-authored
+  markdown starting with `---\ntitle: ...`) produces the nested
+  **double-wrap** bug: filename begins `_title-*`, outer `title: ---`,
+  two frontmatter blocks, `verify.sh` flags it. A tool-side strip-and-warn
+  guard landed 2026-04-19 (Soul-Brews-Studio/arra-oracle-v3
+  `stripFrontmatterWrap`), and the Step 5 template above was rewritten
+  the same day from a YAML-blob form that literally prescribed this
+  pattern. Keep `pattern` as 1–2 paragraphs of plain prose and use the
+  function-call form shown in Step 5; rely on the guard only as a
+  safety net.
 
 ---
 
 **Created:** 2026-04-16 (GMT+7) · workflow owner: `tester` agent.
+**Revised:** 2026-04-19 (GMT+7) — Step 5 `arra_learn` template
+rewritten from YAML-frontmatter-blob form to `arra_learn(pattern=...,
+concepts=..., source=..., project=...)` function-call form. Backstory:
+the earlier template was isomorphic to the arra_learn "double-wrap"
+corruption signature (eleven such learnings recovered on 2026-04-19
+across technical-writer territory — the tester template had not yet
+been exercised but was equally exposed). Sibling-synced with the
+technical-writer W2/W8 pitfall additions the same day. Common pitfall
+bullet added; Step 9 verify.sh gate remains the pre-commit backstop.
