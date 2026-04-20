@@ -21,10 +21,18 @@ artifact, not a per-test one.
 ## Scope & rules
 
 - **Tester writes the test file.** Production code is read-only here too.
-- **No runtime validation in this workflow.** `bash -n` (syntax parse) is
-  the only check run. The test's *first real execution* is a follow-up
-  action the user or CI initiates; tester marks the row in
-  `docs/test-index.md` as `UNKNOWN` until then.
+- **Runtime-iterate until the test works — or bail with an honest report.**
+  Default path: `bash -n` parse check, then execute the test, then
+  fix-and-retry until it exits 0 (for regression tests) or lands in the
+  expected failure mode (for forward-looking tests — see Step 5 Part B).
+  This is the opposite of the pre-2026-04-20 policy (which left
+  first-execution to CI) — runtime drift has historically hidden in
+  UNKNOWN rows for weeks. Now it gets caught in the same session.
+- **Escape hatch — "unusually long" tests.** If the test is demonstrably
+  slow (criteria in Step 5), skip runtime, leave `docs/test-index.md`
+  row as `UNKNOWN`, and **report plainly to the user**: "test added but
+  not runtime-verified, reason: <criterion>". Do not silently ship. See
+  Step 5 Part C for the criteria.
 - **Pattern discipline is non-negotiable.** Every new test follows the
   template and pitfall list in
   `.agent/skills/integration-test-writer/SKILL.md`. That skill is
@@ -183,14 +191,14 @@ Never inline a mock-bank change into a test PR. Every mock change is
 its own review commit so `mock-bank-sync-check` can verify the full
 3-surface contract.
 
-### 3f. Follow-up (optional) — consult `FIXTURES.md`
+<!--
+Step 3f intentionally omitted pending `integration-tests/mock-bank/FIXTURES.md`.
+See Oracle thread #28 (`docs:tester — mock-bank FIXTURES.md inventory audit`).
+Once that audit completes and FIXTURES.md is comprehensive, restore Step 3f
+per the template in thread #28. Until then, rely on 3a/3b/3c greps — a
+half-filled FIXTURES.md would false-advertise coverage.
+-->
 
-If `integration-tests/mock-bank/FIXTURES.md` exists, consult it first
-— it indexes all available fixtures as `(admin endpoint, client
-behavior, applies-to)` tuples. Faster than grepping. If it doesn't
-exist yet (not created at time of this workflow revision), you may
-seed it as a Step 8 learning artifact when your test adds a net-new
-fixture category.
 
 ## Step 4 — Draft the test script
 
@@ -264,7 +272,9 @@ new test to avoid them:
 6. **Timeout path is a failure**, not a pass. Every polling loop ends
    with an explicit `TEST_RESULT=1; break` on timeout, not fall-through.
 
-## Step 5 — Save + parse-check
+## Step 5 — Save, parse-check, run, iterate
+
+### Part A — Syntax parse (mandatory first gate)
 
 ```bash
 chmod +x integration-tests/test-<name>.sh
@@ -272,8 +282,136 @@ bash -n integration-tests/test-<name>.sh
 echo $?   # must be 0 — non-zero means syntax error, fix before continuing
 ```
 
-No runtime execution. The first execution is a separate event (user or
-CI).
+### Part B.0 — Ensure docker images match the source you're testing
+
+Running against a stale image is the silent #1 cause of "I just fixed
+that bug why is it still broken" — 2026-04-20 session ate 3-4
+rebuild-debug cycles on mock-bank alone before the pattern became
+obvious. Always rebuild the services whose source you've touched
+**before** the first run, and again after each iteration edit.
+
+**Rebuild mapping (by changed path):**
+
+| Changed path | `docker compose -f integration-tests/docker-compose.yml up -d --build <svc>` |
+|---|---|
+| `controllers/` `services/` `models/` `helpers/` `routes/` `main.go` `db/` `middlewares/` | `backend` |
+| `integration-tests/mock-bank/server.js` | `mock-bank` |
+| `integration-tests/mock-bank/public/*.html` | `mock-bank` |
+| `bank-bot/**/*.js` | `bank-bot bank-bot-ktb` (add stress variants if active) |
+| `integration-tests/test-runner/**` | `test-runner` |
+| `integration-tests/test-*.sh` | **no rebuild** — `-v .:/tests` mount reflects live |
+| `integration-tests/helpers/*.sh` | **no rebuild** — same mount |
+| `.agent/**`, `docs/**`, vault files | **no rebuild** — not consumed at runtime |
+
+**Targeted vs lazy:**
+
+- **Targeted** (preferred — precise): rebuild only affected services.
+  ~5s cache-hit, ~30-60s genuine rebuild.
+- **Lazy** (when unsure): `docker compose -f integration-tests/docker-compose.yml up -d --build`
+  — rebuilds everything; cache makes the unchanged parts nearly-free.
+  ~5-10s total if nothing changed, ~60s if one service changed.
+
+**Verify post-rebuild** (cheap gate, catches silent Docker cache bugs):
+
+```bash
+# Example: mock-bank HTML edit
+docker exec integration-tests-mock-bank-1 \
+  grep -c "<unique-marker-string-from-your-edit>" /app/public/ktb.html
+# expect > 0
+
+# Example: backend binary
+docker exec integration-tests-backend-1 \
+  wget -qO- http://localhost:3099/<new-endpoint> | head -c 100
+```
+
+If the marker/string isn't in the container → something in the
+compose/cache layer is stale; `docker compose down` + `up -d --build`
+and re-verify before running the test. Do NOT iterate on the test
+itself until the image has your latest code.
+
+### Part B — Runtime execution and fix-and-retry
+
+Ensure the test env is up (`docker compose -f integration-tests/docker-compose.yml
+ps` — all services `healthy`; if not, `docker compose up -d`).
+
+Run via test-runner web UI (`localhost:8080`) OR direct docker exec
+(faster for iteration — but **must pass `DOCKER_MODE=true
+TEST_RUNNER_MODE=1`** env, otherwise `setup-infra.sh` falls back to
+`docker compose exec -T` which fails inside test-runner — see
+`learning_2026-04-20_when-running-integration-tests-via-direct-docker`):
+
+```bash
+docker exec -e DOCKER_MODE=true -e TEST_RUNNER_MODE=1 \
+  integration-tests-test-runner-1 \
+  bash -c "cd /tests && ./test-<name>.sh"
+```
+
+**Iterate until green:**
+
+- **PASS (`exit 0`)** → proceed to Step 6.
+- **FAIL** → read the logs (test stdout, `docker logs integration-tests-bank-bot-*-1`,
+  `docker logs integration-tests-mock-bank-1`, `docker logs integration-tests-backend-1`),
+  identify the gap, fix *within scope* (test script, mock-bank fixture,
+  test-runner env — NEVER production code), and re-run.
+- **Forward-looking test** (header contains an `[AWAITING_THREAD:N]`
+  marker — a convention some tests use to flag dependency on an
+  open drift thread) → "PASS" means the observed failure mode matches
+  the expected drift described in the thread, not `exit 0`. Example:
+  `test-payout-ktb-post-otp-waiting-to-review.sh` at thread #16 HEAD
+  expected `withdrawal_queue.status = 'failed'`; after thread #16 fix
+  it flipped to `waiting_to_review`. Match the expectation, commit.
+
+**State cleanup between iterations:** most tests generate fresh
+timestamped entities (`TS=$(date +%s)`) — iterations don't conflict on
+identity. But they share mock-bank ledger, withdrawal_queue collection,
+and bank `working_status`. If state accumulation causes confusion, reset
+between runs via mock-bank's admin reset or `docker compose down &&
+docker compose up -d`.
+
+### Part C — "Unusually long" escape hatch
+
+If running the test would exceed the session time budget or tie up the
+test-runner for other work, skip runtime and report honestly. Criteria
+(any single match → skip):
+
+| Criterion | Threshold |
+|---|---|
+| `MAX_WAIT` or any single polling-loop cap | > 600s (10 min) |
+| Test filename / header contains | `stress`, `burst-multi`, `multi-bank-stress`, `load` |
+| Scheduler cadence the test waits on | > 15 min (e.g., some deposit-expiry / pullout-task variants) |
+| Stated expected end-to-end duration in header comment | > 8 min |
+| Test relies on a fixture / PR not yet merged | blocked by external thread |
+
+**If skipped:**
+1. Complete Parts A + verify via manual inspection (read the script
+   against the template in SKILL).
+2. `docs/test-index.md` row → `status: UNKNOWN` with footnote: "added
+   <date> — runtime skipped, reason: <criterion>. First runtime pending
+   CI or manual run."
+3. In the session-end report to user, say plainly: "test added but
+   **not runtime-verified** — reason: <criterion>." Don't bury this in
+   a retrospective.
+4. If the blocker is a not-yet-merged fixture/PR, file the dependency
+   as `[AWAITING_THREAD:N]` in the test header (see
+   `test-payout-ktb-post-otp-waiting-to-review.sh` for the canonical
+   example) — future runs will auto-flip it green when the blocker
+   resolves.
+
+### Part D — If stuck on a non-test bug
+
+If the failure is in production code (not the test, fixture, or test
+env), stop iterating. Production code is read-only in this workflow.
+Options:
+1. Open an `arra_thread` documenting the drift (anchor: the test script
+   + reproduction). Route to the appropriate repo owner (bot-writer for
+   bank-bot drift, pg-writer for gateway drift).
+2. Mark the test row `UNKNOWN` with footnote "blocked by thread #N".
+3. Commit the test anyway — it becomes a regression tripwire when the
+   drift closes.
+
+Never patch production code to make a new test pass. That inverts the
+tripwire — the test would no longer catch real drift, only the drift
+you papered over.
 
 ## Step 6 — Register in **three** places
 
@@ -304,13 +442,18 @@ Mark the filled gap:
 - Do **not** delete the row (P-001 — Nothing is Deleted).
 
 ### 7b. `docs/test-index.md`
-Append a new row for the test with:
-- `status` = `UNKNOWN` (never run yet)
-- `last_verified_commit` = current HEAD
-- `root_cause` = `—`
-- `proposed_fix` = `—`
-- A footnote: "added <ISO date GMT+7> by tester agent; awaiting first
-  runtime execution to upgrade status to VALID."
+Append a new row for the test. `status` value depends on the Step 5
+outcome:
+
+| Step 5 outcome | `status` | Footnote |
+|---|---|---|
+| Part B ran green (`exit 0`) | `VALID` | "added <ISO date GMT+7> by tester agent; runtime-verified in-session at commit <sha>." |
+| Part B matched expected forward-looking failure mode | `VALID` (forward-looking) | "added <date>; runtime-verified as expected-red per [AWAITING_THREAD:N] — will flip to regression tripwire when thread closes." |
+| Part C skipped (unusually long) | `UNKNOWN` | "added <date> — runtime skipped, reason: <criterion>. First runtime pending CI or manual run." |
+| Part D stuck on production bug | `UNKNOWN` | "added <date> — blocked by thread #N; test is a regression tripwire for that drift." |
+
+`last_verified_commit` = current HEAD, `root_cause` = `—`,
+`proposed_fix` = `—`.
 
 ## Step 8 — File learnings for non-obvious design choices
 
@@ -364,8 +507,7 @@ git commit -m "test: add integration test — <name>
 - Covers <one-line feature description>
 - Closes coverage gap: <row from test-coverage-gaps.md>
 - Registered in runner script + test-runner.html + workflow doc.
-- Never executed at CI yet; docs/test-index.md row marked UNKNOWN
-  until first runtime pass upgrades it.
+- Runtime outcome: <VALID (exit 0) | VALID (expected-red per AWAITING_THREAD:N) | UNKNOWN (reason: <criterion>)>
 - Does not modify production code."
 
 git push -u origin feat/tester-test-<domain>-<variant>
@@ -395,10 +537,17 @@ Adds `integration-tests/test-<name>.sh` to close the
 None (all endpoints used pre-existed) — OR — depended on PR #<n> which
 added `<endpoint>`.
 
+## Runtime verification
+
+- [ ] Ran green in-session (`exit 0`) → `docs/test-index.md` = `VALID`
+- [ ] Ran as expected-red per `[AWAITING_THREAD:N]` → `VALID` (forward-looking)
+- [ ] Skipped (unusually long) → `UNKNOWN`, reason: `<criterion>` — first
+      runtime pending CI/manual.
+
 ## Post-merge follow-up
 
-First runtime execution will upgrade `docs/test-index.md` row from
-UNKNOWN to VALID or reveal issues via the standard validate workflow.
+If status = `UNKNOWN`, first runtime execution (CI or manual) upgrades
+`docs/test-index.md` via the standard validate workflow.
 
 EOF
 )"
@@ -410,7 +559,9 @@ EOF
 
 ### Per-test open questions — use threads, not handoffs
 
-If a specific test has an unanswered question that a domain expert needs to resolve (e.g. "first runtime run — pass or fail?", "should this edge case return 400 or 422?"), open an `arra_thread` for that question with the PR URL and the test path in the message body. Anchor the question in the test script or in `docs/test-index.md` with `[AWAITING_THREAD:<id>]` so the next tester/writer pass sweeps it when resolved.
+If a specific test has an unanswered question that a domain expert needs to resolve (e.g. "should this edge case return 400 or 422?", "is this expected failure mode correct?"), open an `arra_thread` for that question with the PR URL and the test path in the message body. Anchor the question in the test script or in `docs/test-index.md` with `[AWAITING_THREAD:<id>]` so the next tester/writer pass sweeps it when resolved.
+
+**Note:** "first runtime run — pass or fail?" should no longer reach this step since Step 5 now runtime-iterates in-session. If it does appear, that's a signal the test hit Part C (unusually long) or Part D (production blocker) — both already carry their own `[AWAITING_THREAD:N]` marker, so a duplicate thread here would be redundant.
 
 Do NOT write an `arra_handoff` for the PR — PR tracking lives in the PR itself, not in Oracle.
 
@@ -502,3 +653,24 @@ synced with workflow-1 Step 5 and workflow-3 Step 7 the same day).
 The earlier template was isomorphic to the arra_learn "double-wrap"
 corruption signature recovered from technical-writer territory on
 2026-04-19. Common pitfall bullet added.
+**Revised:** 2026-04-20 (GMT+7, part 1) — Step 3 expanded to 3-surface
+mock-bank readiness check (server endpoints / admin toggles / client-
+side HTML-JS fixtures) after 2026-04-20 debug session evidenced that
+admin-toggle success does NOT imply client-side behavior fires (Oracle
+thread #26).
+**Revised:** 2026-04-20 (GMT+7, part 2) — Policy inverted for runtime
+validation: new tests now runtime-iterate in-session until green (or
+match expected-red for `[AWAITING_THREAD:N]` forward-looking tests);
+"unusually long" escape hatch defined with concrete criteria (Step 5
+Part C). `docs/test-index.md` row status is now outcome-dependent
+(VALID / UNKNOWN) instead of blanket UNKNOWN. Step 7b, Step 9 commit
+body, and PR body template updated accordingly.
+**Revised:** 2026-04-20 (GMT+7, part 3) — Step 5 Part B.0 added:
+rebuild-mapping cheatsheet + post-rebuild verify step to prevent
+iterating against stale docker images (the 2026-04-20 session ate
+3-4 debug cycles on mock-bank before the stale-cache pattern surfaced).
+**Revised:** 2026-04-20 (GMT+7, part 4) — Step 3f (FIXTURES.md
+consult) removed — placeholder HTML comment left pointing at Oracle
+thread #28. Intention: restore Step 3f only after the fixture
+inventory audit (thread #28) completes; a partial FIXTURES.md would
+false-advertise coverage and readers would skip the 3a/3b/3c greps.
