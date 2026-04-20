@@ -199,28 +199,56 @@ Charter §7a mandates three tag layers on every vault write:
 - Layer 2 (system domain): e.g. `memory`, `indexer`, `fleet`, `federation`
 - Layer 3 (role): e.g. `brew-ops`, `pg-writer`, `bot-writer`
 
-Python audit (handles ψ paths correctly):
+Python audit (handles ψ paths correctly + both frontmatter tag forms):
+
+> **Note (2026-04-20 fix):** earlier versions of this script only matched the inline `tags: [a, b, c]` form. YAML-list form `tags:\n  - a\n  - b` was treated as "no tags" — both forms are valid YAML frontmatter, and ~31% of the vault uses the list form (mostly `technical-writer` retros). Pre-fix audits reported 31.6% no_tags (FAIL); post-fix they report ~0.7% (PASS). The two forms are equivalent; the script now tries inline first, falls back to list, and only counts a doc as no-tags when neither matches. See learning `2026-04-20_workflow-5-step5-tag-extractor-regex-fix` for the audit run that surfaced this.
 
 ```python
 import os, re
 vault = os.path.expanduser('~/Code/github.com/kxlahsimx09/mb_agent_oracle_memory')
-REPO_RE = re.compile(r'repo:(arra-oracle-v\d|maw-js|oracle-studio|cross|bank-bot|mobiz-payment-gateway)')
+REPO_RE = re.compile(r'repo:(arra-oracle-v\d|maw-js|oracle-studio|cross|bank-bot|mobiz-payment-gateway|mb_agent_oracle_memory)')
 ROLES = {'brew-ops','pg-writer','pg-tester','bot-writer','technical-writer','tester'}
 
-stats = {'total':0, 'missing_repo':0, 'missing_role':0, 'no_tags':0}
+# Match either:
+#   inline:    tags: [a, b, c]
+#   YAML-list: tags:
+#                - a
+#                - b
+INLINE_RE = re.compile(r'^tags:\s*\[(.*?)\]', re.MULTILINE)
+LIST_RE   = re.compile(r'^tags:\s*\n((?:\s*-\s+.+\n?)+)', re.MULTILINE)
+
+def extract_tag_string(content: str) -> str | None:
+    m = INLINE_RE.search(content)
+    if m: return m.group(1)
+    m = LIST_RE.search(content)
+    if m:
+        # Flatten "  - tag1\n  - tag2" into "tag1, tag2" for downstream regex.
+        items = [line.strip().lstrip('- ').strip().strip('"\'') for line in m.group(1).split('\n') if line.strip()]
+        return ', '.join(items) if items else None
+    return None
+
+stats = {'total':0, 'missing_repo':0, 'missing_role':0, 'no_tags':0, 'principles_excluded':0}
 for root, _, files in os.walk(vault):
     if '.git' in root: continue
     if '/ψ/memory/' not in root: continue   # handoffs excluded
+    is_principle = '/resonance/' in root    # principles legitimately lack repo:/role: tags
     for f in files:
         if not f.endswith('.md'): continue
+        if is_principle:
+            stats['principles_excluded'] += 1
+            continue
         stats['total'] += 1
         with open(os.path.join(root,f), errors='ignore') as fd: c = fd.read()
-        m = re.search(r'^tags:\s*\[(.*?)\]', c, re.MULTILINE)
-        if not m: stats['no_tags'] += 1; continue
-        tstr = m.group(1)
+        tstr = extract_tag_string(c)
+        if tstr is None:
+            stats['no_tags'] += 1
+            continue
         if not REPO_RE.search(tstr): stats['missing_repo'] += 1
         if not any(r in tstr for r in ROLES): stats['missing_role'] += 1
 print(stats)
+print(f'no_tags pct:      {stats["no_tags"]*100/max(stats["total"],1):.1f}%')
+print(f'missing_repo pct: {stats["missing_repo"]*100/max(stats["total"],1):.1f}%')
+print(f'missing_role pct: {stats["missing_role"]*100/max(stats["total"],1):.1f}%')
 ```
 
 **Acceptance:**
