@@ -264,7 +264,56 @@ last-verified-at:        <ISO 8601, GMT+7>
 
 Rule: bump **only** when Steps 3–6 are complete. A partial Workflow 2 (e.g. 3 of 5 files updated, 2 deferred to Workflow 4) does **not** bump `.baseline` — the anchor must cite a commit where every in-territory file has been reconciled. Instead, leave `.baseline` at the old hash and note the deferrals in the retro + drift learnings.
 
-### Step 8 — Commit + PR (3 min)
+### Step 8 — Commit + PR (3 min new / 4 min amend)
+
+The watcher fires daily; if yesterday's W2 PR is still open, today's pass **extends** it instead of stacking a new PR. One open W2 PR per repo at a time. `.baseline` only bumps on Step 7 success, so amending preserves the chain integrity. Empirical precedent for the amend procedure below: retro `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/20/10.25_w2-extend-pr242-bank-rotation-f694dcd.md` (pg-writer manually applied this pattern to PR #242 before the spec was updated; the procedure here mirrors what they did).
+
+#### 8.0 — Detect open W2 PR (run first)
+
+```bash
+existing_pr=$(gh pr list --search "head:docs/track- state:open" --author "@me" \
+  --json number,headRefName,title --jq '.[0]')
+```
+
+- empty → continue with **8.B** (new PR path).
+- non-empty → switch to **8.A** (amend path).
+
+#### 8.A — Amend path (existing W2 PR open)
+
+```bash
+branch=$(jq -r .headRefName <<< "$existing_pr")
+pr_num=$(jq -r .number <<< "$existing_pr")
+
+git fetch origin
+git checkout "$branch"
+git merge --no-edit origin/main    # absorb new main commits
+# Conflicts in docs/* → resolve manually (rare, single-author docs).
+# Conflicts in code/* → out-of-territory; abort + retro note.
+```
+
+Layer the new doc updates on top with an "extend" subject so the audit trail is readable:
+
+```
+docs: extend track to <new-short> (W2 amend; cumulative <orig-baseline>..<new-short>)
+
+Adds <N> commits to PR #<pr_num>. Updated sections:
+- <doc path> §<anchor>
+
+Filed <N> new arra_learn entries (PR cumulative now: N+M).
+```
+
+Push + rewrite PR metadata to reflect the **cumulative** range:
+
+```bash
+git push origin "$branch"
+gh pr edit "$pr_num" \
+  --title "docs: track commits <orig-baseline-short>..<new-short> (W2, amended)" \
+  --body "<regenerated body — list ALL commits cumulatively, ALL doc sections, ALL arra_learn ids; link the prior W2 trace and the new one (chain continuation per Step 2b); end with 'I will not merge this PR. Awaiting human review.'>"
+```
+
+Skip to Step 8b. Do **not** open a second PR.
+
+#### 8.B — New PR path (no existing W2 PR)
 
 Branch: `docs/track-<short-hash>` (e.g. `docs/track-c8a91f2`).
 
@@ -393,6 +442,7 @@ Retro must capture:
 - Which files were fast-fixed vs deferred to Workflow 4.
 - Any `[UNVERIFIED]` left in the docs and why.
 - The next expected Workflow 2 trigger (next PR, expected area of change).
+- Whether this pass opened a new PR (Step 8.B) or extended an existing PR #<n> (Step 8.A) — and if 8.A, the commit count layered + the cumulative range now in the PR title.
 
 **After writing, verify no stray landed in the project tree:**
 
@@ -487,6 +537,7 @@ This workflow is complete **only** when all are true:
 - [ ] W2 trace (Step 2b) opened with `queryType="evolution"` and every commit in the range in `foundCommits`. If a prior baseline/W2 trace exists for this project, `arra_trace_link(prevTraceId=<head>, nextTraceId=W2_TRACE)` was called so the horizontal chain extends instead of forking.
 - [ ] Cross-repo sibling check (Step 2c) ran: you either looked for a bank-bot W2 trace in the last 24h and linked (+ filed `#cross-repo-sync` learning), **or** you recorded in the retro that no cross-repo signal was found, **or** you deferred because you ran first and noted the expected back-link. "Forgot to check" is not one of the options.
 - [ ] Step 0 ran to completion: Pass 1 (doc-anchored grep) left zero `answered`-status markers in pg-writer territory; Pass 2 (orphan scan) returned zero pg-writer-territory threads not found by Pass 1. On a daily-cron schedule, Step 0 must clear the same day it runs — Step 0 skip = zombie ageing.
+- [ ] **One open W2 PR per repo:** Step 8.0 ran (`gh pr list --search "head:docs/track- state:open" --author "@me"`). If non-empty → this pass took 8.A (amend); if empty → 8.B (new). At end of pass, count of open `docs/track-*` PRs by `@me` on this repo ≤ 1. The watcher fires daily; without this gate, every settled-commit cycle stacks a fresh PR superseding the prior unmerged one.
 - [ ] **Anchor discipline**: every `arra_thread(...)` call in this pass inserted a paired `[AWAITING_THREAD:<id>]` marker into a doc that is part of the same PR. Orphan thread count = 0. Check: `grep AWAITING_THREAD` in the PR diff ≥ count of `arra_thread(` calls recorded in the retro.
 
 ---
@@ -548,3 +599,4 @@ When this workflow produces a doc claim that needs **domain-expert verification*
 - 2026-04-19 (later, brew-ops) — **Step 9 retro path discipline + §The ψ/ trap added** after a live retro-leak observed on the 15:06 W2 pass. Prior Step 9 said only "Run `rrr`" — no path, no anti-trap warning. The agent wrote the retro to `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md` (stray in the product repo working tree) instead of `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/19/15.06_...` (vault via symlink). Not an agent failure — a spec ambiguity: `ψ/memory/...` looks like a vault path but resolves cwd-relative in a worktree. Observation triggered broader audit: 21 files already committed in mobiz git history from this exact trap across three failed cleanup-and-revert rounds (`414f568` / `2965cda` / `da4d13a`). Fix: Step 9 now mandates (a) pre-write `readlink` check on `~/.arra-oracle-v2/ψ`, (b) absolute-path-via-symlink for the destination, (c) explicit list of the 4 traps NOT to take, (d) post-write stray-find that must return empty, (e) documented recovery recipe if a stray is found. New `§The ψ/ trap` section at end-of-file explains the topology (vault vs symlink vs stray) + links the historical incidents. DoD tightened: one line for the absolute-path retro, one for the stray-check. Trap applies to all workflows that call `rrr` (W1/W4/W8/W9), but this pass fixes only W2 per scope; others inherit the same discipline on their next revision.
 - 2026-04-19 (later, user) — **Step 8b Telegram length target bumped 500 → 700 chars.** Hard cap unchanged at 800 (physical screen constraint). Prior target was intentionally conservative (mobile-first) but in practice the backstory-weave + flow-affected line + learnings split rarely fit under 500 without dropping the "why" sentence — the exact part the audience needs most. 700 gives ~2 more sentences of breathing room while still keeping the message inside one Telegram screen. No template change; composers should spend the added budget on the *why-this-pass-exists* paragraph, not extra bullets.
 - 2026-04-19 (later, user) — **§Common pitfalls: `arra_learn(pattern=...)` prose-only rule added** (sibling-synced with bank-bot W2 edit the same day). Backstory: six double-wrap learnings landed in the vault earlier today (2 mobiz, 4 bank-bot) because agents passed full markdown documents (including their own `---\ntitle: ...\n---` frontmatter) as `pattern`. arra_learn wraps its own frontmatter around whatever is passed, so a pre-wrapped input produces nested frontmatter, filename `_title-*`, and outer `title: ---` — the exact corruption signature verify.sh names "arra_learn double-wrap bug". A tool-side guard (`stripFrontmatterWrap` in Soul-Brews-Studio/arra-oracle-v3 `src/tools/learn.ts`) landed the same day and strips + warns on detection, but making the boundary explicit in the workflow means agents stop relying on the guard. verify.sh (Step 9d-equivalent pre-commit gate) still catches any that slip past; the pitfall bullet + tool guard are belt-and-suspenders.
+- 2026-04-20 (brew-ops) — **Step 8 split into 8.0 (detect) → 8.A (amend) / 8.B (new), with a new DoD line "one open W2 PR per repo".** Trigger: the W2 watcher (`arra-oracle-v3/scripts/w2-watcher.sh`) fired 5× overnight 2026-04-19→20 (3 bot-writer + 2 pg-writer triggers; settle 30 min, min_gap 2 hr — all per design), producing 6 stacked W2 PRs (3 on mobiz, 3 on bank-bot) all from the same `.baseline` (`1ffafc1` for mobiz, `0ea0e80` for bank-bot). Each new PR fully superseded the previous because the prior version's branch was static while `.baseline` did not bump (Step 7 only bumps on completion of in-territory work — none completed because PRs were unmerged). Root cause: Step 8 always created a fresh branch + PR without checking for an open W2 PR on the same repo. **Empirical precedent** for the amend procedure: 2026-04-20 10:25 GMT+7 retro at `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/20/10.25_w2-extend-pr242-bank-rotation-f694dcd.md` documents pg-writer manually extending PR #242 (`1ffafc1..386f0a7` extended to cover `f694dcd`, body rewritten, trace chain `9e30baaf → 6b2543d9` linked). The retro's Honest Feedback section explicitly requested this spec change verbatim: *"If this pattern persists, add a §Extension sub-procedure to the workflow covering: (1) branch switch + merge main, (2) layer one commit per new in-range commit, (3) update PR body rather than opening a new one, (4) trace chain continuation. Would have saved me 5 minutes of second-guessing."* The new 8.A mirrors those four steps. `.baseline` discipline unchanged (still bumps only when Step 7's "no in-territory deferrals" gate passes — extending the PR doesn't bump it either, baseline discipline is anchored to merge-time, not write-time). Sibling-synced; bank-bot W2 gets identical change.
