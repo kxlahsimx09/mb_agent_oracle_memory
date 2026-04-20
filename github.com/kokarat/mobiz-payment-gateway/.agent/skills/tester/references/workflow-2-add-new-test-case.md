@@ -81,20 +81,116 @@ sentences. This becomes the header comment block of the test.
 
 ## Step 3 — Check mock-bank readiness
 
-Does the feature require a mock-bank endpoint that doesn't exist yet?
+Mock-bank has **three fixture surfaces**, each a separate readiness
+concern. Missing any one produces a silent half-working test — the
+endpoint answers, the server-state flag toggles, but the behavior the
+test actually depends on never fires. Always check all three.
+
+### 3a. Server endpoints — API routes that simulate production
 
 ```bash
-grep -nE "app\.(get|post|put|delete)" integration-tests/mock-bank/server.js
+grep -nE "app\.(get|post|put|delete)\('/api/" integration-tests/mock-bank/server.js
 ```
 
-- **If all needed endpoints exist** → proceed to Step 4.
-- **If a new mock endpoint is required** → stop. Hand off to
-  `mock-bank-sync-check` workflow to add the endpoint in a separate
-  commit (user sign-off required). Only after that commit lands do you
-  come back to Step 4.
+These mirror real bank APIs (`/api/ktb/login`, `/api/transfer/approve`,
+etc.). Missing → standard `mock-bank-sync-check` hand-off.
 
-Never inline a mock-bank change into a test PR. Every mock change is its
-own review.
+### 3b. Admin toggle endpoints — fixture control plane
+
+```bash
+grep -nE "app\.(get|post|put)\('/admin/" integration-tests/mock-bank/server.js
+```
+
+Examples: `/admin/accounts`, `/admin/ktb/break-otp-confirm`,
+`/admin/shuffle-pending`, `/admin/set-config`. This category is
+test-only instrumentation (no production counterpart) — lives only on
+mock-bank.
+
+### 3c. Client-side HTML/JS fixtures — browser behavior
+
+```bash
+# flags + condition branches that gate mock behavior
+grep -rnE "_brk|_fixture|mock-only|// TEST|// Fixture" \
+  integration-tests/mock-bank/public/
+```
+
+**Critical distinction:** an admin toggle endpoint returning
+`{success: true}` does NOT mean the corresponding client-side
+behavior will fire. Admin toggle (3b) and client honor-it (3c) are
+**separate surfaces** — both must be ready.
+
+**Case study — 2026-04-20 debug session (Oracle thread #26):**
+`/admin/ktb/break-otp-confirm` toggled server state correctly
+(`state.ktbBreakOtpConfirm.has(acc) == true`), but `ktb.html:437`
+fetched the status flag at page load — before `/api/ktb/login` set
+the session cookie — so `getSessionBankAccount()` fell back to the
+mock-bank container's `BANK_ACCOUNT` env default, never matched the
+toggled account, and client-side `_brkOtpConfirm` stayed `false` for
+the entire page lifetime. Fixture silently no-op'd, test half-passed.
+Hours of debug before 3c surfaced as the broken layer.
+
+**Heuristic for checking 3c when the test depends on client behavior:**
+
+1. Grep the HTML/JS flag the test presupposes (e.g., `_brkOtpConfirm`).
+2. Read the condition that gates it. Common gates: URL query param,
+   session cookie, `document.readyState`, fetch timing.
+3. Ask yourself: *"If my test toggles the admin endpoint at time X,
+   when does the browser observe the flag change? Before or after the
+   action that should trigger the fixture?"*
+4. If you cannot answer confidently → **red flag** — trace via bot
+   container logs, mock-bank `console.log` instrumentation (temporary
+   only), or browser devtools (non-headless run) before trusting the
+   fixture.
+
+### 3d. Smoke-test the round-trip BEFORE drafting test logic
+
+If the test depends on a fixture + admin toggle (i.e. 3b+3c combo),
+verify round-trip works before writing Step 4:
+
+```bash
+# Toggle ON for target account
+curl -X POST "$MOCK_BANK_URL/admin/<fixture>" \
+  -H "Content-Type: application/json" \
+  -d '{"account_number":"<target>","enabled":true}'
+
+# Probe that the status endpoint (used by ktb.html/scb.html on page load)
+# reflects the toggle for THIS account specifically
+curl "$MOCK_BANK_URL/admin/<fixture>/status?account=<target>"
+# expect: enabled:true + account:<target>
+
+# Manual: open /<bank-page>?account=<target> via headless Playwright or
+# non-headless browser, trigger the action, observe whether the fixture
+# fires via: bot container logs, temporary mock-bank console.log,
+# or browser devtools.
+```
+
+If toggle → status mismatch, or status OK → client behavior not
+observed ⇒ 3c gap is open. Do NOT write around it in the test. Hand
+off to `mock-bank-sync-check` to fix the root cause.
+
+### 3e. If anything is missing — hand off to `mock-bank-sync-check`
+
+Covers all of:
+
+- New `/api/` endpoint (3a)
+- New `/admin/` toggle endpoint (3b)
+- New JS fixture block in a bank HTML page (3c)
+- **Edit to an existing fixture** (e.g. `break-otp-confirm` v2 → v3) —
+  treat as a change requiring its own review commit, not a "small fix"
+  inlined into the test PR.
+
+Never inline a mock-bank change into a test PR. Every mock change is
+its own review commit so `mock-bank-sync-check` can verify the full
+3-surface contract.
+
+### 3f. Follow-up (optional) — consult `FIXTURES.md`
+
+If `integration-tests/mock-bank/FIXTURES.md` exists, consult it first
+— it indexes all available fixtures as `(admin endpoint, client
+behavior, applies-to)` tuples. Faster than grepping. If it doesn't
+exist yet (not created at time of this workflow revision), you may
+seed it as a Step 8 learning artifact when your test adds a net-new
+fixture category.
 
 ## Step 4 — Draft the test script
 
