@@ -471,6 +471,32 @@ This workflow is complete **only** when all are true:
 - If you find a security-sensitive behavior that `CLAUDE.md` does not mention (e.g. an auth bypass path), **halt AND open a thread AND CC `security_auditor` in `arra_inbox`** before continuing. Do not document the vulnerability in public `docs/*` files until `security_auditor` has acknowledged — the thread is for internal context only, not public exposure.
 - If the baseline reveals that CURRENT and TARGET systems have started to share code (a merge instead of a migration), **halt** — that contradicts §3 of SKILL.md ("Current and Target, never mixed") and needs a human-level decision before the baseline can proceed. A thread here would be insufficient; this is an architectural drift that blocks the whole workflow.
 
+### Memory/search/trace anomalies — escalate to brew-ops (non-blocking)
+
+**Fire-and-forget.** Filing a handoff does NOT block this workflow or wait on brew-ops. Finish your pass normally — brew-ops picks up asynchronously on its next session. No `[AWAITING_...]` anchor, no Step 0 sweep. The handoff file itself is the durable record.
+
+If your pass encounters one of these patterns and cannot resolve it in scope:
+
+| Symptom | Likely cause |
+|---|---|
+| `arra_search` returned 0 for content you know exists | possible FTS5 / vector / tokenizer drift |
+| `arra_learn` succeeded but search can't find the new entry | possible indexer / vector connect race |
+| `arra_trace` succeeded but `arra_trace_get` returns missing fields | possible trace tool bug (e.g., 2026-04-21 trace project-corrupt incident) |
+| `arra_supersede` says success but old doc still appears un-flagged | possible supersede chain breakage |
+| Closed thread leaves `[AWAITING_THREAD:N]` markers stranded across repos | cross-repo orphan — see workflow-5 §13c |
+| `verify.sh` fails with new pattern not covered by existing fixes | possible new corruption class |
+| Path-typo files (`bank-bot<`, `pure-bot`, etc.) keep recurring | input-validation gap |
+
+Don't try to debug in-pass. File a handoff at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ/inbox/handoff/<YYYY-MM-DD>_<HH-MM>_brew-ops_<topic>.md
+```
+
+Format per `arra-oracle-v3/.agent/skills/brew-ops/references/workflow-5-memory-audit.md` §How this workflow gets triggered → §B (Escalated handoff). brew-ops picks up on next fresh wake; **your workflow does not wait.**
+
+If unsure whether to escalate: file a P2 handoff with `expected outcome: investigation only`. brew-ops can downgrade to "no action needed" cheaply; a missed real signal is more expensive.
+
 ---
 
 ## Change log for this workflow file
