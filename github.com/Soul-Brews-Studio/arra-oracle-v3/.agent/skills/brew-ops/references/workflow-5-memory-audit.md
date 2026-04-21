@@ -2,7 +2,7 @@
 description: Periodic health audit of Oracle memory system — verify P-001..P-004 compliance, catch bloat/orphans/drift, synthesize signals from peer retros
 owner: brew-ops
 autonomy: read-only
-cadence: weekly, on-request, or after major fleet/indexer changes
+cadence: daily-or-weekly, on-request, or after major fleet/indexer changes
 ---
 
 # Workflow 5 — Memory Audit
@@ -572,6 +572,132 @@ Severity: <PASS|WARN|FAIL>
 
 ---
 
+## Step 13c — Cross-repo orphan-marker sweep
+
+Pattern that triggered this step: 2026-04-21 thread #16 incident. Marker filed in `bank-bot/docs/flows/ktb-single-transfer-withdrawal.md` (4 locations); fix landed in same repo via commit `3359d08` (W9 PR #87); thread closed without a closing message; pg-writer's mobiz-side W9 sweep stripped its own sibling marker but couldn't reach bank-bot's KTB doc; bot-writer's W9 PR #87 only updated the §Implementation pointer (line 133), not the §Purpose/§Error paths/§Postconditions prose markers (lines 16, 92, 108, 109). Result: 4 markers stranded for 2 days until PR #89's Step 0 grep happened to catch them; PR #90 stripped.
+
+The W9 spec got a Step 4b (section-level marker reconciliation, sibling-synced 2026-04-21) and the workflow-thread-resolve spec got a closing-message rule (same session). Both are agent-side disciplines that catch the next case at write-time. Step 13c is the **observer-side safety net**: a periodic global sweep that catches whatever slipped past the write-time disciplines.
+
+### 13c.1 Pull recently-closed threads
+
+```bash
+bun --eval '
+const db = new (require("bun:sqlite").Database)(require("os").homedir() + "/.arra-oracle-v2/oracle.db");
+const since = Date.now() - 14 * 24 * 3600 * 1000;
+// Threads closed in the past 14d. Note: forum_threads has no closed_at column;
+// derive close-time from updated_at + status filter.
+const rows = db.query(`
+  SELECT id, title, status, project, updated_at,
+         (SELECT COUNT(*) FROM forum_messages WHERE thread_id = ft.id) AS message_count,
+         (SELECT MAX(role)  FROM forum_messages WHERE thread_id = ft.id ORDER BY created_at DESC LIMIT 1) AS last_role
+  FROM forum_threads ft
+  WHERE status = "closed"
+    AND updated_at > ?
+  ORDER BY updated_at DESC
+`).all(since);
+console.log("Recently-closed threads (past 14d):", rows.length);
+for (const r of rows) console.log(`  #${r.id} ${r.status} msgs=${r.message_count} last=${r.last_role || "(none)"} closed≈${new Date(r.updated_at).toISOString().slice(0,10)} — ${r.title.slice(0,70)}`);
+'
+```
+
+### 13c.2 For each closed thread, grep ALL flow docs across known repos
+
+```bash
+KNOWN_REPOS=(
+  "$HOME/Code/github.com/kokarat/mobiz-payment-gateway"
+  "$HOME/Code/github.com/kokarat/bank-bot"
+)
+
+for tid in <list of thread ids from 13c.1>; do
+  for repo in "${KNOWN_REPOS[@]}"; do
+    grep -rnE "\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED-STEP):${tid}\]" \
+      "$repo/docs/" 2>/dev/null
+  done
+done
+```
+
+Add new repos to `KNOWN_REPOS` as the fleet grows. Future enhancement: derive from `oracle_documents.project DISTINCT` rather than a hardcoded list.
+
+### 13c.3 Classify each surviving marker
+
+For each `(thread_id, repo, file:line)` triplet:
+
+| Pattern | Likely cause | Severity hint |
+|---|---|---|
+| Closed ≥ 7d, repo had W9/W2 pass since close, no `[DRIFT-N RESOLVED]` annotation nearby | Step 4b not running (or pre-Step-4b spec) | **P0** |
+| Closed ≥ 7d, repo had no W9/W2 pass since close | Agent inactive on this territory | **P0** (agent gap) |
+| Closed 3-7d, repo had no W9/W2 pass since close | Overdue but explainable | **P1** |
+| Closed 3-7d, repo had W9/W2 pass since close, single missed marker | Step 4b missed it (the 2026-04-21 case shape) | **P1** |
+| Closed < 3d, any state | Within natural cadence — give Step 4b / next pass a chance | **P2** (informational) |
+| Closed without human message (`message_count == 1` or `last_role == 'claude'`) | Close-without-fix anti-pattern (workflow-thread-resolve.md) | bump severity 1 level |
+
+The 7-day P0 threshold assumes daily audit cadence + agents running W9 at least every 2-3 days. If audit drops to weekly cadence, loosen to 14-day P0 to avoid false-positive noise from agents that just happened to skip a sweep cycle.
+
+To check if owning agent ran W9/W2 since close:
+
+```bash
+# Timestamp of last W9 retro for owning agent's territory
+LAST_W9=$(find ~/.arra-oracle-v2/ψ/memory/retrospectives -path "*flow-track*" \
+  -newer <(date -j -f "%s" "$close_unix" "+%Y-%m-%d %H:%M:%S" --) | head -1)
+# If empty → no W9 ran since close → P0/P1 per the matrix above
+```
+
+### 13c.4 Severity dispatch + remediation suggestion
+
+For each P0/P1 finding, generate a **strip suggestion** (do NOT execute — read-only workflow):
+
+```markdown
+**Suggested fix (manual, by owning agent):**
+
+Branch: `docs/strip-orphan-thread-<id>-<short-slug>` (in <owning-repo>)
+Files: <list of file:line>
+Action: replace `[AWAITING_THREAD:<id>]` with `[DRIFT-<id> RESOLVED via <fix-commit-short>]`
+       (matching convention from W2/W9 prior strips, e.g., bank-bot PR #90)
+Per P-001: retain surrounding prose; flip tense if it would be left as a stale
+"currently lost" / "currently unreachable" claim.
+```
+
+If the closer was a different agent than the doc owner, the suggestion is routed via `arra_thread` to the owning role rather than executed by brew-ops.
+
+### 13c.5 Output (feeds §15 report)
+
+```markdown
+## Cross-repo orphan markers (§13c)
+
+Closed threads with surviving markers (past 14d):
+
+P0 (>7d stale, agent inactive or sweep broken):
+- thread #<id> — closed YYYY-MM-DD (<N> day(s) ago, <message_count> message(s), last role <role>)
+  - <repo>/<file>:<line>[,<line>...]
+  - Owning agent: <role>; last W9/W2: <date> (<N> day(s) before close / no run since close)
+  - Suggested fix: <strip-PR template per §13c.4>
+
+P1 (3-7d stale OR single missed sweep):
+- (entries follow same shape)
+
+P2 (<3d, informational — within natural cadence):
+- (entries follow same shape, no remediation suggested)
+```
+
+### 13c.6 Acceptance
+
+| Recurring P0 markers | Severity for whole audit |
+|---|---|
+| 0 P0 + 0 P1 | PASS |
+| 0 P0 + 1-2 P1 | WARN |
+| 0 P0 + 3+ P1 | WARN (escalate) |
+| 1+ P0 | FAIL — orphan markers indicate the agent-side sweeps (W9 Step 4b, thread-resolve closing-message rule) are not running or not reaching this territory. Trace which discipline failed and surface in the audit report's Recommendations. |
+
+### 13c.7 Limitations (be honest about what this doesn't catch)
+
+- Markers in non-flow docs (`current-system.md`, runbooks) — V1 scope is `docs/flows/*.md` only. Extend to other paths if a real incident appears outside flow docs.
+- File rename / move since marker was filed — grep hits old path miss the new location. Future: integrate `git log --follow` for renames. V1 punts.
+- Multi-thread interactions (one marker depends on 2+ threads) — V1 treats each thread independently. Rare in practice.
+- Markers in commit messages, code comments, or retros — out of scope. Doc-level markers only.
+- Closed-and-genuinely-not-strippable cases (e.g., `wont-fix` decisions where the marker should remain as historical narrative). V1 surfaces as P2 informational; closer is expected to add a `// permanent-historical-marker:thread-<id>` annotation that future Step 13c runs grep-skip.
+
+---
+
 ## Step 14 — Narrative coherence sampling
 
 Structural checks (§2–§8) verify that data is *consistent*. This step asks a different question:
@@ -713,6 +839,10 @@ Produce a single markdown report with this structure:
 
 <200-word cross-agent signals summary>
 
+## Cross-repo orphan markers (§13c)
+
+<P0/P1/P2 entries per §13c.5 template; or "No orphan markers found" if clean>
+
 ## Recommendations (ordered)
 
 1. <most-urgent action>
@@ -774,7 +904,7 @@ tags:
 
 The audit is **complete** when:
 
-- [ ] All 15 steps executed (or explicitly skipped with reason).
+- [ ] All 15 steps executed (or explicitly skipped with reason). Step 13c (cross-repo orphan-marker sweep) is mandatory whenever the audit runs at daily cadence; on weekly or on-request runs it may be skipped if and only if Step 0 surfaced 0 closed-this-week threads (no orphan-candidate cohort to scan).
 - [ ] Report written with P0/P1/P2 sections + retro synthesis + metrics table.
 - [ ] At least 1 `arra_learn` filed with `#brew-ops #audit` tags.
 - [ ] If any P0 found: `arra_thread` opened addressed to the owning role (brew-ops, technical-writer, etc.) with reproduction + proposed fix; thread id listed in the audit report.
