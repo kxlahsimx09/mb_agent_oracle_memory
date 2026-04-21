@@ -199,24 +199,7 @@ Before grep-ing (3a/3b/3c), check if the fixture you need is already indexed:
 cat integration-tests/mock-bank/FIXTURES.md
 ```
 
-Entries are shaped `(admin endpoint, status probe, client behavior,
-mechanism, gate conditions, applies-to, used-by)` — faster than grepping
-and surfaces non-obvious gotchas (e.g. pre-login fetch timing gates,
-button-render races). If your fixture is **not** in FIXTURES.md, two
-possibilities:
-
-1. **True unknown** — proceed to 3a/3b/3c. If a new fixture is needed,
-   your hand-off adds it to FIXTURES.md as part of the `mock-bank-sync-check`
-   PR (see Step 3e).
-2. **FIXTURES.md has drifted** (a fixture exists but is undocumented) —
-   re-audit. Thread #28 opening message lists the audit candidates. Pick
-   the one you touched and document it in FIXTURES.md as part of your
-   test PR.
-
-FIXTURES.md is seeded partial (thread #28, 2026-04-21) with both
-`break-otp-confirm` entries (KTB + SCB). The audit TODO list at the
-bottom of that file is the backlog — fill it opportunistically when a
-test forces you into the context.
+Entries are shaped `(admin endpoint, client behavior, gate conditions, applies-to, used-by)` — faster than grepping and surfaces non-obvious gotchas (e.g. pre-login fetch timing gates). If your fixture is NOT in FIXTURES.md → either it's a true unknown (proceed to 3a/3b/3c) or FIXTURES.md has drifted (re-audit via this thread #28).
 
 
 ## Step 4 — Draft the test script
