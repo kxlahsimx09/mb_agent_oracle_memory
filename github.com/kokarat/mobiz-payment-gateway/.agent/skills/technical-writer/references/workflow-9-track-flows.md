@@ -249,6 +249,32 @@ For each (flow, step, target_file, target_line, target_short) in the affected po
 - **D vs "uncovered surface"**: D applies **only** when the new actor-crossing sits inside code territory an existing flow's pointer set already covers (near or between numbered steps). If the commit introduces a brand-new endpoint, service, or code path that **no** current flow covers, it is **not** D — it is an **uncovered surface**. For uncovered surfaces, do not open a thread; instead file an `arra_learn` tagged `#w8-handoff + #uncovered-surface + flow:<proposed-slug>` naming the new code + suggesting a W8 authoring pass. The next W8 consumer picks it up. W9 never authors flows, and class D is specifically about *gaps within existing flow territory*, not *greenfield territory*.
 - F is rare and serious; prefer calling W8 revision today over claiming W9 can re-ratify.
 
+### Step 4b — Section-level marker reconciliation (5 min)
+
+Step 4's classifier targets *pointer-level* drift (Class A/B for hash/line shifts, C/E for behavior/symbol). But threads also live as **section-level prose markers** in §Purpose, §Actors, §Preconditions, §Error paths, and §Postconditions — `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` annotations tied to drift-or-decision threads.
+
+When the W9 pass's commit range contains a fix that closes one of those threads, the **section-level markers must be swept in the same pass** — not deferred to "the next W9 sweep" or to a "small follow-up PR" that easily gets forgotten. See learning `2026-04-21_workflow-bug-orphan-marker-thread-16-driftb` for a real-world case where the deferral rule produced 2 days of orphan markers in a load-bearing flow doc (`bank-bot/docs/flows/ktb-single-transfer-withdrawal.md`, 4 markers stranded across §Purpose / §Error paths / §Postconditions while line 133's `// impl:` pointer correctly recorded `[DRIFT-N RESOLVED]`).
+
+For each flow doc touched in this pass:
+
+```bash
+grep -nE '\[(AWAITING_THREAD|RATIFICATION_PENDING):[0-9]+\]' docs/flows/<slug>.md
+```
+
+For each marker found:
+
+1. Look up the thread id via `arra_threads(status="closed")` + `arra_threads(status="answered")`.
+2. **If status = `pending` or absent from the closed/answered lists**: leave the marker. That's the intended state — the thread is still open.
+3. **If status = `closed` AND a commit in this W9 pass's range cites the fix** (commit message references the thread / drift / `// impl:` pointer in the same flow doc references the same fix commit hash):
+   - Strip the bracket marker text. Replace inline with `[DRIFT-N RESOLVED via <short-sha>]` matching the existing convention from §Implementation pointers.
+   - **Update prose tense as needed (P-004)**: if surrounding text says "this status is currently lost", change to "this status was lost prior to `<short-sha>`". Don't pretend the bug never existed (P-001), but don't lie about current state either (P-004). Past-tense + commit citation strikes the balance.
+4. **If status = `closed` / `answered` but no fix commit in this pass's range**: file `#orphan-marker + #flow-drift` learning + route per `workflow-thread-resolve.md` dispatch table. Do not strip on faith — the fix might live in a different repo (cross-repo case) or might never have happened (close-without-fix anti-pattern).
+5. **If status = `answered`** (human replied): open the thread inline, classify the answer per `workflow-thread-resolve.md`, and act accordingly. May trigger doc rewrite (handoff to W8 if section-level) or a `[DRIFT-N RESOLVED]` annotation if the answer is a fix-citation.
+
+**Cross-repo coverage**: per the marker-ownership convention from W8 ratifications (e.g., thread #21 Q4 — bank-bot's KTB doc is the bot-owned anchor for `[AWAITING_THREAD:15]` / `[AWAITING_THREAD:16]`), a marker may live in **this repo's** flow doc but the closing fix may land in a **different repo**. Step 4b sweeps both because the doc owner is the only agent that reaches its own doc — pg-writer's W9 sweep cannot reach bank-bot's KTB doc and vice versa.
+
+**Why this lives in Step 4b, not Step 0**: Step 0 (`workflow-thread-resolve.md` Pass 1) is the entry-time grep that catches markers in docs the agent intends to touch. Step 4b is the exit-time grep that catches markers in docs this pass's commit range *fixed*. The two are complementary — Step 0 prevents zombie threads from blocking forward progress; Step 4b prevents in-range fixes from leaving stranded markers behind.
+
 ### Step 5 — Apply actions per class (10–30 min)
 
 Apply the per-class action recorded in Step 4. Practical notes:
@@ -556,6 +582,7 @@ Step 9's pre-write symlink check + post-write stray-find is the fix. Both must p
 - [ ] Retrospective written with AI Diary + Honest Feedback.
 - [ ] Retro is the state carrier; no separate handoff step. Open thread ids + ratification-pending thread ids are listed in the PR body and anchored in the flow doc(s) via `[AWAITING_THREAD:<id>]` / `[RATIFICATION_PENDING:<id>]` — W8/W9 Step 0 picks them up on resolution.
 - [ ] **Vault audit hard gate passed (Step 7b)** — `verify.sh` ran **before** the Step 8 commit (not after, not as retro-time afterthought); both `✅ no double-wrap` and `✅ every indexed doc has a title:` present. Any `arra_learn` call this pass produced (up to 5 sites) that carried a corrupt `project` field was fixed at the source + old row superseded per P-001 before PR opens.
+- [ ] **Step 4b ran for every flow doc touched this pass** — every section-level `[AWAITING_THREAD:*]` / `[RATIFICATION_PENDING:*]` marker checked against thread status. Closed-with-in-range-fix markers stripped + tense-corrected (P-001 prose retained, P-004 tense fixed). Closed-without-in-range-fix markers got a `#orphan-marker + #flow-drift` learning routed per `workflow-thread-resolve.md`. Pending markers left intact. Cross-repo case (marker in this repo, fix in another) covered explicitly per the marker-ownership convention.
 - [ ] **One open W9 PR per repo:** Step 8.0 ran (`gh pr list --search "head:docs/flow-track- state:open" --author "@me"`). If non-empty → this pass took 8.A (amend); if empty → 8.B (new). At end of pass, count of open `docs/flow-track-*` PRs by `@me` on this repo ≤ 1. Independent of the W2 PR gate (different branch prefix).
 - [ ] **Retro path discipline (pre-write):** Step 9 ran the `readlink ~/.arra-oracle-v2/ψ` check; the canonical vault symlink resolved; retro written via the absolute `~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/...` path (NOT a relative `ψ/memory/...` path).
 - [ ] **Stray-check passed (post-write):** `find ~/Code/github.com/kokarat/mobiz-payment-gateway -path '*/ψ/memory/*' -name "*<slug>*" -not -path '*/.agent/*'` returned empty. The retro is NOT leaking into the product repo's working tree.
