@@ -64,6 +64,10 @@ created: <YYYY-MM-DD>T<HH:MM>+07:00
 <which §steps of workflow-5 are most relevant — e.g., "§3 vector + §4 path corruption", "§13c orphan markers only">
 ```
 
+**Format scope clarification.** This structured frontmatter is **brew-ops-specific** — required only for `to: brew-ops` escalations so the fresh-wake claude can parse trigger context, severity, and scope hints reliably. Pre-existing handoffs in `ψ/inbox/handoff/closed/` use a different, free-form markdown convention for agent-to-agent project status updates (e.g., "PR #N opened, here's context") — that convention remains valid for non-brew-ops handoffs. Don't retrofit old ones; do enforce this frontmatter on every new brew-ops escalation.
+
+**Non-blocking contract.** Filing this handoff does NOT block the calling workflow. The writer/tester/thread-resolve pass that files the handoff finishes its own Step N normally (retro, commit, PR) and does NOT wait on brew-ops to process. brew-ops picks up asynchronously on next fresh wake. No `[AWAITING_...]` anchor is used for handoffs — the handoff file itself is the durable record, and this directory is where brew-ops looks on every startup.
+
 To trigger brew-ops to pick up the handoff in a fresh wake:
 
 ```bash
