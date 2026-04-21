@@ -13,6 +13,85 @@ This is brew-ops' periodic health check for the Oracle memory system. It answers
 
 No writes to the vault except `arra_learn` of findings and (if urgent) an `arra_thread` to flag the issue for a specific role. Nothing is re-indexed, no files moved, no DB rows modified. The workflow **observes and reports** — fixes are separate, human-approved follow-ups.
 
+## How this workflow gets triggered
+
+Three trigger paths, all converge on the same workflow body. The trigger context is recorded in §15 report header (`trigger: <ad-hoc | handoff #<filename> | scheduled>`) and surfaces in the §17 Telegram message so the operator knows whether to expect a scoped or full-portfolio audit.
+
+### A — Ad-hoc by human
+
+Operator invokes brew-ops manually for an unscheduled check (e.g., after seeing weird search results in Studio, after a major fleet/indexer change, before/after a release):
+
+```bash
+maw wake brew-ops --fresh "รัน workflow-5 audit เต็มรูปแบบ. ส่ง Telegram report เมื่อจบ (Step 17)."
+```
+
+### B — Escalated handoff from another workflow
+
+Any workflow that hits memory/search/trace/insert anomalies it cannot resolve in scope drops a handoff at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ/inbox/handoff/<YYYY-MM-DD>_<HH-MM>_brew-ops_<topic>.md
+```
+
+Handoff frontmatter (mandatory):
+
+```yaml
+---
+to: brew-ops
+from: <calling-role>           # pg-writer / bot-writer / tester / etc.
+severity: P0|P1|P2
+source-workflow: <name>         # workflow-2-track-commit / workflow-9-track-flows / etc.
+related-thread-ids: [<id>...]   # optional, if applicable
+related-trace-ids: [<id>...]    # optional, if applicable
+related-pr: <url>               # optional, if applicable
+created: <YYYY-MM-DD>T<HH:MM>+07:00
+---
+
+## Symptom
+<one paragraph: what the calling agent observed that doesn't match expectations>
+
+## What was tried
+- <bullet: tool / query / search the calling agent ran + result>
+- ...
+
+## Evidence
+- <file paths, commit hashes, search log entries, doc IDs, etc.>
+
+## Expected outcome
+<what brew-ops should produce: investigation only? a fix-PR? a workflow-spec change? an arra_thread to a role?>
+
+## Scope hint (optional)
+<which §steps of workflow-5 are most relevant — e.g., "§3 vector + §4 path corruption", "§13c orphan markers only">
+```
+
+To trigger brew-ops to pick up the handoff in a fresh wake:
+
+```bash
+maw wake brew-ops --fresh "อ่าน handoff ใหม่ใน \$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ/inbox/handoff/ ที่ to:brew-ops แล้วยังไม่ถูก process. รัน workflow-5 audit ตามบริบทของ handoff: ถ้า scope hint ระบุ §steps แคบ ให้ scope ตามนั้น; ถ้าไม่ระบุ ให้รันเต็ม. ส่ง Telegram report (Step 17) ทุกครั้ง พร้อม cite handoff filename ใน trigger field."
+```
+
+The fresh-wake claude reads the handoff(s) → scopes the audit → reports back via Telegram (§17) AND files an `arra_learn` summary (§16). The handoff file is moved to `ψ/inbox/handoff/done/<YYYY-MM-DD>/` after processing (per inbox protocol).
+
+### C — Scheduled (cron / launchd)
+
+Future: a launchd timer runs the same `maw wake brew-ops --fresh "..."` command at daily cadence. Documented here for completeness; infrastructure not yet in place. When it lands, the §17 Telegram report becomes the human's primary signal of overnight memory health.
+
+## How OTHER workflows escalate to brew-ops
+
+Brief reference for cross-workflow authors. If your workflow (W2/W4/W8/W9/tester/etc.) encounters one of these patterns, file a handoff per §B above:
+
+| Symptom in your workflow | Why escalate to brew-ops |
+|---|---|
+| `arra_search` returned 0 for content you know exists | possible FTS5 / vector / tokenizer drift |
+| `arra_learn` succeeded but search can't find the new entry | possible indexer / vector connect race |
+| `arra_trace` succeeded but `arra_trace_get` returns missing fields | possible trace tool bug (e.g., 2026-04-21 trace project-corrupt incident) |
+| `arra_supersede` says success but old doc still appears un-flagged | possible supersede chain breakage |
+| Closed thread leaves `[AWAITING_THREAD:N]` markers stranded across repos | cross-repo orphan — see §13c |
+| `verify.sh` fails with new pattern not covered by existing fixes | possible new corruption class |
+| Path-typo files (`bank-bot<`, `pure-bot`, etc.) keep recurring | input-validation or pattern that escaped the existing typo guard |
+
+If you're unsure whether to escalate: file a P2 handoff with `expected outcome: investigation only`. brew-ops can downgrade to "no action needed" cheaply; a missed real signal is more expensive.
+
 ## Scope & rules
 
 - **Read-only on vault files, DB, and all services.** Use `arra_search`, `sqlite3` / `bun:sqlite`, `curl` to the HTTP API, and `find` on disk.
@@ -888,6 +967,94 @@ tags:
 - Modify vault files to "fix" issues inline.
 - Run the indexer — even if it would fix something, a fresh indexer run may hide drift from the next audit.
 
+## Step 17 — Telegram report (mandatory)
+
+Send a Thai-language summary to the brew-ops alert channel after every workflow-5 run. The audience is non-technical operators who want to know "ปกติไหม?" without opening Studio. The report is brief, easy-to-read, and surfaces P0/P1/P2 counts + top 3 findings.
+
+**Tool**: `mcp__brew-ops-telegram__telegram_send` (registered via `claude mcp add brew-ops-telegram` at user/local scope; bot identity = `brew_ops_alert_bot`, separate from the writer-fleet `telegram` MCP). Token + default chat_id live in `~/.claude.json` env vars (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID=2002026175`); spec stays token-free.
+
+**Template (Thai, easy-to-read)**
+
+Use `parse_mode: "HTML"` (the MCP supports `<b>`, `<i>`, `<code>`, `<a href="">link</a>`). One emoji per section header (🔔 / ✅ / ⚠️ / 🚨 / 📝). Hard cap ~700 chars.
+
+For an audit with **0 P0/P1/P2** (clean):
+
+```html
+<b>🔔 Oracle Audit — {YYYY-MM-DD HH:MM} GMT+7</b>
+trigger: {ad-hoc | handoff #&lt;filename&gt; | scheduled}
+
+✅ ทุกอย่างปกติ — ไม่พบปัญหาที่ต้องแก้
+
+<b>Metrics snapshot</b>
+docs={N} · FTS ratio={ratio} · vector={connected|degraded} · superseded={N}
+```
+
+For an audit with findings:
+
+```html
+<b>🔔 Oracle Audit — {YYYY-MM-DD HH:MM} GMT+7</b>
+trigger: {ad-hoc | handoff #&lt;filename&gt; | scheduled}
+
+<b>สรุป</b>
+✅ ผ่าน: {N} sections
+⚠️ เตือน: {N} P1
+🚨 ด่วน: {N} P0
+
+<b>ที่พบ (top 3)</b>
+1. {one-line, plain-language explanation of P0 or top P1}
+2. {...}
+3. {...}
+
+<b>Metrics</b>
+docs={N} · FTS ratio={ratio} · orphans={N} · superseded={N}
+
+📝 รายละเอียดเต็ม: <code>{retro filename}</code>
+```
+
+Plain-language guidance for the "ที่พบ" lines: avoid Oracle-internal vocabulary (UUIDs, trace ids, raw SQL). Use phrases an operator understands:
+
+- ❌ "9 path-corrupt rows in oracle_documents survived earlier supersede sweep with `learning_<short>_N` id pattern"
+- ✅ "พบ 9 row หลงเหลือใน index ที่ pattern เก่า — แก้แล้วใน audit นี้"
+
+If a finding is technical and unavoidable (e.g., "Oracle thread #16 closed without resolution message"), give a one-liner consequence the operator cares about: *"thread #16 ปิดโดยไม่มีคำตอบ → 4 markers ค้าง 2 วันใน bank-bot KTB doc"*.
+
+**Tool call**
+
+```
+mcp__brew-ops-telegram__telegram_send(
+  text: "<composed HTML from template above>",
+  parse_mode: "HTML",
+  disable_web_page_preview: true
+)
+```
+
+`chat_id` is omitted — the MCP uses `TELEGRAM_DEFAULT_CHAT_ID=2002026175` from its env. If you need to override (e.g., for a P0 critical alert that should also go to a different channel), pass `chat_id` explicitly.
+
+**Acceptance**
+
+- `telegram_send` returned `{ ok: true, message_id: <N>, chat_id: <ID> }`.
+- `message_id` captured in the §16 retro body so the message is traceable for edits/replies.
+- For zero-findings runs (the green-path), still send the short clean note — the channel cadence is part of the operator's "is it running?" signal. No send = the operator can't tell if the audit ran or skipped.
+
+**Fallback (Telegram unreachable)**
+
+If the MCP returns `{ ok: false, error: ... }` or the tool isn't loaded (fresh wake before MCP is registered):
+
+1. Do **not** block the workflow; the §16 `arra_learn` is the durable record.
+2. File one `arra_learn` tagged `#telegram-failed + #workflow-bug + brew-ops` with the intended HTML body (full, unescaped) + the error string. Next session can re-send from there.
+3. Note the failure in the §15 report under "Recommendations".
+
+**Why a separate bot from the writer-fleet `telegram` MCP**
+
+The writer-fleet bot (`mcp-telegram` registered at mobiz scope) sends W2/W8 narrative summaries. brew-ops audits are operationally distinct:
+
+- Different cadence (writer fleet fires on commits; brew-ops fires daily/handoff)
+- Different audience expectation (writer fleet = "what landed today"; brew-ops = "is the system healthy")
+- Different escalation severity (writer fleet rarely P0; brew-ops can hit P0 on indexer drift, P-001 violations, etc.)
+- Different bot identity in the same group chat helps the operator triage at a glance ("who's pinging me?")
+
+Same chat (`2002026175`), different bot — both surface in the same operator inbox.
+
 ## Escalation matrix
 
 | Condition | Action |
@@ -905,6 +1072,8 @@ tags:
 The audit is **complete** when:
 
 - [ ] All 15 steps executed (or explicitly skipped with reason). Step 13c (cross-repo orphan-marker sweep) is mandatory whenever the audit runs at daily cadence; on weekly or on-request runs it may be skipped if and only if Step 0 surfaced 0 closed-this-week threads (no orphan-candidate cohort to scan).
+- [ ] **Step 17 (Telegram report) sent** — `telegram_send` returned `{ ok: true, message_id }` and the message_id is captured in the §16 retro body. For zero-findings runs, the clean-note still sent. If the MCP failed: `#telegram-failed` learning filed with the intended HTML body + error string + a §15 Recommendations entry telling the operator to investigate the alert channel.
+- [ ] **Trigger context recorded** — §15 report header has `trigger: <ad-hoc | handoff #<filename> | scheduled>`. For handoff-triggered runs, the handoff filename is cited and the file is moved to `ψ/inbox/handoff/done/<YYYY-MM-DD>/` after processing.
 - [ ] Report written with P0/P1/P2 sections + retro synthesis + metrics table.
 - [ ] At least 1 `arra_learn` filed with `#brew-ops #audit` tags.
 - [ ] If any P0 found: `arra_thread` opened addressed to the owning role (brew-ops, technical-writer, etc.) with reproduction + proposed fix; thread id listed in the audit report.
