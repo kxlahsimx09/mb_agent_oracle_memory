@@ -191,13 +191,15 @@ Never inline a mock-bank change into a test PR. Every mock change is
 its own review commit so `mock-bank-sync-check` can verify the full
 3-surface contract.
 
-<!--
-Step 3f intentionally omitted pending `integration-tests/mock-bank/FIXTURES.md`.
-See Oracle thread #28 (`docs:tester — mock-bank FIXTURES.md inventory audit`).
-Once that audit completes and FIXTURES.md is comprehensive, restore Step 3f
-per the template in thread #28. Until then, rely on 3a/3b/3c greps — a
-half-filled FIXTURES.md would false-advertise coverage.
--->
+### 3f. Consult `integration-tests/mock-bank/FIXTURES.md` for known fixtures
+
+Before grep-ing (3a/3b/3c), check if the fixture you need is already indexed:
+
+```bash
+cat integration-tests/mock-bank/FIXTURES.md
+```
+
+Entries are shaped `(admin endpoint, client behavior, gate conditions, applies-to, used-by)` — faster than grepping and surfaces non-obvious gotchas (e.g. pre-login fetch timing gates). If your fixture is NOT in FIXTURES.md → either it's a true unknown (proceed to 3a/3b/3c) or FIXTURES.md has drifted (re-audit via this thread #28).
 
 
 ## Step 4 — Draft the test script
@@ -674,3 +676,10 @@ consult) removed — placeholder HTML comment left pointing at Oracle
 thread #28. Intention: restore Step 3f only after the fixture
 inventory audit (thread #28) completes; a partial FIXTURES.md would
 false-advertise coverage and readers would skip the 3a/3b/3c greps.
+**Revised:** 2026-04-21 (GMT+7, part 5) — Step 3f restored (FIXTURES.md
+seeded with `break-otp-confirm` × 2 per Oracle thread #28). The
+placeholder HTML-comment block at lines 194–200 was replaced with the
+live Step 3f section; the audit candidates from thread #28 remain open
+as a TODO list at the bottom of FIXTURES.md and will be filled
+opportunistically per thread #28's "let it accumulate organically"
+guidance. Thread #28 closed by the PR that landed this edit.
