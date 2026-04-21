@@ -420,6 +420,87 @@ EOF
 
 **Do not merge.** Wait for human review (AGENTS.md §9).
 
+## Step 7b — Telegram narrative summary (~2 min)
+
+After the PR is open and all `arra_learn` entries are filed, publish a **Thai-language narrative summary** to the tester alert channel via the **`mcp__tester-telegram__telegram_send`** MCP tool. The goal is a story, not a status dump — readers should understand *what was validated and what (if anything) regressed* after a 30-second glance.
+
+**Which MCP — important:** the mobiz project has two telegram MCPs registered in `~/.claude.json`:
+
+| MCP server | Purpose | Used by |
+|---|---|---|
+| `telegram` | writer fleet (shared team channel) | pg-writer W2 Step 8b |
+| `tester-telegram` | tester alerts (bot `@ampay_test_alert_bot`) | **this step** |
+
+Call `mcp__tester-telegram__telegram_send`, not the bare `telegram_send` — the writer fleet's channel is noisy for non-writer audiences, and the tester channel is already the operator's personal chat.
+
+**Audience:** mixed. A developer scanning between PRs AND an operator who wants to know whether today's validation caught a regression. Favor plain language over jargon.
+
+**Length target:** ~700 chars. Hard cap 800 (one Telegram screen on mobile).
+
+**Composition — tell the story**
+
+1. **Extract the core (this pass's own outputs):**
+   - Baseline bump (`$PRIOR_BASELINE..HEAD` commit range that was covered).
+   - Status breakdown (V/S/W/F/SUP/UNK counts).
+   - Count of `arra_learn` entries filed + top STALE/WRONG-SETUP root causes.
+2. **Weave in context:**
+   - `arra_search query="<test-file or feature area> tester" type=all limit=5` — prior learnings may explain a newly STALE test (e.g., a W2 doc drift that this validation just confirmed in the test suite).
+   - If a test flipped VALID → STALE in this pass, name the root-cause commit (from `docs/test-index.md` matrix).
+   - Regression candidates (`#regression-candidate` learnings) are the load-bearing signal for ops — surface them explicitly.
+3. **Rule of thumb:** reader finishes and feels "I know whether today's code broke any test coverage — I do not need to open the PR."
+
+**Structure (HTML, `parse_mode: "HTML"`)**
+
+Placeholders are `{curly braces}` — substitute before sending. Everything else is literal.
+
+```html
+<b>🧪 W1 tester — {หัวข้อหนึ่งบรรทัด}</b>
+
+{2–3 ประโยค: (1) baseline range ที่ validate + เหตุผลที่ต้อง re-validate (commit ไหน / pattern-lib เปลี่ยน?),
+ (2) เจออะไร (status breakdown + regression candidates ที่สำคัญที่สุด),
+ (3) action ต่อ — ถ้าไม่มี action ให้ยืนยันว่าชุดเทสยังตรงกับ code}
+
+<b>รายละเอียด</b>
+• Baseline: <code>{old-short}..{new-short}</code> ({N} production-surface commits)
+• Tests validated: {N} — V={v} · S={s} · W={w} · F={f} · SUP={sup} · UNK={u}
+• Learnings: {N} ({a} STALE · {b} WRONG-SETUP · {c} FLAKY · {d} regression-candidates)
+• PR: <a href="{pr-url}">#{pr-number}</a>
+
+<i>กดลิงก์ PR เพื่อรีวิว — ยังไม่ merge จนกว่าจะได้รับอนุมัติ</i>
+```
+
+Use `<code>`, `<b>`, `<i>`, `<a href="url">`. No `<br>`, `<hr>`, custom CSS.
+
+**HTML escaping:** escape `<`, `>`, `&` in interpolated prose. Shas and file paths are safe; a commit subject containing `<` or `&` is not.
+
+**Tool call**
+
+```
+mcp__tester-telegram__telegram_send(
+  text: "<composed HTML from template above>",
+  parse_mode: "HTML",
+  disable_web_page_preview: true
+)
+```
+
+`chat_id` omitted — the MCP server uses `TELEGRAM_DEFAULT_CHAT_ID` (set at registration).
+
+**Acceptance**
+
+- `mcp__tester-telegram__telegram_send` returned `{ ok: true, message_id: <N> }`.
+- `message_id` captured in the Step 8 retro body so the message is traceable if edits are needed.
+- If the pass produced **zero regressions** (all VALID, no STALE flips), still send a short note — "วันนี้ validate {N} tests, 0 regression, baseline bumped to <code>{sha}</code>" — so the channel reflects cadence and the operator knows W1 is still running.
+
+**Fallback (Telegram unreachable)**
+
+If `mcp__tester-telegram__telegram_send` returns `{ ok: false, error: ... }`, or the MCP is not registered (fresh machine):
+
+1. Do **not** block the W1 pass. The PR + `docs/test-index.md` are already real and useful — the Telegram is a notification, not a gate.
+2. File one `arra_learn` tagged `#telegram-failed + #workflow-bug + repo:cross` with the intended HTML body (full, unescaped) + the error string. Next session can re-send from there.
+3. Note the failure in the Step 8 retro.
+
+**Never** leak Oracle-internal ids (long trace ids, full uuids, raw handoff paths) into the channel. Shas and PR numbers are fine; everything else belongs in the `arra_learn` trail.
+
 ## Step 8 — Retrospective
 
 **Path discipline (load-bearing — see §The ψ/ trap).** Before writing, verify the vault symlink resolves:
