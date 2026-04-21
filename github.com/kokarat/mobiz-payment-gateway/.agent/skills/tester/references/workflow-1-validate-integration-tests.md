@@ -298,7 +298,7 @@ Schema:
 Priority scale (from the create-test-case workflow): 🔴 Critical / 🟡
 Important / 🟢 Nice-to-have.
 
-## Step 7 — Commit + PR
+## Step 7 — Commit + PR (3 min new / 4 min amend)
 
 Before committing, verify no broken frontmatter was introduced this session:
 
@@ -307,6 +307,60 @@ bash $(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/scripts/verify.sh | grep 
 # expect: ✅ no double-wrap + ✅ every indexed doc has a title:
 # if ❌ or ⚠️ — fix via /tmp/fix-frontmatter.py before proceeding
 ```
+
+The validate suite produces a single PR per pass. If a previous tester-validate PR is still open (human hasn't merged yet) the next run **extends** it instead of stacking — same shape as W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory commit `0357769`) and W9 Step 8.0/8.A/8.B (commit `0bdfdc3`), with the `feat/tester-validate-` branch prefix that distinguishes tester PRs from writer PRs. Tester W1's stack risk is lower than W2's because the date suffix gives each daily run a unique branch name, but two runs on consecutive days against the same set of unmerged docs (`docs/test-index.md` + `docs/test-coverage-gaps.md`) would conflict at merge time and produce duplicate `arra_learn` filings — the amend path avoids both.
+
+### 7.0 — Detect open tester-validate PR (run first)
+
+```bash
+existing_pr=$(gh pr list --search "head:feat/tester-validate- state:open" --author "@me" \
+  --json number,headRefName,title --jq '.[0]')
+```
+
+- empty → continue with **7.B** (new PR path).
+- non-empty → switch to **7.A** (amend path).
+
+### 7.A — Amend path (existing tester-validate PR open)
+
+```bash
+branch=$(jq -r .headRefName <<< "$existing_pr")
+pr_num=$(jq -r .number <<< "$existing_pr")
+
+git fetch origin
+git checkout "$branch"
+git merge --no-edit origin/main    # absorb new main commits
+# Conflicts in docs/test-index.md or docs/test-coverage-gaps.md are
+# expected if the prior pass's findings overlap with this pass —
+# resolve manually by accepting the union (P-001: prior findings retained,
+# new findings appended).
+# Conflicts in test-*.sh files → out-of-territory; abort + retro note
+# (tester does not patch tests in W1).
+```
+
+Layer the new validation results on top with an "extend" subject:
+
+```
+chore(tester): extend validate to baseline <new-sha> (W1 amend; cumulative since <orig-sha>)
+
+Adds N new test-*.sh evaluations to PR #<pr_num>. Status delta:
+- V: +x  S: +y  W: +z  F: +w  SUP: +v  UNK: +u
+- Filed N new arra_learn entries (PR cumulative now: N+M).
+
+No test scripts modified. No production code touched.
+```
+
+Push + rewrite PR metadata to reflect the **cumulative** range:
+
+```bash
+git push origin "$branch"
+gh pr edit "$pr_num" \
+  --title "chore(tester): validate integration tests — cumulative <orig-sha>..<new-sha> (W1, amended)" \
+  --body "<regenerated body — full Status breakdown across BOTH passes (cumulative), Top findings deduplicated, all arra_learn ids listed cumulatively, end with 'Do not merge. Wait for human review.'>"
+```
+
+Skip to Step 8. Do **not** open a second PR.
+
+### 7.B — New PR path (no existing tester-validate PR)
 
 On branch `feat/tester-validate-<date-GMT7>`:
 
@@ -498,3 +552,17 @@ explains the topology + cites historical incidents from W2's prior
 exposure. No tester-specific change to behavior; pure path
 discipline propagation. No bank-bot tester sibling to sync (bank-bot
 has no tester role yet).
+**Revised:** 2026-04-21 (GMT+7, brew-ops, later same session) —
+**Step 7 split into 7.0 (detect) → 7.A (amend) / 7.B (new).** Mirrors
+W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory commit `0357769`) and W9
+Step 8.0/8.A/8.B (commit `0bdfdc3`) with the `feat/tester-validate-`
+branch prefix that distinguishes tester PRs from writer PRs. Stack
+risk for tester W1 is lower than W2 (date suffix gives each daily run
+a unique branch name) but two unmerged passes on consecutive days
+would conflict at merge time on `docs/test-index.md` +
+`docs/test-coverage-gaps.md` and produce duplicate `arra_learn`
+entries — 7.A's amend path avoids both via single-PR-per-cycle
+discipline. Independent gate from W2's `docs/track-` PR gate and W9's
+`docs/flow-track-` PR gate (different branch prefix). Tester W1 not
+yet in the watcher today; this prepares the spec for when manual
+multi-day cadence happens or watcher integration lands.
