@@ -368,14 +368,80 @@ EOF
 
 ## Step 8 — Retrospective
 
-`rrr` into `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_tester-validate.md`.
-AI Diary and Honest Feedback are mandatory (AGENTS.md §7). Cover:
+**Path discipline (load-bearing — see §The ψ/ trap).** Before writing, verify the vault symlink resolves:
+
+```bash
+readlink ~/.arra-oracle-v2/ψ | grep -q "mb_agent_oracle_memory/ψ$" \
+  || { echo "FAIL: ~/.arra-oracle-v2/ψ does not resolve to the canonical vault — halt"; exit 1; }
+```
+
+**Write to:**
+```
+~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_tester-validate.md
+```
+
+**Never to any of these traps:**
+- ❌ `ψ/memory/retrospectives/...` — relative path, lands in your current cwd (worktree tree)
+- ❌ `./ψ/memory/retrospectives/...` — same
+- ❌ `<project-path>/ψ/memory/...` — absolute but wrong root; `project` is the product repo, not the vault
+- ❌ `.agent/../ψ/memory/...` — symlink traversal may misresolve through the vault's own project subdir
+
+`rrr` template — AI Diary and Honest Feedback are mandatory (AGENTS.md §7). Cover:
 
 - What the validation turned up that was surprising.
 - Any rule in the integration-test-writer SKILL that feels outdated or
   ambiguous after this run (propose a refinement, don't apply it).
 - Any patterns that recurred across multiple tests (e.g., "5 tests all
   miss `working_status: 'ready'`") — candidate for a shared helper.
+
+**After writing, verify no stray landed in the project tree:**
+
+```bash
+SLUG="<slug-you-used>"  # e.g., 14.05_tester-validate-first-baseline
+# This MUST return empty — any hit = stray leak, follow recovery in §The ψ/ trap.
+find ~/Code/github.com/kokarat/mobiz-payment-gateway \
+  -path '*/ψ/memory/*' -name "*${SLUG}*" \
+  -not -path "*/.agent/*" 2>/dev/null
+# And the canonical location MUST exist:
+ls ~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/${SLUG}.md
+```
+
+**Recovery if stray found** (do NOT just delete — content may not be in vault yet):
+```bash
+STRAY="<stray-path-from-find>"
+VAULT_DEST=~/.arra-oracle-v2/ψ/memory/retrospectives/YYYY-MM/DD/
+mkdir -p "$VAULT_DEST"
+if [ -f "$VAULT_DEST/$(basename "$STRAY")" ]; then
+  diff -q "$STRAY" "$VAULT_DEST/$(basename "$STRAY")" && rm "$STRAY" || echo "differs — merge manually"
+else
+  mv "$STRAY" "$VAULT_DEST"
+fi
+(cd $(ghq list -p Soul-Brews-Studio/arra-oracle-v3) && bun run index)
+```
+
+---
+
+## The ψ/ trap (why path discipline in Step 8 matters)
+
+`ψ/memory/` looks like a vault-relative path but is not. The **canonical vault** lives at:
+
+```
+$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ
+```
+
+surfaced to agents via the symlink `~/.arra-oracle-v2/ψ → <vault>/ψ`. Writes going through that symlink land in the vault correctly.
+
+A **stray `ψ/` directory at the root of this project repo** (`mobiz-payment-gateway/ψ/`) would look identical to a vault path but:
+
+1. **Not indexed by Oracle** — `arra_search` can't find it.
+2. **Invisible to other agents** — defeats the "shared memory" design.
+3. **May get git-tracked accidentally** — `ψ/` is NOT in this repo's `.gitignore` as of 2026-04-19. Once `git add` catches it, it enters the payment-gateway product repo's permanent history.
+
+Historical incidents:
+- **21 files** already committed to `mobiz-payment-gateway` git history from this trap, across three failed cleanup attempts (commits `414f568` / `2965cda` / `da4d13a`).
+- **2026-04-19 15:06**: a W2 run wrote its retro to `mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md` (stray) instead of `~/.arra-oracle-v2/ψ/memory/retrospectives/2026-04/19/15.06_...` (vault). Recovered by manually moving to vault + re-indexing (see `arra_search "ψ-trap-retro-leak"`). The same trap shape applies to tester W1 — only W2 was bitten that day because tester W1 hadn't run, but the retro template was vulnerable.
+
+Step 8's pre-write symlink check + post-write stray-find is the fix. Both must pass. Retro is not "done" until the stray check returns empty.
 
 ## Common pitfalls this workflow has hit before
 
@@ -415,3 +481,20 @@ across technical-writer territory — the tester template had not yet
 been exercised but was equally exposed). Sibling-synced with the
 technical-writer W2/W8 pitfall additions the same day. Common pitfall
 bullet added; Step 9 verify.sh gate remains the pre-commit backstop.
+**Revised:** 2026-04-21 (GMT+7, brew-ops) — **Step 8 retro path
+discipline + §The ψ/ trap section added.** Port from W2's 2026-04-19
+fix after the live retro-leak incident at
+`mobiz-payment-gateway/ψ/memory/retrospectives/2026-04/19/15.06_w2-
+track-commit-admin-cancel-payout.md` (21 stray files committed in
+mobiz history across 3 failed cleanup attempts). Tester W1 had been
+using a relative `ψ/memory/retrospectives/...` path which is exactly
+the trap shape — the workflow had never been bitten because tester W1
+had only run once (2026-04-16 first baseline), but the template was
+load-bearing for any future run. Step 8 now mandates pre-write
+`readlink ~/.arra-oracle-v2/ψ` check + absolute-path-via-symlink
+write target + post-write stray-find with documented recovery
+recipe. New §The ψ/ trap section (inserted before §Common pitfalls)
+explains the topology + cites historical incidents from W2's prior
+exposure. No tester-specific change to behavior; pure path
+discipline propagation. No bank-bot tester sibling to sync (bank-bot
+has no tester role yet).
