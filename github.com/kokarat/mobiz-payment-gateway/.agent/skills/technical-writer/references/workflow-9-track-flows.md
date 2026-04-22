@@ -116,6 +116,35 @@ Run `references/workflow-thread-resolve.md` (Pass 1 + Pass 2). Pay special atten
 
 **Gate:** Step 1 does not start until Pass 1 = 0 remaining answered markers and Pass 2 = 0 unfiled orphans. On a daily-cron schedule, skipping Step 0 ages zombie threads by 24h per cycle — same exposure as W2.
 
+### Step 0.5 — Consume sibling cross-repo-sync learnings (2 min, added 2026-04-22 — Gap 1 root-cause fix)
+
+Before scanning mobiz commits at Step 2, read any `#cross-repo-sync` learnings the sibling repo (bank-bot) filed since the last W9 baseline. These are the producer-side breadcrumbs that bot-writer's W2 leaves when their fix touches a file cited in a mobiz flow doc — without this consumption step they sit unread, which is exactly how the 2026-04-20 `2026-04-19_cross-repo-sync-pr-84-bank-bot-3359d08-is-the.md` incident drifted 2 days against `docs/flows/withdrawal-queue-single-bot-transfer.md`.
+
+```
+# Baseline date anchors the "since" window
+LAST_VERIFIED=$(awk '/last-verified-at:/{print $2}' docs/flows/.baseline)
+
+# Fetch recent sibling cross-repo-sync learnings
+arra_search(
+  query="#cross-repo-sync",
+  project="github.com/kokarat/bank-bot",
+  type="learning",
+  limit=50
+)
+# Filter results client-side: keep where frontmatter `created:` >= $LAST_VERIFIED
+```
+
+For each learning that survives the filter:
+
+1. **Read the body.** What bot-side file, contract, or flow did it describe?
+2. **Grep mobiz flow docs** for the mentioned file or shared-contract concept: `grep -ln "<bot-file-or-concept>" docs/flows/*.md`.
+3. **If any mobiz flow cites the changed bot surface** → add that flow to this pass's affected-flows list (the same list Step 3 builds from mobiz commits). Treat it as a drift candidate: the flow doc likely still describes pre-fix bot behavior.
+4. **If no mobiz flow cites it** → informational only; no action.
+
+**DoD:** either this step produced a non-empty consumed list (noted in retro), or the retro explicitly records "no fresh bot-side cross-repo-sync learnings since last baseline". "Forgot to check" is not an option.
+
+**Why this step exists.** Before 2026-04-22, `#cross-repo-sync` learnings were producer-only — bot-writer filed them at commit time (16 existed in vault by 2026-04-22) but no mobiz-side touch point read them. The originating incident (`2026-04-19_cross-repo-sync-pr-84-bank-bot-3359d08-is-the.md`) was filed with full content at bot-commit time, sat unconsumed until the 2026-04-22 session audit caught it. Closes the **consumer gap** from handoff `ψ/inbox/handoff/2026-04-22_12-57_brew-ops_workflow-gaps-memory-drift-session-2026-04-22.md` §Gap 1 incident #2.
+
 ### Step 1 — Grounding (3 min)
 
 ```
@@ -664,3 +693,4 @@ If unsure whether to escalate: file a P2 handoff with `expected outcome: investi
   1. **§Common pitfalls: `arra_learn(pattern=...)` prose-only rule added** — W9 fires arra_learn at up to 5 sites per pass (same exposure as W4/W8 which got this rule on 2026-04-19); the bullet was missing here. Tool-side `stripFrontmatterWrap` guard (arra-oracle-v3 `b816ca0`) catches violations, but spec-side prose-only discipline keeps agents from relying on the guard.
   2. **Step 9 path discipline + §The ψ/ trap section added** — port from W2's 2026-04-19 fix after the live retro-leak incident at mobiz/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md. Step 9 now mandates pre-write `readlink` check + absolute-path-via-symlink + post-write stray-find + recovery recipe. New §The ψ/ trap section explains the topology + cites historical incidents. DoD adds two lines (pre-write check passed, post-write stray-check empty). W9 had not been bitten by the trap (only W2 was 2026-04-19) but inherits the same discipline preemptively.
   3. **Step 8 split into 8.0 (detect) → 8.A (amend) / 8.B (new), with a new DoD line "one open W9 PR per repo".** Mirrors W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory `0357769`) using the `docs/flow-track-` branch prefix. Independent gate from W2's `docs/track-` PR gate. Important caveat: the daily W9 cron infrastructure does NOT yet exist (P2 follow-up flagged in the 2026-04-19 brew-ops audit, learning `2026-04-19_pattern-w9-step3-extractor-regex-fix`); when it lands, this Step 8 split prevents the same overnight stack-up that hit W2. Until then, manual W9 runs benefit from the same gate when humans run W9 multiple times in a day.
+- 2026-04-22 (brew-ops, Gap 1 root-cause fix — incident #2) — **Step 0.5 added: consume sibling cross-repo-sync learnings before Step 2 commit scan.** Fetches bank-bot-filed `#cross-repo-sync` learnings created since `docs/flows/.baseline` last-verified-at; for each, greps mobiz flow docs for the mentioned bot file/contract and adds matches to this pass's affected-flows list. Sibling-synced to bank-bot workflow-9-track-flows.md (symmetric rule, swaps producer/consumer direction). Driven by `2026-04-19_cross-repo-sync-pr-84-bank-bot-3359d08-is-the.md` — filed with complete content at bot-commit time 2026-04-20 but sat unconsumed for 2 days because W9 scanned only mobiz commits. Closes the consumer gap (producer side already filed; no mobiz touch-point read them).
