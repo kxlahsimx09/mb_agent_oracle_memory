@@ -92,6 +92,14 @@ I am the ecosystem operations expert; I do not own peer-role workflows, but I ke
 |---|---|---|
 | `mobiz-payment-gateway` | integration-test-writer | Pattern library consumed by `tester` workflows 1–3. Not an active agent — no `SKILL.md` Identity section beyond the template — just the mandatory script template + conventions. |
 
+### Active roles without numbered workflows yet
+
+Some roles are activated with only a SKILL.md and a framework — numbered workflows are authored as the role matures.
+
+| Repo | Role | Skill content | Status |
+|---|---|---|---|
+| `mb-next-payment-gateway` | system-architect | Five-phase system-design framework (requirements → high-level → deep-dive → scale/reliability → trade-off analysis). Embedded verbatim from `anthropics/knowledge-work-plugins/engineering/skills/system-design`. Produces ADRs + subsystem design docs; reads current-system prior art from Oracle via `arra_search #repo:mobiz-payment-gateway / #repo:bank-bot / #current`. | Activated 2026-04-22. Tag lifecycle: `#next`. Window: `next-architect-oracle`. No numbered workflows yet — workflows authored as the role encounters repeat patterns. |
+
 ### Canonical path (edit here, applies everywhere)
 
 ```

@@ -147,9 +147,22 @@ If a rule in this charter appears to conflict with a principle, **the principle 
 
 **Other fleet members (different repos, reachable via Oracle + maw):**
 
-| Role | Repo | Responsibility |
+| Role | Repo | System lifecycle | Responsibility |
+|---|---|---|---|
+| `technical-writer` (pg-writer) | `kokarat/mobiz-payment-gateway` | `#current` | Keeps docs synced with live code for the payment gateway. |
+| `technical-writer` (bot-writer) | `kokarat/bank-bot` | `#current` | Keeps docs synced with the Playwright bank-bot. |
+| `tester` (pg-tester) | `kokarat/mobiz-payment-gateway` | `#current` | Static-analysis auditor for integration-tests + mock-bank contract. |
+| `system-architect` (next-architect) | `kxlahsimx09/mb-next-payment-gateway` | `#next` | Designs the next-generation payment gateway. Reads current-system learnings via Oracle, produces ADRs + subsystem designs. Activated 2026-04-22. |
+
+**System-lifecycle tagging (ecosystem-wide).** Two families of product systems live in parallel:
+
+| Tag | Applies to | Repos |
 |---|---|---|
-| `technical-writer` (pg-writer) | `kokarat/mobiz-payment-gateway` | Keeps docs synced with live code for the payment gateway. |
+| `#current` | The running production stack | `kokarat/mobiz-payment-gateway`, `kokarat/bank-bot` |
+| `#next` | The next-generation successor under design/build | `kxlahsimx09/mb-next-payment-gateway` |
+| `#migration-map` | Cross-family mappings (current↔next) | any repo, usually paired with `#repo:cross` |
+
+`#current` vs `#next` is about *which system family* a fact describes, not about recency. A learning written today about `mobiz-payment-gateway` is still `#current` because the fact is about the current production system.
 
 We spawn a new agent only when the team has a named gap it cannot cover.
 
