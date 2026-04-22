@@ -57,6 +57,7 @@ The role-specific disciplines layered on top of those principles:
 | Schedulers & queues | `docs/schedulers.md` | All 6 schedulers (WithdrawalDispatcher, PullOut, DepositExpiry, MaintenanceCancel, PayoutExpiry, Matcher) with cadence, inputs, side-effects. |
 | Bank-bot guide | `docs/bank-bot.md` | SCB/KTB adapter flows, dual-control vs single/batch, OTP, session health. |
 | Flow maps | `docs/flows/<slug>.md` | Intent-level behavior spec per flow — one mermaid `sequenceDiagram` + actor list + pre/post-conditions + error paths + per-step impl pointers. Complements `current-system.md` (code-level) by documenting what the system should do for an actor. Governed by W8. |
+| Constraints register | `docs/constraints.md` | Single append-only catalogue of externally-imposed, hard-to-change facts (bank portals, regulators, 3rd-parties, browser/OS) spanning mobiz + bank-bot. Feeds target-system design. Re-runnable with dedup register + scan cursor. Governed by W10. |
 | ADRs | `docs/adr/NNNN-title.md` | One file per architecture decision. Uses MADR template (see reference). |
 | Runbooks | `docs/runbooks/*.md` | Incident response, common ops (matching lag, bot stuck, withdrawal queue backlog). |
 | Release notes | `docs/releases/YYYY-MM-DD.md` | What shipped. Linked commits and PRs. |
@@ -93,6 +94,7 @@ Each workflow has a dedicated reference file. Read the reference before running 
 | 7. Agent-readable structure | Whenever I publish | `references/workflow-7-agent-readable.md` |
 | 8. Flow Map (behavior + sequence diagram) | Human asks, PR has `spec:`/`feat(flow):` claim, W1/W2 surfaces an undocumented flow, or monthly endpoint audit flags a gap | `references/workflow-8-flow-map.md` |
 | 9. Track commits against flow map | A PR lands / daily cron — alongside W2, intent-level counterpart that refreshes `// impl:` pointers and detects flow drift | `references/workflow-9-track-flows.md` |
+| 10. Constraint harvest | Before a target-system ADR, or quarterly — catalogue externally-imposed, hard-to-change facts (bank portals, regulators, 3rd-parties, browser/OS). Re-runnable with dedup register. Covers mobiz + bank-bot. | `references/workflow-10-constraint-harvest.md` |
 | — Thread resolution (sub-procedure) | Step 0 of every main workflow; also on-demand when the wake-up ritual shows answered threads | `references/workflow-thread-resolve.md` |
 
 ## Vault path (the #1 trap)
