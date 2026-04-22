@@ -108,7 +108,7 @@ For each unique `<id>`:
 | `pending` | `claude` | No-op. Genuinely waiting for human. Leave marker. |
 | `pending` | `human` | **Run the 4-step resolution block.** Human has replied; Oracle's deployment does not auto-transition `pending` → `answered` when a human message lands (see §"Oracle status lifecycle" below). This is the **most common case** that actually fires in practice. |
 | `answered` | any | **Run the 4-step resolution block.** Normal case when / if Oracle auto-transitions in a future deployment. |
-| `closed` | any | **Orphan marker**: the thread was closed elsewhere but the doc still references it. Strip the marker in the same commit; file a one-line `#workflow-bug + #orphan-marker` learning naming the file + commit that introduced the marker. |
+| `closed` | any | **Orphan-closed marker.** Run the **orphan-close resolution block** (§below) before stripping — the closer may have landed a code fix without posting a closing-message citation, and a plain marker-strip risks hiding a real resolution (see originating incident `2026-04-20_workflow-bug-orphan-marker-thread-16-closed-without-answer`). |
 
 ### Oracle status lifecycle — deployment quirk (read this once, understand forever)
 
@@ -187,6 +187,33 @@ This means `arra_threads(status="answered", limit=50)` returns **0 results** on 
    ```
 
    Without this, the discovery sits as `superseded_by: null` in the DB and `arra_search` surfaces both claims as current — the replacement semantics of P-001 are defeated by implicit-only chaining. See handoff `ψ/inbox/handoff/2026-04-22_12-57_brew-ops_workflow-gaps-memory-drift-session-2026-04-22.md` §Gap 2 for originating incidents.
+
+### Orphan-close resolution block (added 2026-04-22, brew-ops — Gap 3)
+
+Runs when Pass 1's dispatch table hits the `closed | any` row, and also when Pass 2 discovers an un-anchored closed-without-answer thread in territory.
+
+The plain marker-strip that applied before 2026-04-22 was a silent-loss risk: a closer who landed a code fix without posting a closing-message citation (the §Step 4 rule added 2026-04-21) would see their fix disappear from the evidence chain. The 2026-04-20 thread #16 incident captured the class — bank-bot `3359d08` fixed the waiting_to_review drift the same day W9 stripped the marker as orphan. No ruled-drift learning, no supersede, fix invisible to search. See `ψ/memory/learnings/2026-04-20_workflow-bug-orphan-marker-thread-16-closed-without-answer.md` and handoff `ψ/inbox/handoff/2026-04-22_12-57_brew-ops_workflow-gaps-memory-drift-session-2026-04-22.md` §Gap 3 for the full trail.
+
+For each closed-without-answer thread (no human answer + no fix-commit citation in the final message):
+
+1. **Extract code areas** cited in `t.messages[0]`. File paths + line ranges, e.g. `scheduler/withdrawal_dispatcher.go:788`, `app.js:1244-1260`. Also note any drift-discovery learning the opener links via `source:` or inline.
+
+2. **Grep current HEAD** for those areas across the relevant repos:
+   - Primary repo (pg-writer: mobiz-payment-gateway; bot-writer: bank-bot).
+   - Sibling repo if the thread's code area is cross-repo (a mobiz thread about bank-bot behavior → grep bank-bot HEAD too, and vice versa).
+   - Locate candidate fix commits with `git log --format=%H -S "<drift keyword>" --after=<drift date> -- <file>` (the `-S` pickaxe catches added/removed strings; widen the keyword or drop `-S` and use `--after` alone if the pickaxe misses).
+
+3. **If code has changed materially since the drift was filed** — the closer landed a fix, just didn't cite it:
+   - File a `#ruled-drift + flow:<slug>` (or equivalent resolution) learning citing the fix commit + verifying the new behavior at current HEAD.
+   - Call `arra_supersede(oldId=<original-drift-discovery>, newId=<new-ruled-drift>, reason="thread-<id> resolved by commit <sha>")` per the `workflow-8-flow-map.md` §Step 5 supersede-pairing rule (Gap 2 discipline).
+   - Strip the anchor marker from the flow doc with a `[RESOLVED:YYYY-MM-DD]` annotation citing the fix commit.
+   - Optionally post a post-hoc closing message to the thread citing the fix commit so the trail is complete per §Step 4 (thread stays `closed`; message is for provenance).
+
+4. **If code is unchanged** — the close was premature or erroneous:
+   - File the `#workflow-bug + #thread-orphan` learning (the pre-2026-04-22 behavior) naming the thread id + opening commit + guess at which workflow leaked the close.
+   - **Re-open** the thread via `arra_thread(threadId=<id>, message="Bump: grep at HEAD <sha> shows <file>:<lines> unchanged since drift filed — reopening for human answer. See ψ/memory/learnings/<workflow-bug learning>.md.")` and **do not** re-strip the marker. The marker stays live until the thread is answered-effective.
+
+The previous single-action rule ("strip marker + file workflow-bug learning") is preserved as the step-4 fallback; step 3 is the new branch that catches silent-resolution cases.
 
 ### Pass 2 — Safety-net orphan scan
 
@@ -274,3 +301,4 @@ If unsure whether to escalate: file a P2 handoff with `expected outcome: investi
 - 2026-04-18 (later) — **Oracle status-lifecycle fix (Pass 1 + Pass 2).** Observed concretely via thread #3 (`bank-bot .env.example BOT_SECRET`): human had answered `ถาม dev มาแล้ว เค้าบอกว่า เป็นแค่ place_holder` on 2026-04-17 but the thread's `status` stayed `pending` — Oracle does not auto-transition `pending` → `answered` when a human reply lands. Pass 1 was classifying by `status` alone and missed every human-answered thread; Pass 2's `arra_threads(status="answered")` always returned 0. Fix: Pass 1 now dispatches on the **pair** `(status, last-message role)` — `pending + human-last-message` is operationally equivalent to `answered` and runs the 4-step resolution block. Pass 2 now scans both `pending` and `answered` thread lists, then filters by the same role rule. Added a §"Oracle status lifecycle" explainer so future agents understand why the rule looks unusual. Deployment-agnostic: if/when Oracle auto-transitions in the future, the old code path (`status=answered`) still works in parallel.
 - 2026-04-21 (brew-ops) — **Step 4 closing-message rule + matching anti-pattern bullet added.** Driven by the 2026-04-20 thread #16 incident: thread closed via `arra_thread_update(status="closed")` with zero messages beyond the opener (`message_count=1`). Result: 4 `[AWAITING_THREAD:16]` markers stranded across `bank-bot/docs/flows/ktb-single-transfer-withdrawal.md` for 2 days because pg-writer's mobiz-side W9 sweep (which would normally strip on close) had no fix-evidence to cite, and bot-writer (who actually landed the fix in commit `3359d08`, W9 PR #87) closed the thread without posting a citation. Cross-repo amplifier: the doc owner (bot-writer) and the marker filer (pg-writer via thread #13) live in different repos, so the closer's local commit history was not reachable. The W9 spec also got a Step 4b (section-level marker reconciliation) the same session to make the doc-side cleanup mandatory; this thread-resolve change makes the closer's side mandatory too — both sides of the loop now have a discipline. Sibling-synced; bank-bot copy gets identical change.
 - 2026-04-22 (brew-ops, Gap 2 fix from handoff `2026-04-22_12-57`) — **Step 5 supersede-sweep added to the 4-step resolution block.** When a thread's resolution files a `ruled-*` / `resolution-*` / `fix-*` / `followup-*` learning, verify every drift-discovery cited in its `source:` has `superseded_by` set; call `arra_supersede` if missing. Paired with `workflow-8-flow-map.md` §Step 5 "When filing ruled-/resolution-/followup- learnings" edit from the same pass. Sibling-synced to bank-bot copy. Same root cause: two 2026-04-19 drift-discoveries stayed `superseded_by: null` for 3–4 days because their `ruled-` replacements cited via `source:` only, never called the tool.
+- 2026-04-22 (brew-ops, Gap 3 fix from handoff `2026-04-22_12-57`) — **Orphan-close resolution block added; Pass 1 `closed | any` dispatch now routes through it.** Before 2026-04-22 the rule was a single action (strip marker + file `#workflow-bug + #orphan-marker` learning), which silently lost real resolutions when the closer had landed a code fix but failed the §Step 4 closing-message rule. New 4-step procedure: extract code areas from thread opener → grep current HEAD across primary + sibling repos → if code changed, file ruled-drift + `arra_supersede` (per workflow-8 §Step 5 Gap-2 rule) + strip marker with `[RESOLVED:YYYY-MM-DD]`; if unchanged, fall back to the old workflow-bug filing **and** re-open the thread with a bump message citing grep evidence (do not re-strip). Sibling-synced to bank-bot copy. Driven by 2026-04-20 thread #16 incident: bank-bot `3359d08` fixed drift #2 the same day W9 stripped the marker as orphan — this sweep would have detected the fix.
