@@ -152,6 +152,19 @@ In this Oracle deployment, thread status transitions are **not** fully automatic
 
    If no pass-scoped trace is open (Step 0 of a fresh workflow before the root trace exists), record the `arra_thread_update` call in the retro instead of creating an orphan trace.
 
+5. **Supersede sweep (added 2026-04-22, brew-ops).**
+
+   If this pass filed a `ruled-*`, `resolution-*`, `fix-*`, or `followup-*` learning as part of the resolution, verify that every drift-discovery learning cited in its `source:` frontmatter has a matching `superseded_by` pointer. Missing pointers → call `arra_supersede(oldId, newId, reason)` in the same pass per `workflow-8-flow-map.md` §Step 5 "When filing ruled-/resolution-/followup- learnings".
+
+   ```
+   arra_read(id="<old-discovery-id>")   # confirm superseded_by is set
+   # if null:
+   arra_supersede(oldId="<old-discovery-id>", newId="<new-ruled-id>", reason="<thread-n> resolution")
+   arra_read(id="<old-discovery-id>")   # re-verify
+   ```
+
+   Without this, the discovery sits as `superseded_by: null` in the DB and `arra_search` surfaces both claims as current — the replacement semantics of P-001 are defeated by implicit-only chaining. See handoff `ψ/inbox/handoff/2026-04-22_12-57_brew-ops_workflow-gaps-memory-drift-session-2026-04-22.md` §Gap 2 for originating incidents.
+
 ### Pass 2 — Safety-net orphan scan
 
 After Pass 1 resolves everything grep'd from docs, cross-check against the thread list. Because of the Oracle status-lifecycle quirk (see §"Oracle status lifecycle" above), scanning only `status="answered"` misses every thread where a human actually replied. Pass 2 must scan **both** `pending` and `answered`, then filter by last-message role the same way Pass 1 does:
@@ -235,3 +248,4 @@ If unsure whether to escalate: file a P2 handoff with `expected outcome: investi
 - 2026-04-17 (later) — **Calibration from pg-writer's W9 first-run retro** (bug applies to both instances): Pass 1 dedupe fixed — extract id with `sed`, `sort -u` the ids (not the `<file>:<line>:<marker>` strings), then for each unique id locate the load-bearing anchor (first/top-most occurrence). Prior `sort -u` would double-process an id mentioned in both header and §Change log. Added practical heuristic for where each marker's anchor lives.
 - 2026-04-18 — **Oracle status-lifecycle fix (Pass 1 + Pass 2).** Observed via thread #3 (`bank-bot .env.example BOT_SECRET`) from bot-writer's W1 first-run retro (16.58): human answered on 2026-04-17 (`ถาม dev มาแล้ว เค้าบอกว่า เป็นแค่ place_holder`) but thread `status` stayed `pending` — Oracle does not auto-transition `pending` → `answered` on human reply. Pass 1 and Pass 2 now dispatch on `(status, last-message role)` pair instead of status alone. `pending + human-last-message` is treated as answered-effective and runs the 4-step resolution block. Pass 2 scans both `pending` and `answered` lists then filters by role. Added §"Oracle status lifecycle" explainer. Mirrored from pg-writer's copy; no bot-specific adjustments beyond territory keywords.
 - 2026-04-21 (brew-ops) — **Step 4 closing-message rule + matching anti-pattern bullet added** (sibling-synced with mobiz copy). Driven by 2026-04-20 thread #16 incident: bot-writer landed the dispatcher fix (commit `3359d08`, W9 PR #87) and closed thread #16 via `arra_thread_update(status="closed")` but did not post a closing message. Result: 4 `[AWAITING_THREAD:16]` markers stranded across this repo's `docs/flows/ktb-single-transfer-withdrawal.md` for 2 days; pg-writer's mobiz-side W9 sweep had no fix-citation to act on; the orphan was finally caught by PR #89's Step 0 sweep and stripped via PR #90. The W9 spec also got a Step 4b (section-level marker reconciliation) the same session — both sides of the close-loop now have explicit discipline.
+- 2026-04-22 (brew-ops, Gap 2 fix from handoff `2026-04-22_12-57`) — **Step 5 supersede-sweep added to the 4-step resolution block** (sibling-synced with mobiz workflow-thread-resolve.md). When a thread's resolution files a `ruled-*` / `resolution-*` / `fix-*` / `followup-*` learning, verify every drift-discovery cited in its `source:` has `superseded_by` set; call `arra_supersede` if missing. Paired with `workflow-8-flow-map.md` §Step 5 edit from the same pass. Same root cause as mobiz copy: two 2026-04-19 drift-discoveries sat `superseded_by: null` for 3–4 days.
