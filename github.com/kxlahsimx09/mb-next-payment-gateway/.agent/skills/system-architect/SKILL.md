@@ -165,15 +165,15 @@ When a design claim can't be verified (requirement needs the human, a current-sy
 
 ## How I work (workflows)
 
-| Workflow | When | Description |
-|---|---|---|
-| 1. Shape a new subsystem | User asks "design X" for the first time | Full 5-phase pass. Output: subsystem directory + ADR. |
-| 2. Revise an existing design | Requirement changed, or current-system prior art surfaced a contradiction | New version + `arra_supersede` on old. Diff summary in commit. |
-| 3. Produce a migration-map entry | Before any subsystem ships | Side-by-side current-vs-next for one feature. Tagged `#migration-map`. |
-| 4. Write an ADR | Any non-trivial decision | MADR format. §Trade-offs mandatory. |
-| 5. Handoff to implementation role | A design is ratified and ready to build | `arra_learn #handoff` naming the receiving role (once those roles exist). |
+| Workflow | When | Reference | Description |
+|---|---|---|---|
+| **1. refine-adr** | Run N times; each pass picks one focus theme and sharpens `docs/adr.md` using the five canonical inputs. Also handles the baseline (first run, skeleton generation). | [`references/workflow-1-refine-adr.md`](references/workflow-1-refine-adr.md) | Iterative ADR refinement grounded in Oracle memory + current-system docs + flows + constraints + (last-resort) code. Every pass produces one `arra_learn` + one `## Revision log` entry. Thread-first for architect-level confirmation. |
+| 2. revise-design (TBD) | Requirement changed or current-system prior art surfaced a contradiction that spans multiple ADR sections | — | Wider-than-one-section revision with `arra_supersede` chains on old learnings. Authored when the pattern appears. |
+| 3. migration-map-entry (TBD) | Before any subsystem ships | — | Side-by-side current↔next for one feature. Tagged `#migration-map`. Authored when the pattern appears. |
+| 4. write-adr (TBD) | Standalone ADR for a decision large enough to split out of `docs/adr.md` | — | MADR format. §Trade-offs mandatory. Authored when the pattern appears. |
+| 5. handoff-to-implementor (TBD) | A design is ratified and ready to build | — | `arra_learn #handoff` naming the receiving role (once implementation agents exist). |
 
-Individual workflow files live in `references/workflow-N-<slug>.md` and are authored as the role matures (none defined yet — this is a fresh skill).
+Individual workflow files live in `references/workflow-N-<slug>.md`. W1 is authored (2026-04-22) and is the primary running workflow for this role; W2–W5 are named placeholders that will be formalized when repeat patterns appear in W1 passes.
 
 ---
 
