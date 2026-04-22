@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-single-transfer-withdrawal, ktb, withdrawal-queue, single-transfer, batch-transfer, ratified, s2, thread-21, revision]
-created: 2026-04-19
-source: W8 ratification via Oracle thread #21 (closed), 2026-04-19 GMT+7
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: ratified revision — flow ktb-single-transfer-withdrawal (S4 to S2 via Oracle thread 21, Q5 scope REVISE)
 tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-single-transfer-withdrawal, ktb, withdrawal-queue, single-transfer, batch-transfer, ratified, s2, thread-21, revision]
 created: 2026-04-19

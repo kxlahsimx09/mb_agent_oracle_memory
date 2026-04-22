@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, current, drift, ktb, login, otp, imap-fallback, confirm-sentinel, for-bot-writer]
-created: 2026-04-19
-source: W8 authoring pass ktb-login-with-otp, 2026-04-19T18:20+07:00 — surfaced during doc authoring from banks/ktb/login.js + app.js inspection
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: two drifts surfaced by ktb-login-with-otp W8 pass (imap-fallback missing, confirm-sentinel missing)
 tags: [technical-writer, repo:bank-bot, current, drift, ktb, login, otp, imap-fallback, confirm-sentinel, for-bot-writer]
 created: 2026-04-19

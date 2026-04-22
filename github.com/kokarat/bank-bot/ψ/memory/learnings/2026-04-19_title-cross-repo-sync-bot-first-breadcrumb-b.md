@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, repo:cross, repo:mobiz-payment-gateway, current, flow, flow:ktb-login-with-otp, cross-repo-sync-bot-first, ktb, login, otp, bot-first]
-created: 2026-04-19
-source: W8 authoring pass ktb-login-with-otp, 2026-04-19T18:20+07:00
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: cross-repo-sync-bot-first breadcrumb (bot side) — ktb-login-with-otp has no mobiz sibling, only a gateway-OTP-relay crossing
 tags: [technical-writer, repo:bank-bot, repo:cross, repo:mobiz-payment-gateway, current, flow, flow:ktb-login-with-otp, cross-repo-sync-bot-first, ktb, login, otp, bot-first]
 created: 2026-04-19

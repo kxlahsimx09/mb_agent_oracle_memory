@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:mobiz-payment-gateway, current, payout, admin-cancel, wallet-refund, withdrawal-queue, financial]
-created: 2026-04-19
-source: controllers/PayoutController.go:913-1079 + routes/payout.go:31 @ 153a4f6
-project: github.com/kokarat/mobiz-payment-gateway
----
-
-# ---
-
----
 title: payout admin-cancel endpoint — PUT /payouts/:id/cancel with queue-first cascade and wallet refund
 tags: [technical-writer, repo:mobiz-payment-gateway, current, payout, admin-cancel, wallet-refund, withdrawal-queue, financial]
 created: 2026-04-19

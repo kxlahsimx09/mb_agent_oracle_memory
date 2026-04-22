@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [telegram-failed, workflow-bug, repo:cross, repo:mobiz-payment-gateway, w2]
-created: 2026-04-19
-source: W2 Step 8b fallback — 2026-04-19T15:05+07:00 mobiz-payment-gateway PR #230
-project: github.com/kokarat/mobiz-payment-gateway
----
-
-# ---
-
----
 title: telegram-failed — W2 Step 8b delivery 404 on mobiz PR #230 summary
 tags: [telegram-failed, workflow-bug, repo:cross, repo:mobiz-payment-gateway, w2, bot-delivery]
 created: 2026-04-19

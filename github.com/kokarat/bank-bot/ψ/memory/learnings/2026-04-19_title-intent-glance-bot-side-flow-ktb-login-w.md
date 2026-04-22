@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-login-with-otp, ktb, login, otp, playwright, reverse-engineered, ratification-pending, s4, bot-first]
-created: 2026-04-19
-source: W8 authoring pass ktb-login-with-otp, 2026-04-19T18:20+07:00 — re-filed after project-path typo
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: intent-glance bot-side flow ktb-login-with-otp (split via thread 21 Q5 REVISE, thread 23 pending)
 tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-login-with-otp, ktb, login, otp, playwright, reverse-engineered, ratification-pending, s4, bot-first]
 created: 2026-04-19

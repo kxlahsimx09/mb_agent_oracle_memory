@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [cross-repo-sync, flow:deposit-auto-match-from-statement, trace-linking, schema-constraint]
-created: 2026-04-19
-source: bank-bot@b423eca, mobiz@1ffafc1, traces 7f046c32 + 65b549a4
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: cross-repo-sync — bank-bot W2 (4ca226c..b423eca) ↔ mobiz W2 (37dfb26..1ffafc1) share the deposit-auto-match-from-statement flow doc ratification
 tags: [technical-writer, repo:cross, repo:bank-bot, repo:mobiz-payment-gateway, current, cross-repo-sync, flow:deposit-auto-match-from-statement]
 created: 2026-04-19

@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [viewer-loop, browser-recycle, session-recovery, fire-and-forget, liveness-probe]
-created: 2026-04-19
-source: app.js:1095-1125@b423eca, PR #74 commit 2d8ec5e
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: pattern — viewerLoop self-recovers from maker-initiated browser recycle (page-evaluate probe + ensureBrowser + getSession)
 tags: [technical-writer, repo:bank-bot, current, scb, viewer, browser-recycle, session-reuse, incident, resilience]
 created: 2026-04-19

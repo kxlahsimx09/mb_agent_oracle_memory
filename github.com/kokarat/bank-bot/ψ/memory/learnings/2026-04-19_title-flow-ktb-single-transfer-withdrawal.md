@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-single-transfer-withdrawal, ktb, withdrawal-queue, single-transfer, batch-transfer, playwright, reverse-engineered, ratification-pending, s4]
-created: 2026-04-19
-source: W8 flow-map authoring pass, 2026-04-19T17:50+07:00
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: flow — ktb-single-transfer-withdrawal — bot-side intent at a glance
 tags: [technical-writer, repo:bank-bot, current, flow, flow:ktb-single-transfer-withdrawal, ktb, withdrawal-queue, single-transfer, batch-transfer, playwright, reverse-engineered, ratification-pending, s4]
 created: 2026-04-19

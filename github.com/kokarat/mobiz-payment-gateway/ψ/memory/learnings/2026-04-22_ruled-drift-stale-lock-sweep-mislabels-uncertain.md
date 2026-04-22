@@ -1,0 +1,14 @@
+---
+title: ruled-drift — stale-lock sweep mislabels uncertainty as failed (fix shipped 2026
+tags: [technical-writer, repo:mobiz-payment-gateway, current, followup, ruled-drift, scheduler, withdrawal-dispatcher, stale-sweep-resolved, invariant-upheld, w4-queue-closed, payout, thread-22-invariant]
+created: 2026-04-22
+source: mobiz commit 8bf3a52 PR #249 (2026-04-20) + verification at HEAD 4aaec2c (scheduler/withdrawal_dispatcher.go:730-799) + 2026-04-20_cross-repo-sync-2026-04-20-mobiz-249-8bf3a52-s + original ruling 2026-04-19_ruled-drift-stale-lock-sweep-mislabels-uncertain
+project: github.com/kokarat/mobiz-payment-gateway
+---
+
+# ruled-drift — stale-lock sweep mislabels uncertainty as failed (fix shipped 2026
+
+ruled-drift — stale-lock sweep mislabels uncertainty as failed (fix shipped 2026-04-20 via PR #249, 8bf3a52). Supersedes the 2026-04-19 ruling (`2026-04-19_ruled-drift-stale-lock-sweep-mislabels-uncertain`) which classified this drift as "fix later, queued for W4". Status now: **RESOLVED, not in W4 queue.** Fix commit: `8bf3a52` in PR #249, merged 2026-04-20. Scope: `scheduler/withdrawal_dispatcher.go:730-799` `releaseStaleLocksIfNeeded` — the 10-minute stale-processing sweep now triages on `bank_transaction_id`: non-empty (bot already called `/set-txn-id`, maker submitted transfer to bank) → `services.MarkWaitingToReview` with reason "Processing timeout (10 min) after bot submitted transfer (bank_transaction_id present). Admin must verify via bank statement before refund."; empty (bot crashed pre-submit, no transfer reached bank) → `services.MarkFailed` with reason "Processing timeout (10 min) — bot may have crashed before submit. Check bank statement before retrying.". This upholds the thread #22 invariant ("`failed` is proof-negative-only; uncertainty belongs in `waiting_to_review`") by routing TRANSFER_ID-evidence uncertainty to `waiting_to_review` instead of blind `MarkFailed`. Closure basis: code evidence at HEAD `4aaec2c` (`services.MarkWaitingToReview` branch at `:779-787`, `services.MarkFailed` branch at `:789-794`) + the `2026-04-20_cross-repo-sync-2026-04-20-mobiz-249-8bf3a52-s.md` learning which documents PR #249 as the mobiz-side closure of two invariant-violation paths (this one + the Revert branch in `tryReconcileAfterMarkFailed`). Why this ruling was delayed: at 2026-04-19 ruling time, the fix had not been written yet; the "fix later, queued for W4" classification was correct as of that date. PR #249 shipped the following day (2026-04-20), but no explicit `arra_supersede` was filed at that time to close the W4-queued claim — this learning closes that gap. Related companion closure: `2026-04-22_ruled-drift-in-payout-auto-reconcile-from-statement-q.md` (new Q(a) drift, different failure mode — wallet-insufficient at reconcile helper — still open W4).
+
+---
+*Added via Oracle Learn*

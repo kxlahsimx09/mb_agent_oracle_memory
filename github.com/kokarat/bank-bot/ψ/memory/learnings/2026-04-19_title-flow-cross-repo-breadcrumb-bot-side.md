@@ -1,14 +1,4 @@
 ---
-title: ---
-tags: [technical-writer, repo:bank-bot, repo:cross, repo:mobiz-payment-gateway, current, flow, flow:ktb-single-transfer-withdrawal, cross-repo-sync, mobiz-payment-gateway, ktb, withdrawal-queue, single-transfer, batch-transfer]
-created: 2026-04-19
-source: W8 flow-map authoring pass, 2026-04-19T17:50+07:00
-project: github.com/kokarat/bank-bot
----
-
-# ---
-
----
 title: flow cross-repo breadcrumb (bot side) — ktb-single-transfer-withdrawal crosses to mobiz withdrawal-queue-single-bot-transfer
 tags: [technical-writer, repo:bank-bot, repo:cross, repo:mobiz-payment-gateway, current, flow, flow:ktb-single-transfer-withdrawal, cross-repo-sync, mobiz-payment-gateway, ktb, withdrawal-queue, single-transfer]
 created: 2026-04-19
