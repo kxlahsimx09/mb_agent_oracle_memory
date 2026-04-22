@@ -79,6 +79,7 @@ I am the ecosystem operations expert; I do not own peer-role workflows, but I ke
 | `bank-bot` | technical-writer | **4** reconcile-drift | (bot-flavored) drift reconciliation with A/B/C outcomes. |
 | `bank-bot` | technical-writer | **8** flow-map | (bot side, cross-repo by nature) reverse-engineer bot-owned user flows into `docs/flows/<slug>.md`. Adds two steps absent from pg-writer's W8: §9b reciprocal `#cross-repo-sync` breadcrumb (mandatory, plus index learning when mobiz counterpart exists) and §9c four-query self-test proving the cross-repo link is discoverable via search + trace. Created 2026-04-19 to close the one-way-breadcrumb asymmetry (17 of 18 existing `#cross-repo-sync` learnings were mobiz-only). Post-first-pass calibration 2026-04-19 (later): §Design notes (decomposition asymmetry + loop representation framework) + Step 9d verify.sh hard gate added; sibling-synced to pg-writer W8. |
 | `bank-bot` | technical-writer | **9** track-flows | (bot side) daily cron alongside W2, keeps `docs/flows/*.md` `// impl:` pointers aligned with code. Inherits mobiz W9's 6-class taxonomy (A/B/C/D/E/F), fast-fix thresholds, regex-fixed extractor, and Step 7b verify.sh hard gate. Three bot-specific differences: Step 2c flips direction (looks for mobiz W2 trace, not bank-bot W2); Step 5e `#cross-repo-sync + #flow-drift` is mandatory on most passes because bot flows are cross-repo by construction and drift inside `// ext:` territory is invisible to mobiz W9; §Cross-repo-sync discipline documents this primary bot-to-mobiz drift propagation channel. Created 2026-04-19; first real pass expected when commits after `466d56e` touch files referenced by `scb-dual-control-withdrawal.md`. |
+| `mb-next-payment-gateway` | system-architect | **1** refine-adr | Iterative refinement of `docs/adr.md` (the consolidated ADR for the next-gen gateway). Each pass picks one focus theme and sharpens that section using the five canonical inputs in priority order: Oracle memory → current-system docs → flow maps → constraints register → current-system code (last resort). Run-N-many-times design. Handles baseline (run 1, skeleton generation from template) and refine (run 2+, deep dive on one section) modes. Thread-first for architect-level confirmation (`[AWAITING_THREAD:<id>]` anchors in the ADR section being refined). Produces one `arra_learn` tagged `#system-architect #repo:mb-next-payment-gateway #next #adr #refinement + <theme>` and one `## Revision log` entry per pass. Created 2026-04-22. |
 
 ### Shared cross-role references
 
@@ -92,13 +93,6 @@ I am the ecosystem operations expert; I do not own peer-role workflows, but I ke
 |---|---|---|
 | `mobiz-payment-gateway` | integration-test-writer | Pattern library consumed by `tester` workflows 1–3. Not an active agent — no `SKILL.md` Identity section beyond the template — just the mandatory script template + conventions. |
 
-### Active roles without numbered workflows yet
-
-Some roles are activated with only a SKILL.md and a framework — numbered workflows are authored as the role matures.
-
-| Repo | Role | Skill content | Status |
-|---|---|---|---|
-| `mb-next-payment-gateway` | system-architect | Five-phase system-design framework (requirements → high-level → deep-dive → scale/reliability → trade-off analysis). Embedded verbatim from `anthropics/knowledge-work-plugins/engineering/skills/system-design`. Produces ADRs + subsystem design docs; reads current-system prior art from Oracle via `arra_search #repo:mobiz-payment-gateway / #repo:bank-bot / #current`. | Activated 2026-04-22. Tag lifecycle: `#next`. Window: `next-architect-oracle`. No numbered workflows yet — workflows authored as the role encounters repeat patterns. |
 
 ### Canonical path (edit here, applies everywhere)
 
