@@ -1,0 +1,13 @@
+{
+  "name": "20-mb-next-payment-gateway",
+  "windows": [
+    {
+      "name": "next-architect-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "kxlahsimx09/mb-next-payment-gateway"
+  ]
+}
