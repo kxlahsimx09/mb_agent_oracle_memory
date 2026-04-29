@@ -1,6 +1,6 @@
 ---
 title: ψ-trap-retro-leak — pattern observed 2026-04-19 15:06 on mobiz W2 run. Agent wro
-tags: [["brew-ops", "workflow-edit", "workflow-2", "technical-writer", "vault-discipline", "ψ-trap", "retro-leak", "config-ambiguity", "pattern", "repo:cross", "2026-04-19"]]
+tags: [brew-ops, workflow-edit, workflow-2, technical-writer, vault-discipline, ψ-trap, retro-leak, config-ambiguity, pattern, repo:cross, 2026-04-19]
 created: 2026-04-19
 source: W2 Step 9 retro leak 2026-04-19 15:06 + W2 spec fix (both repos) same day
 project: github.com/soul-brews-studio/arra-oracle-v3

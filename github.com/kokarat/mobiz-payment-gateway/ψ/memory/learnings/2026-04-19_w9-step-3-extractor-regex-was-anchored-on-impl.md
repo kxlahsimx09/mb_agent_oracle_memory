@@ -1,6 +1,6 @@
 ---
 title: W9 Step 3 extractor regex was anchored on `// impl:` as a *prefix* of the pointe
-tags: [["brew-ops", "workflow-edit", "workflow-9", "technical-writer", "regex-fix", "w9-extractor-regression", "silent-drift", "pattern", "repo:cross", "2026-04-19"]]
+tags: [brew-ops, workflow-edit, workflow-9, technical-writer, regex-fix, w9-extractor-regression, silent-drift, pattern, repo:cross, 2026-04-19]
 created: 2026-04-19
 source: 2026-04-19 brew-ops audit session, vault commit pending, workflow-9-track-flows.md Step 3 rewrite
 project: github.com/kokarat/mobiz-payment-gateway

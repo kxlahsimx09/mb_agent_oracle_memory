@@ -1,6 +1,6 @@
 ---
 title: Workflow-9 track-flows authored for bank-bot side (technical-writer role in `git
-tags: [["brew-ops", "workflow-edit", "workflow-9", "technical-writer", "bank-bot", "cross-repo-sync", "drift-propagation", "pattern", "repo:bank-bot", "2026-04-19"]]
+tags: [brew-ops, workflow-edit, workflow-9, technical-writer, bank-bot, cross-repo-sync, drift-propagation, pattern, repo:bank-bot, 2026-04-19]
 created: 2026-04-19
 source: vault workflow-9-track-flows.md (bank-bot side), 2026-04-19 brew-ops session
 project: github.com/kokarat/bank-bot

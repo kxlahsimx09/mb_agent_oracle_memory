@@ -1,6 +1,6 @@
 ---
 title: gotcha — SCB success popup is itself a MuiDialog
-tags: [["gotcha", "scb", "approver", "muidialog", "success-popup", "otp", "waiting_to_review", "session_expired", "safety", "popup", "playwright", "selector", "technical-writer", "repo:bank-bot", "current"]]
+tags: [gotcha, scb, approver, muidialog, success-popup, otp, waiting_to_review, session_expired, safety, popup, playwright, selector, technical-writer, repo:bank-bot, current]
 created: 2026-04-18
 source: banks/scb/approver.js:599-654@4ca226c (PR #69, commits efa9077 + a07c3d5)
 project: github.com/kokarat/bank-bot

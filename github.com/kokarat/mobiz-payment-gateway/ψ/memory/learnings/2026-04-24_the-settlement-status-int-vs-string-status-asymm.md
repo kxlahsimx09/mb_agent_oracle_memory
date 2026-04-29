@@ -1,0 +1,18 @@
+---
+title: The Settlement `Status int` vs string-status asymmetry (first documented at #224
+tags: [technical-writer, repo:mobiz-payment-gateway, current, settlement, withdrawal-queue, bot-claim, string-vs-int-asymmetry, type-mismatch, bugfix, pr-308, second-site, follow-up-to-224]
+created: 2026-04-24
+source: services/withdrawalQueue.go:558-599@909d5a3 + PR #308 + #224 5a99588 prior carve-out + models/settlements.go:46-50
+project: github.com/kokarat/mobiz-payment-gateway
+---
+
+# The Settlement `Status int` vs string-status asymmetry (first documented at #224
+
+The Settlement `Status int` vs string-status asymmetry (first documented at #224 when `MarkWaitingToReview` mirrored the string `"waiting_to_review"` onto a settlement doc and broke the list endpoint) has a second manifestation site, fixed at commit 909d5a3 (PR #308, 2026-04-24). `ClaimByBank`'s post-claim background loop in `services/withdrawalQueue.go` blanket-wrote `{status: "processing", processed_at, processed_date_bkk, updated_at}` onto every source doc at claim time. That write is fine for `ts_payouts`, `pullout_logs`, and `direct_transfers` (all string `Status`), but for the `settlements` collection (`Status int`) it silently produced a decode error whenever admin subsequently called `GET /api/v1/settlements` while that settlement was still in flight — the string `"processing"` stored in an int field caused `cursor.All` to fail the entire list response with 500. The 500 was self-healing (as soon as the bot's `MarkSuccess`/`MarkFailed` wrote an int back, decoding worked again) which is why it looked intermittent in user reports.
+
+The fix mirrors the #224 carve-out pattern: skip the `status` field of the source update when `item.SourceCollection == "settlements"`; write the timestamp trio uniformly for every source. Semantically there's no regression because the queue item's own `withdrawal_queue.status = "processing"` already tracks the in-flight state for the dispatcher's `onBankItemDone`/`UnlockBankIfDone` logic and for `tryReconcileAfterMarkFailed`'s invariants — the settlement `Status int` simply stays at `0` (pending) through the bot-hold window and flips to an int terminal (`1`/`2`/`3`) via `MarkSuccess`/`MarkFailed`/`MarkWaitingToReview` at completion. Manual DB recovery for docs stuck from the pre-fix window: `db.settlements.updateMany({status:"processing"}, {$set:{status:1}})` (the commit body suggests this; no migration was run in the fix PR because the 500 class is intermittent-until-in-flight-settlement completes, so recovery is only needed for docs that never received a terminal write).
+
+**Durable fact for future writers:** whenever the `withdrawal_queue` pipeline touches a source document's `status` field — whether at `ClaimByBank` claim time, `MarkSuccess`/`MarkFailed` terminal time, `MarkWaitingToReview` terminal time, or any future write site — the code MUST branch on `SourceCollection == "settlements"` (or equivalently `SourceType == SourceTypeSettlement`) and route to the int-valued column of the asymmetry table: `0=pending, 1=completed, 2=failed, 3=waiting_to_review, 4=cancelled` (see `models/settlements.go:46-50`). Forgetting the carve-out reliably manifests as a 500 on `GET /api/v1/settlements` while a settlement is mid-flight. Current known carve-out sites: `:558-599` (`ClaimByBank` background loop — #308), `:1101-1140` (`MarkWaitingToReview` — #224), and `getSourceStatusUpdate` at `:1310-1340` (which MarkSuccess/MarkFailed delegate to, handling the int-vs-string branch for terminal writes). A third-type equivalent for `SourceType == SourceTypePullout` is NOT needed — `pullout_logs.Status` is a string like the payout collections.
+
+---
+*Added via Oracle Learn*

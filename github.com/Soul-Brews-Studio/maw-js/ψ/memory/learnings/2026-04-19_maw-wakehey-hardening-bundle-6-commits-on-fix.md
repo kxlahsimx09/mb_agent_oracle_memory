@@ -1,6 +1,6 @@
 ---
 title: maw wake/hey hardening bundle — 6 commits on `fix/wake-prompt-injection-outside-
-tags: [["brew-ops", "hardening-bundle", "maw-js", "live-use-discovery", "pattern", "wake", "hey", "fleet", "repo:maw-js", "2026-04-19"]]
+tags: [brew-ops, hardening-bundle, maw-js, live-use-discovery, pattern, wake, hey, fleet, repo:maw-js, 2026-04-19]
 created: 2026-04-19
 source: 6 commits on fix/wake-prompt-injection-outside-brace-group branch, 2026-04-19 brew-ops session
 project: github.com/soul-brews-studio/maw-js

@@ -1,6 +1,6 @@
 ---
 title: Recurring pattern: stray `<` character appears in `arra_learn` `project` field, 
-tags: [["brew-ops", "memory", "vault", "drift", "workflow-bug", "path-corruption", "recurring", "project-field-typo", "arra_learn", "verify.sh", "repo:cross", "2026-04-19"]]
+tags: [brew-ops, memory, vault, drift, workflow-bug, path-corruption, recurring, project-field-typo, arra_learn, verify.sh, repo:cross, 2026-04-19]
 created: 2026-04-19
 source: 2026-04-18 audit §4 path corruption finding + 2026-04-19 bot-writer W8 retro §Honest Feedback
 project: github.com/soul-brews-studio/arra-oracle-v3

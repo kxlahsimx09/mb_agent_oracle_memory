@@ -1,6 +1,6 @@
 ---
 title: telegram-sent-late — W2 PR #230 summary delivered on re-send at 2026-04-19 15:35
-tags: [["telegram-sent-late", "telegram-failed", "workflow-bug", "repo:cross", "repo:mobiz-payment-gateway", "w2", "bot-delivery", "recovered", "brew-ops", "2026-04-19"]]
+tags: [telegram-sent-late, telegram-failed, workflow-bug, repo:cross, repo:mobiz-payment-gateway, w2, bot-delivery, recovered, brew-ops, 2026-04-19]
 created: 2026-04-19
 source: Telegram API sendMessage response message_id=8 at 2026-04-19T15:35+07:00, recovering the 15:05 failure
 project: github.com/kokarat/mobiz-payment-gateway

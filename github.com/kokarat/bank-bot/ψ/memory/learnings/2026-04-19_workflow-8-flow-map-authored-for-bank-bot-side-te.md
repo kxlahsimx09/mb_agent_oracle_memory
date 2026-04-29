@@ -1,6 +1,6 @@
 ---
 title: Workflow-8 flow-map authored for bank-bot side (technical-writer role in `github
-tags: [["brew-ops", "workflow-edit", "workflow-8", "technical-writer", "bank-bot", "cross-repo-sync", "reciprocal-breadcrumb", "self-test", "pattern", "repo:cross", "2026-04-19"]]
+tags: [brew-ops, workflow-edit, workflow-8, technical-writer, bank-bot, cross-repo-sync, reciprocal-breadcrumb, self-test, pattern, repo:cross, 2026-04-19]
 created: 2026-04-19
 source: vault commit 47b42ca on main, 2026-04-19 brew-ops session
 project: github.com/kokarat/bank-bot

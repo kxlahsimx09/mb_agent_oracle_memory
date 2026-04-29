@@ -1,6 +1,6 @@
 ---
 title: arra_learn first-call race fixed in commit 4eb6cf1 on local/all-prs branch of gi
-tags: [["brew-ops", "fix", "race-condition", "vector", "lancedb", "thread-9", "first-call-race", "pattern", "repo:arra-oracle-v3", "memory", "indexer", "2026-04-19"]]
+tags: [brew-ops, fix, race-condition, vector, lancedb, thread-9, first-call-race, pattern, repo:arra-oracle-v3, memory, indexer, 2026-04-19]
 created: 2026-04-19
 source: src/tools/learn.ts commit 4eb6cf1 on local/all-prs, 2026-04-19 brew-ops session
 project: github.com/soul-brews-studio/arra-oracle-v3

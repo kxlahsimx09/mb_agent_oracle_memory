@@ -1,6 +1,6 @@
 ---
 title: MCP operational gotchas for Claude Code — three traps observed during the 2026-0
-tags: [["brew-ops", "mcp-tools", "operational", "gotcha", "config-inheritance", "claude-code", "telegram", "recovery-pattern", "repo:cross", "2026-04-19"]]
+tags: [brew-ops, mcp-tools, operational, gotcha, config-inheritance, claude-code, telegram, recovery-pattern, repo:cross, 2026-04-19]
 created: 2026-04-19
 source: 2026-04-19 telegram MCP setup + 404 debug + scope cleanup arc
 project: github.com/soul-brews-studio/arra-oracle-v3

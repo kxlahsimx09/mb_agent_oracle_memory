@@ -1,6 +1,6 @@
 ---
 title: decision — SCB approver post-OTP success detection is a 3-layer wait
-tags: [["decision", "scb", "approver", "otp", "success-popup", "waiting_to_review", "todo-list-fallback", "muidialog", "dismissPopups", "technical-writer", "repo:bank-bot", "current", "safety"]]
+tags: [decision, scb, approver, otp, success-popup, waiting_to_review, todo-list-fallback, muidialog, dismissPopups, technical-writer, repo:bank-bot, current, safety]
 created: 2026-04-18
 source: banks/scb/approver.js:599-716@4ca226c (PRs #67, #68, #69 — commits e986846, 1c658cc, a07c3d5, efa9077)
 project: github.com/kokarat/bank-bot
