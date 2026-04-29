@@ -191,8 +191,9 @@ Required:
 Optional (only when conditions are met):
 
 - **New threads** via `arra_thread` — one per architecturally-significant confirmation the human must give. Each thread must be anchored in the ADR with a `[AWAITING_THREAD:<id>]` marker at the specific claim or section it governs.
-- **New traces** via `arra_trace` — when the refinement connects ≥ 2 pieces of evidence across sources (e.g., "mobiz learning A + bank-bot constraint B + thread C → next-system decision D").
 - **Migration-map delta** in `docs/migration-map.md` — when the refinement defines a current→next mapping. Tag the learning `#migration-map` and `#repo:cross`.
+
+(Note: `arra_trace` was previously listed here as conditional. As of 2026-04-29 it is **mandatory** in Step 8 — every pass produces a trace, every chain candidate produces a link. See Step 8 + Change log.)
 
 Never produced in this workflow:
 
@@ -385,6 +386,34 @@ arra_learn(
 
 If this pass superseded any prior learning (a previous refine pass that this one replaces wholesale), call `arra_supersede(oldId, newId, reason="W1 refine pass <N> — <theme>")` after the `arra_learn` returns.
 
+**Then trace the pass into the chain (mandatory, in the same response before commit):**
+
+```
+arra_trace(
+  query="W1 refine pass <N> — <theme>",
+  queryType="evolution",
+  scope="project",
+  project="github.com/kxlahsimx09/mb-next-payment-gateway",
+  foundLearnings=["<source_file from arra_learn response>"],
+  foundRetrospectives=["<retro path if already drafted, else omit>"]
+)
+```
+
+`arra_trace` returns a `trace_id` (UUID) — record it.
+
+If this pass chains to a prior in-territory trace (the baseline this ratifies, a sibling pass on the same subsystem, a current-system drift this closes), find the prior `trace_id` via `arra_trace_list query="<prior pass theme>"` and link:
+
+```
+arra_trace_link(
+  prevTraceId="<prior_uuid>",
+  nextTraceId="<this_pass_uuid>"
+)
+```
+
+If no chain candidate exists for this pass, record `"no chain candidate — first in subsystem"` (or equivalent reason) in the retrospective's §Pass metadata. Silence is not a valid state — every pass either chains or explicitly declares "no candidate."
+
+**Why mandatory, not optional:** every W1 pass connects ≥ 2 of the five canonical inputs by construction (oracle memory + current docs + flow maps + constraints + code). The earlier framing of `arra_trace` as conditional ("when ≥ 2 evidence") made the call look situational when it should fire on every pass. Without `arra_trace`, the pass produces a learning + supersede chain but no navigable session record — `arra_trace_link` becomes impossible (no UUIDs to chain), and the chain context fades by retro time. See thread #54 + brew-ops PR `arra_learn` trace-link hint for the recurring-miss pattern this addresses.
+
 ### Step 9 — Retrospective (10–15 min)
 
 Write a retro at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_w1-refine-<theme>.md`. AI Diary and Honest Feedback are mandatory (per AGENTS.md §7). Minimum sections:
@@ -536,6 +565,8 @@ All must hold:
 - [ ] Every resolved thread has both a marker-strip in `docs/adr.md` and a closing message posted before `arra_thread_update(status="closed")`.
 - [ ] One `arra_learn` entry filed with 3-layer tags + focus-theme tag.
 - [ ] `arra_supersede` called for any prior learning this pass replaced (not just cited; replaced).
+- [ ] `arra_trace` filed for this pass with `foundLearnings=[<source_file>]` (Step 8).
+- [ ] `arra_trace_link` filed to chain to prior trace **OR** retro records `"no chain candidate"` with one-line reason (Step 8).
 - [ ] PR opened (not merged); URL reported back to the human.
 - [ ] Retrospective written at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_w1-refine-<theme>.md` with AI Diary + Honest Feedback.
 
@@ -546,3 +577,4 @@ If any checkbox fails, the pass is incomplete. Do not mark the session done in t
 ## Change log
 
 - 2026-04-22 — Initial version. Defines baseline vs refine modes, five-input priority order (Oracle memory → current-system docs → flow maps → constraints → current-system code), Step 0 thread sweep shared with the fleet, Step 2 focus-theme discipline, `docs/adr.md` skeleton template, revision-log format, definition-of-done checklist. Paired with `system-architect` activation (central commit `5d28531`) and brew-ops inventory update (central commit `4c3911c`).
+- 2026-04-29 — Promote `arra_trace` from "Optional" (old line 194 — conditional on "≥ 2 evidence sources") into Step 8 main flow as a mandatory call after `arra_learn`/`arra_supersede`. Add `arra_trace_link` as the chain primitive when a prior trace exists. Add 2 Definition-of-Done checkboxes (`arra_trace` filed; `arra_trace_link` filed OR `"no chain candidate"` declared in retro). Trigger: thread #54 — brew-ops surfaced that `mb-next-payment-gateway` had 0 traces in 30 days, so 8+ retros flagging "missed `arra_trace_link`" actually meant `arra_trace` itself was never called. Old "≥ 2 evidence" trigger framed the call as conditional when W1's structure satisfies it by default — fixed framing here. Companion: `arra_learn` MCP response now includes `trace_link_hint` field at learn-time (PRs #14 + #15 in `Soul-Brews-Studio/arra-oracle-v3`, merged via `feat/all-prs-rebased`).
