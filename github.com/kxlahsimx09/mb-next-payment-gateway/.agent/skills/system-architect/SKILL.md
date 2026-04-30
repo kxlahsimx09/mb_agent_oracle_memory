@@ -168,10 +168,11 @@ When a design claim can't be verified (requirement needs the human, a current-sy
 | Workflow | When | Reference | Description |
 |---|---|---|---|
 | **1. refine-adr** | Run N times; each pass picks one focus theme and sharpens `docs/adr.md` using the five canonical inputs. Also handles the baseline (first run, skeleton generation). | [`references/workflow-1-refine-adr.md`](references/workflow-1-refine-adr.md) | Iterative ADR refinement grounded in Oracle memory + current-system docs + flows + constraints + (last-resort) code. Every pass produces one `arra_learn` + one `## Revision log` entry. Thread-first for architect-level confirmation. |
-| 2. revise-design (TBD) | Requirement changed or current-system prior art surfaced a contradiction that spans multiple ADR sections | — | Wider-than-one-section revision with `arra_supersede` chains on old learnings. Authored when the pattern appears. |
-| 3. migration-map-entry (TBD) | Before any subsystem ships | — | Side-by-side current↔next for one feature. Tagged `#migration-map`. Authored when the pattern appears. |
-| 4. write-adr (TBD) | Standalone ADR for a decision large enough to split out of `docs/adr.md` | — | MADR format. §Trade-offs mandatory. Authored when the pattern appears. |
-| 5. handoff-to-implementor (TBD) | A design is ratified and ready to build | — | `arra_learn #handoff` naming the receiving role (once implementation agents exist). |
+| **2. sync-clean** | After any ratification pass; when a human needs a readable snapshot; before handoff to implementation agents. | [`references/workflow-2-sync-clean.md`](references/workflow-2-sync-clean.md) | Exports `docs/architecture.md` — a clean, process-free snapshot of all ratified decisions — by stripping revision logs, inline citations, markers, and process metadata from `docs/adr.md`. Read-only on source; `docs/architecture.md` is always the derived output. |
+| 3. revise-design (TBD) | Requirement changed or current-system prior art surfaced a contradiction that spans multiple ADR sections | — | Wider-than-one-section revision with `arra_supersede` chains on old learnings. Authored when the pattern appears. |
+| 4. migration-map-entry (TBD) | Before any subsystem ships | — | Side-by-side current↔next for one feature. Tagged `#migration-map`. Authored when the pattern appears. |
+| 5. write-adr (TBD) | Standalone ADR for a decision large enough to split out of `docs/adr.md` | — | MADR format. §Trade-offs mandatory. Authored when the pattern appears. |
+| 6. handoff-to-implementor (TBD) | A design is ratified and ready to build | — | `arra_learn #handoff` naming the receiving role (once implementation agents exist). |
 
 Individual workflow files live in `references/workflow-N-<slug>.md`. W1 is authored (2026-04-22) and is the primary running workflow for this role; W2–W5 are named placeholders that will be formalized when repeat patterns appear in W1 passes.
 
