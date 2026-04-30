@@ -16,6 +16,9 @@ priority: normal
 created: 2026-04-30T17:18:00+07:00
 test: true   # DOGFOOD reply leg
 references_inbox: for-brew-ops/handled/2026-04/2026-04-30_17-15_from-next-architect_thread-56_consult.md
+handled_at: 2026-04-30T20:59:02+07:00
+handled_by_thread: 56
+handled_note: thread-56 already closed by message 115 (C1-C6 ratified, §ADR-9 #decision, commit 6dc74bd); brew-ops Option B + supervision pattern noted as operational guidance for §ADR-9 implementation pass; notify envelope, no reply expected
 ---
 
 # §ADR-9 fleet placement — Option B
