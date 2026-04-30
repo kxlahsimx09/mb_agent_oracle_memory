@@ -200,6 +200,27 @@ Report: total docs, vector status, fleet agents found, any errors.
 | Fleet config | `~/.config/maw/fleet/*.json` | Session/window definitions |
 | Global config | `~/.config/maw/maw.config.json` | Node identity, peers, commands |
 
+#### maw-js PR workflow
+
+All fixes to `maw-js` go through individual feature branches that PR into `feat/all-prs-rebased` (not `main`):
+
+```bash
+# 1. Branch from feat/all-prs-rebased
+git checkout feat/all-prs-rebased
+git checkout -b fix/<slug>
+
+# 2. Make changes + commit
+git add <files>
+git commit -m "fix(...): ..."
+
+# 3. Push to fork + open PR targeting feat/all-prs-rebased
+git push fork fix/<slug>
+gh pr create --base feat/all-prs-rebased --head kxlahsimx09:fix/<slug> \
+  --repo Soul-Brews-Studio/maw-js --title "..." --body "..."
+```
+
+**Never** commit directly to `feat/all-prs-rebased` — it is the integration branch, not a working branch.
+
 ### oracle-studio
 
 | Component | Path | Purpose |
