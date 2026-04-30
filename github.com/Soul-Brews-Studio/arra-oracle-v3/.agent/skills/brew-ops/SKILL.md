@@ -49,6 +49,7 @@ The role-specific disciplines layered on top:
 | **Vault structure** | `ψ/memory/` folder layout, file conventions, tagging | Audit vault health, find misplaced files, verify tagging compliance, explain folder→type mapping |
 | **Agent lifecycle** | Agent creation, SKILL.md patterns, KICKOFF, workflows | Help create new agents, debug agent startup issues, review skill manifests |
 | **Cross-repo data flows** | Oracle feed → maw feed, soul-sync, federation | Trace end-to-end flows, debug where data gets lost between services |
+| **Brew-ops automation** | `scripts/w2-watcher.sh` (commit watcher) + `scripts/brew-ops-bot/` (Telegram bot) | Diagnose silent wake failures, fix watcher state, restart daemons, manage chats over Telegram |
 
 ## What I don't own
 
@@ -207,6 +208,74 @@ Report: total docs, vector status, fleet agents found, any errors.
 | API client | `src/api/oracle.ts` | Wraps /api/* proxy calls |
 | Server | `bin/serve.ts` | Bun static server + API proxy to :47778 |
 
+## Operations infrastructure (live in this repo)
+
+Two long-running daemons keep the fleet auto-driving and the operator informed via Telegram. Both live under `scripts/` in this repo. State + logs in `~/.cache/w2-watcher/` and `~/.cache/brew-ops-bot/`. Auth in `~/.cache/brew-ops-bot/.env` (chmod 600).
+
+### `scripts/w2-watcher.sh` — commit-driven workflow trigger
+
+Polls `origin/main` of mobiz + bank-bot every 5 min. When non-ignored authors push commits, debounces (`SETTLE_WINDOW=1800s`) and fires per-role `maw wake` to run W2/W9/W1 workflows. Chains `regression-then-investigate.sh` after pg-tester / bot-writer wakes. State per role at `~/.cache/w2-watcher/<role>.state` (last_seen, last_new, last_run, pending_wake_ts).
+
+Key fixes hardened over Apr 23-29:
+- `--task` flag (not positional) for prompts (commit `4f7c2c8`)
+- `--wt "$wake_ts"` unique pane per wake (prevents silent-attach to stale claude — `45dea0c`)
+- `pull --ff-only origin main` instead of plain fetch so worktrees fork from latest base (`6887ab7`)
+- Silent-fail detector: 60min after wake, if no PR + no commits by `$COMMIT_AUTHOR` exist on any remote → Telegram alert (`140d715`)
+- Template-fallback recovery: if maw's `claude --continue || claude -p ...` template silently exits 0, re-send `claude -p` directly (`6b3662d`)
+
+Tunables (env): `POLL_INTERVAL`, `SETTLE_WINDOW`, `MIN_GAP`, `IGNORE_AUTHORS`, `WAKE_VERIFY_TIMEOUT`, `COMMIT_AUTHOR`, `SILENT_FAIL_TG_PROJECT`.
+
+Start: `nohup bash scripts/w2-watcher.sh >> ~/w2-watcher.stdout.log 2>&1 & disown`
+Stop: `bash scripts/w2-watcher.sh stop`
+Status: `bash scripts/w2-watcher.sh status` — per-role trigger gate + W9-chain state
+
+### `scripts/brew-ops-bot/` — Telegram bot + per-chat orchestration
+
+Three daemons, `bash` + `curl` + `jq`:
+
+| File | Role |
+|---|---|
+| `bot.sh` | Telegram getUpdates long-poll loop, command dispatcher; spawns/kills chat-watchers per chat |
+| `chat-watcher.sh` | Per-chat JSONL tail; pushes each new assistant text turn to Telegram (long messages → Telegraph page link). State: `last-line.<chat>` for boot-recovery resume |
+| `detector.sh` | Polls vault docs every 5 min for new `[BLOCK_*]` / `[SECURITY_HOLD:*]` markers; sends 🔴 alert |
+
+Roles loaded dynamically from `~/.config/maw/fleet/*.json` + `~/Code/github.com/*/*/.agent/fleet/*.json` (follows symlinks). Adding a new role = drop a fleet json, restart bot.
+
+Commands (operator-side, registered via `register-commands.sh`):
+
+```
+Read-only:  /help /blockers /pending /threads
+Chat mgmt:  /roles /chats /chat /new /close /watch
+Active I/O: /look /end + plain message → active chat
+History:    /history /retro /closed
+Power:      /list (raw tmux)
+```
+
+`/close all` runs an audit (dirty / unpushed / busy heuristics) and only closes chats that pass; unsafe ones are kept alive with reasons reported. `/close all auto` delegates the whole audit-and-cleanup to a fresh brew-ops chat that:
+- inspects each chat's pane + git state + JSONL
+- closes safe, wraps-up-and-closes finishable, leaves alive in-progress
+- reports back via tester-telegram MCP
+- never touches `-oracle` baselines or its own pane
+- treats dirty `mb_agent_oracle_memory` vault as wrap-up (commit + push), not blocker
+- treats stray `ψ/` in worktrees as a tools-bug signal (block close), but skips the check for legacy-`ψ/` repos (`mobiz-payment-gateway`, `bank-bot`)
+
+Start all three:
+```
+cd ~/Code/github.com/Soul-Brews-Studio/arra-oracle-v3
+nohup bash scripts/brew-ops-bot/bot.sh > /dev/null 2>&1 & disown
+nohup bash scripts/brew-ops-bot/detector.sh > /dev/null 2>&1 & disown
+# chat-watchers spawn on demand from bot.sh
+```
+
+Verify: `pgrep -fl 'w2-watcher\|brew-ops-bot/bot.sh\|brew-ops-bot/detector.sh\|chat-watcher.sh'`
+
+### Common debug entry points
+
+- "wake fired but no PR landed" → check `~/w2-watcher.stdout.log` for SILENT-FAIL alerts; check pane for auth 401 / busy state
+- "Telegram bot silent on /command" → `~/.cache/brew-ops-bot/bot.log` for send_tg failures (often HTML-escape mismatch on captured pane content)
+- "watcher pushed nothing after I sent message" → check `~/.cache/brew-ops-bot/watcher.log` for "JSONL dir never appeared — bailing" (claude with large CLAUDE.md > `JSONL_WAIT_SECONDS`); seed `last-line.<chat>` to 0 + restart watcher to backfill
+- "/close all kept everything alive" → `ψ/` literal-rule false positive on legacy repos; check `case` exception list in `delegate_close_to_brew_ops`
+
 ## Memory discipline
 
 Before I write, I run:
@@ -251,6 +320,7 @@ If `arra_search query="brew-ops" type=learning limit=1` returns zero results, th
 4. **Map the codebase** (this repo):
    - `src/index.ts` (MCP entry), `src/server.ts` (HTTP), `src/db/schema.ts` (data model)
    - Scan `src/routes/`, `src/tools/`, `src/indexer/`, `src/config/`
+   - **Operations infra:** read `scripts/w2-watcher.sh` + `scripts/brew-ops-bot/` (bot.sh, chat-watcher.sh, detector.sh) — these are the long-running daemons brew-ops owns; check they're alive (`pgrep -fl 'w2-watcher\|brew-ops-bot'`)
 5. **Map sibling repos** (read-only):
    - `maw-js`: `src/cli.ts`, `src/api/`, `src/commands/plugins/bud/impl.ts`, fleet loading
    - `oracle-studio`: `bin/serve.ts`, `src/pages/`, `src/api/oracle.ts`
