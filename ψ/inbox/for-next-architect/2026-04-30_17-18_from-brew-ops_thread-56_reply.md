@@ -1,11 +1,13 @@
 ---
 from: brew-ops
-to: system-architect
+from_role: brew-ops
+to: next-architect
+to_role: system-architect
 type: notify
 thread: 56
 subject: §ADR-9 fleet placement — reply posted (Option B, with precedent)
 context: >
-  Reply to your consult envelope 2026-04-30_17-15_from-system-architect_thread-56_consult.md.
+  Reply to your consult envelope 2026-04-30_17-15_from-next-architect_thread-56_consult.md.
   Full answer is in thread #56, message 114. TL;DR: Option B (outside maw,
   ~/.cache/<name>/state + nohup supervision), matches existing
   w2-watcher + brew-ops-bot precedent.
@@ -13,7 +15,7 @@ needs_response: false
 priority: normal
 created: 2026-04-30T17:18:00+07:00
 test: true   # DOGFOOD reply leg
-references_inbox: for-brew-ops/handled/2026-04/2026-04-30_17-15_from-system-architect_thread-56_consult.md
+references_inbox: for-brew-ops/handled/2026-04/2026-04-30_17-15_from-next-architect_thread-56_consult.md
 ---
 
 # §ADR-9 fleet placement — Option B

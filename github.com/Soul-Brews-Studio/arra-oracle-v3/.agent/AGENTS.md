@@ -255,30 +255,43 @@ Threads (`arra_thread`) carry the **content** of agent-to-agent conversations. T
 | Content | `arra_thread` | Full discussion, persists per P-001 |
 | Wake | `scripts/w2-watcher.sh` (Phase 1) | Scans inbox, fires `maw wake <role>` |
 
-### 11a. Path layout
+### 11a. Path layout — routing by **oracle name**, not role label
+
+Inbox directories are named after the **oracle** (the maw fleet entity that `maw wake` targets), **not** the role label. This matters because role labels can be 1:N with oracles:
+
+| Role label (semantic) | Oracle name(s) (operational) |
+|---|---|
+| `brew-ops` | `brew-ops` |
+| `system-architect` | `next-architect` |
+| `technical-writer` | `pg-writer`, `bot-writer` (two oracles, same role) |
+| `tester` | `pg-tester` |
+
+The watcher (Phase 2) reads `for-{oracle}/` and fires `maw wake {oracle}`. Routing uses the oracle name because that is the address `maw wake` resolves. Use `maw oracle ls` to discover the current set.
 
 ```
 ~/.arra-oracle-v2/ψ/inbox/                       (symlinked into mb_agent_oracle_memory/ψ/inbox/)
 ├── handoff/                                     ← existing: self-to-self context pass (unchanged)
-├── for-brew-ops/                                ← new: addressed to brew-ops
-│   ├── 2026-04-30_14-00_from-architect_thread-56_consult.md   ← unread (active)
+├── for-brew-ops/                                ← addressed to oracle "brew-ops"
+│   ├── 2026-04-30_14-00_from-next-architect_thread-56_consult.md   ← unread (active)
 │   ├── .gitkeep
 │   └── handled/
 │       └── 2026-04/
 │           └── 2026-04-30_13-15_from-pg-writer_thread-42_notify.md   ← archived after read
-├── for-system-architect/
+├── for-next-architect/                          ← addressed to oracle "next-architect"
 │   └── …same shape…
-└── for-{role}/                                  ← add new role dirs as fleet grows
+├── for-pg-writer/                               ← Phase 3+ when writers/testers join the protocol
+├── for-bot-writer/
+└── for-{oracle}/                                ← one dir per maw oracle, not per role
 ```
 
 **Per-node, single-node-local in practice.** Although the path resolves into the central vault repo, in current single-node operation this is a per-node inbox. We do not yet propagate `ψ/inbox/for-*/` via `soul-sync`. When the fleet adds peer nodes, decide explicitly whether to sync (cross-node messaging) or filter (keep per-node).
 
 ### 11b. File naming + envelope
 
-**Filename convention:**
+**Filename convention** (uses oracle name, matches dir convention):
 
 ```
-YYYY-MM-DD_HH-MM_from-{source-role}_thread-{id}_{type}.md
+YYYY-MM-DD_HH-MM_from-{source-oracle}_thread-{id}_{type}.md
 ```
 
 `{type}` ∈ `consult` | `escalate` | `notify`. `_thread-{id}` is omitted only for `notify` envelopes that carry no thread.
@@ -287,30 +300,34 @@ YYYY-MM-DD_HH-MM_from-{source-role}_thread-{id}_{type}.md
 
 ```yaml
 ---
-from: system-architect
-to: brew-ops
-type: consult            # consult | escalate | notify
-thread: 56               # omit for notify-without-thread
+from: next-architect           # oracle name (routing)
+from_role: system-architect    # role label (semantic context, optional)
+to: brew-ops                   # oracle name — must match an entry in `maw oracle ls`
+to_role: brew-ops              # role label (optional; redundant when oracle == role)
+type: consult                  # consult | escalate | notify
+thread: 56                     # omit for notify-without-thread
 subject: pre-Input-5 checkpoint externalization proposal
 context: see thread #56 — if pass-2 still misses, need tooling fix
-needs_response: true     # consult/escalate=true; notify=false
-priority: normal         # normal | high (escalate uses high)
+needs_response: true           # consult/escalate=true; notify=false
+priority: normal               # normal | high (escalate uses high)
 created: 2026-04-30T14:00:00+07:00
 # filled by recipient on archive:
 # handled_at: 2026-04-30T15:30:00+07:00
 # handled_by_thread: 56
-# handled_by_inbox: for-system-architect/2026-04-30_15-30_from-brew-ops_thread-56_reply.md
+# handled_by_inbox: for-next-architect/2026-04-30_15-30_from-brew-ops_thread-56_reply.md
 ---
 
 (optional short body — full discussion belongs in the thread)
 ```
 
+`from`/`to` are the **routing keys** — they must match oracle names. `from_role`/`to_role` are documentation only; the watcher and Step 0.5 sweep do not parse them. They exist so the receiver immediately understands what the sender does in fleet terms (e.g., "this came from `next-architect` who plays the `system-architect` role"), without a round-trip to `maw oracle ls`.
+
 ### 11c. Three flows
 
 | Flow | When | Sender writes | Receiver does | Sender continues? |
 |---|---|---|---|---|
-| **consult** | Need input but can keep working around it | Open thread → write inbox file → mark work doc `[AWAITING_AGENT:{role}:thread-{id}]` | Read envelope → `arra_thread_read` → reply in thread → write reply inbox file → archive own inbox file | Yes, around the blocked section |
-| **escalate** | Cannot continue — handover required | Open thread → write inbox file (`type=escalate`, `priority=high`) → mark work doc `[BLOCKED:{role}:thread-{id}]` → retro + stop | Same as consult, but may need to perform work, not just answer | No — wait for unblock signal (reply inbox file) |
+| **consult** | Need input but can keep working around it | Open thread → write inbox file → mark work doc `[AWAITING_AGENT:{oracle}:thread-{id}]` | Read envelope → `arra_thread_read` → reply in thread → write reply inbox file → archive own inbox file | Yes, around the blocked section |
+| **escalate** | Cannot continue — handover required | Open thread → write inbox file (`type=escalate`, `priority=high`) → mark work doc `[BLOCKED:{oracle}:thread-{id}]` → retro + stop | Same as consult, but may need to perform work, not just answer | No — wait for unblock signal (reply inbox file) |
 | **notify** | FYI — no response expected | Write inbox file (`needs_response=false`); thread optional | Read on next wake → archive | N/A — fire and forget |
 
 ### 11d. Archive protocol (P-001 compliant — never delete)
@@ -321,43 +338,43 @@ When the recipient has handled an inbox file, they **move** it (do not delete):
 # from for-brew-ops/, after reading + replying
 month=$(date +%Y-%m)
 mkdir -p handled/$month
-git mv 2026-04-30_14-00_from-architect_thread-56_consult.md handled/$month/
+git mv 2026-04-30_14-00_from-next-architect_thread-56_consult.md handled/$month/
 ```
 
 Before moving, append `handled_at`, `handled_by_thread`, and (if a reply was sent) `handled_by_inbox` to the envelope frontmatter — this is the audit trail the next session reads.
 
-The watcher scans **only** the role-root (`for-{role}/*.md`); `handled/` is invisible to the wake trigger but remains searchable in git history and via `arra_search` once indexed.
+The watcher scans **only** the oracle-root (`for-{oracle}/*.md`); `handled/` is invisible to the wake trigger but remains searchable in git history and via `arra_search` once indexed.
 
 ### 11e. Workflow integration (Step 0.5)
 
 Every agent that participates in directed-inbox flows must add a **Step 0.5: directed inbox sweep** to its workflow, immediately after the existing thread sweep (Step 0). The sweep:
 
-1. `ls ~/.arra-oracle-v2/ψ/inbox/for-{my-role}/*.md` (or via `arra_inbox` once tool-extended in Phase 3).
+1. `ls ~/.arra-oracle-v2/ψ/inbox/for-{my-oracle-name}/*.md` (or via `arra_inbox` once tool-extended in Phase 3). Use `maw whoami` (or check the active tmux session name) to know your oracle name.
 2. For each unread envelope: read frontmatter → `arra_thread_read` → respond per type → archive.
 3. Only after the sweep settles does the agent proceed with its main workflow task.
 
 If the inbox file says `type=escalate`, treat it as **higher priority** than the original wake reason.
 
-### 11f. Wake semantics — session-per-thread (not session-per-role)
+### 11f. Wake semantics — session-per-thread (not session-per-oracle)
 
-Default `maw wake <role>` resumes the role's most-recent Claude session (via `claude --continue`). For directed-inbox traffic this is wrong — a follow-up consult on thread #56 must continue **the thread-#56 session for that role**, not "whatever B was doing last." But the first message in a thread should be `--fresh` so reasoning isn't biased by unrelated prior work.
+Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via `claude --continue`). For directed-inbox traffic this is wrong — a follow-up consult on thread #56 must continue **the thread-#56 session for that oracle**, not "whatever the oracle was doing last." But the first message in a thread should be `--fresh` so reasoning isn't biased by unrelated prior work.
 
 **Decision rule (by inbox event):**
 
 | Scenario | Wake mode |
 |---|---|
-| First inbox file for thread `N` to role `R` | `--fresh` — no prior session for `R+thread-N` |
-| Follow-up inbox file for thread `N` to role `R` | `--resume <session-id>` — `R`'s thread-`N` session |
+| First inbox file for thread `N` to oracle `O` | `--fresh` — no prior session for `O+thread-N` |
+| Follow-up inbox file for thread `N` to oracle `O` | `--resume <session-id>` — `O`'s thread-`N` session |
 | `type=notify` with no `thread:` field | `--fresh` — fire-and-forget, no continuity |
 | `type=notify` with `thread:` field | `--resume` if session-id exists, else `--fresh` |
 | Session-id lookup misses (cache evicted, JSONL gone, claude version migration) | Fallback `--fresh` + log warning. Correctness preserved because the thread itself carries content. |
 
 **Why session-per-thread is correct:**
 
-- A consult exchange is a **conversation about a topic**, not a continuation of `R`'s most-recent unrelated work.
-- It scales naturally: `R` can be active in several threads in parallel, each with its own clean context window.
-- Cross-role symmetry: when `A` and `B` exchange in thread `N`, each has their own session for thread `N` — neither reads the other's JSONL, but both share the thread (the content layer) as the source of truth.
-- It honors P-003 (External Brain): the thread is the durable record; the JSONL is convenience caching for the agent that owns it.
+- A consult exchange is a **conversation about a topic**, not a continuation of `O`'s most-recent unrelated work.
+- It scales naturally: `O` can be active in several threads in parallel, each with its own clean context window.
+- Cross-oracle symmetry: when oracles `A` and `B` exchange in thread `N`, each has their own session for thread `N` — neither reads the other's JSONL, but both share the thread (the content layer) as the source of truth.
+- It honors P-003 (External Brain): the thread is the durable record; the JSONL is convenience caching for the oracle that owns it.
 
 **Storage layout (operational state, not vault — eviction allowed):**
 
@@ -366,23 +383,23 @@ Default `maw wake <role>` resumes the role's most-recent Claude session (via `cl
 ├── brew-ops/
 │   ├── thread-56.session-id           ← Claude Code session UUID
 │   └── thread-58.session-id
-└── system-architect/
+└── next-architect/
     └── thread-56.session-id           ← different session from brew-ops's thread-56
 ```
 
-**Eviction:** when a thread reaches `status=closed`, the watcher drops the corresponding `<role>/thread-<N>.session-id` file. TTL backstop: a session-id not resumed for 30 days is dropped (assume thread cold/abandoned). Eviction does not violate P-001 — `~/.cache/` is ephemeral state, not vault content; the thread itself remains intact in Oracle.
+**Eviction:** when a thread reaches `status=closed`, the watcher drops the corresponding `<oracle>/thread-<N>.session-id` file. TTL backstop: a session-id not resumed for 30 days is dropped (assume thread cold/abandoned). Eviction does not violate P-001 — `~/.cache/` is ephemeral state, not vault content; the thread itself remains intact in Oracle.
 
 ### 11g. Phase status (as of 2026-04-30)
 
-- **Phase 1 (current):** Manual fire — sender writes inbox file, human/sender invokes `maw wake <role>` directly. Used to validate envelope format on real consult traffic before automating. Dogfooded 2026-04-30 with thread #56 (ADR-9 dispatcher placement) — round-trip ~3 min, envelope format validated.
-- **Phase 2a:** Watcher extension in `scripts/w2-watcher.sh` to scan inbox dirs every poll and fire `maw wake <role>` automatically. Implements session-per-thread mapping (§11f) entirely in the watcher: lookup `~/.cache/w2-watcher/inbox-sessions/<role>/thread-<N>.session-id`, wake with `--resume <sid>` or `--fresh` accordingly. Capture new session-id from newest JSONL after a `--fresh` wake. Floor: `INBOX_MIN_GAP=300s` per role. Toggle: `INBOX_SCAN_ENABLED=1` env (default off until merge soak).
-- **Phase 2b:** PR into `kxlahsimx09/maw-js` (target `feat/all-prs-rebased` per SKILL.md maw-js workflow) adding `maw wake <role> --thread <N> --task "..."` native flag. maw handles the session-id mapping internally; watcher (and any other client) becomes provider-agnostic. Phase 2a still ships first — it does not depend on this.
-- **Phase 3:** Telegram alerts for `priority: high` (escalate) envelopes via brew-ops-bot's existing `[BLOCK_*]` detector pattern. `arra_inbox` MCP tool gains `type=directed, role=X` filter. "Step 0.5: directed inbox sweep" added to writer/tester workflows fleet-wide (sibling-sync per §3a discipline).
+- **Phase 1 (current):** Manual fire — sender writes inbox file, human/sender invokes `maw wake <oracle>` directly. Used to validate envelope format on real consult traffic before automating. Dogfooded 2026-04-30 with thread #56 (ADR-9 dispatcher placement) — round-trip ~3 min, envelope format validated. Routing-key correction (oracle name not role label) applied same day before any cross-oracle wake fired.
+- **Phase 2a:** Watcher extension in `scripts/w2-watcher.sh` to scan inbox dirs every poll and fire `maw wake <oracle>` automatically. Implements session-per-thread mapping (§11f) entirely in the watcher: lookup `~/.cache/w2-watcher/inbox-sessions/<oracle>/thread-<N>.session-id`, wake with `--resume <sid>` or `--fresh` accordingly. Capture new session-id from newest JSONL after a `--fresh` wake. Floor: `INBOX_MIN_GAP=300s` per oracle. Toggle: `INBOX_SCAN_ENABLED=1` env (default off until merge soak).
+- **Phase 2b:** PR into `kxlahsimx09/maw-js` (target `feat/all-prs-rebased` per SKILL.md maw-js workflow) adding `maw wake <oracle> --thread <N> --task "..."` native flag. maw handles the session-id mapping internally; watcher (and any other client) becomes provider-agnostic. Phase 2a still ships first — it does not depend on this.
+- **Phase 3:** Telegram alerts for `priority: high` (escalate) envelopes via brew-ops-bot's existing `[BLOCK_*]` detector pattern. `arra_inbox` MCP tool gains `type=directed, oracle=X` filter. "Step 0.5: directed inbox sweep" added to writer/tester workflows fleet-wide (sibling-sync per §3a discipline). When this lands for `pg-writer` / `bot-writer` / `pg-tester`, create their `for-{oracle}/` dirs at the same time.
 
-Multi-recipient broadcast is intentionally **not** in scope. If multiple roles need the same notification, write multiple files (one per recipient) referencing the same thread. Each recipient gets its own session-per-thread mapping.
+Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles need the same notification, write multiple files (one per recipient) referencing the same thread. Each recipient gets its own session-per-thread mapping.
 
 ---
 
 **Created:** 2026-04-16 (GMT+7)
 **Maintainers:** `brew-ops` proposes edits; human approves via PR.
-**Updated:** 2026-04-30 — added §11 (directed inbox protocol)
+**Updated:** 2026-04-30 — added §11 (directed inbox protocol); same-day fix: routing key is oracle name (not role label), envelope gains `to_role` / `from_role` documentation fields.

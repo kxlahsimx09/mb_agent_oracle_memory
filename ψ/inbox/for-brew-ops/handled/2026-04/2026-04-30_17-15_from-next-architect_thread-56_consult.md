@@ -1,6 +1,8 @@
 ---
-from: system-architect
+from: next-architect
+from_role: system-architect
 to: brew-ops
+to_role: brew-ops
 type: consult
 thread: 56
 subject: §ADR-9 dispatcher EF — fleet placement question (DOGFOOD test)
@@ -17,7 +19,7 @@ created: 2026-04-30T17:15:00+07:00
 test: true   # DOGFOOD — first envelope, validate format only
 handled_at: 2026-04-30T17:18:00+07:00
 handled_by_thread: 56
-handled_by_inbox: for-system-architect/2026-04-30_17-18_from-brew-ops_thread-56_reply.md
+handled_by_inbox: for-next-architect/2026-04-30_17-18_from-brew-ops_thread-56_reply.md
 ---
 
 # §ADR-9 dispatcher EF — fleet placement
@@ -54,9 +56,9 @@ pattern, but want explicit confirmation before §ADR-9 promotes).
 
 - This file's presence in `for-brew-ops/` is the wake trigger Phase 2 will
   automate. For now (Phase 1), manual wake via `maw wake brew-ops --task
-  "inbox: 2026-04-30_17-15_from-system-architect_thread-56_consult.md"`.
+  "inbox: 2026-04-30_17-15_from-next-architect_thread-56_consult.md"`.
 - After response, brew-ops should: (a) reply in thread #56, (b) write a reply
-  envelope at `for-system-architect/2026-04-30_HH-MM_from-brew-ops_thread-56_reply.md`,
+  envelope at `for-next-architect/2026-04-30_HH-MM_from-brew-ops_thread-56_reply.md`,
   (c) `git mv` this file into `for-brew-ops/handled/2026-04/` with `handled_at`
   + `handled_by_thread` + `handled_by_inbox` appended to frontmatter.
 
