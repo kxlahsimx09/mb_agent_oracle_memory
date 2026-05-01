@@ -18,7 +18,8 @@ The user can specify which test to run. If the user does not specify a test, **c
 - `test-payout-ktb.sh`
 - `test-mdr-fee-distribution.sh` — ทดสอบการแบ่งค่า Fee MDR Profile (deposit/payout/topup/settlement → verified partner wallet distributions)
 - `test-deposit-cancel.sh` — ยกเลิก deposit ที่ pending → status=cancelled, wallet ไม่เปลี่ยน, bank transfer หลัง cancel ไม่ถูก match
-- `test-payout-cancel.sh` — ยกเลิก payout ที่ pending → status=cancelled, wallet refund (คืนครบ)
+- `test-payout-cancel.sh` — **SUPERSEDED** by `test-payout-admin-cancel.sh` (kept per P-001). Exercises the OLD client-facing `POST /api/v1/payout/:id/cancel` endpoint that PR #228 (`153a4f6`) removed from the generic `/status` validator's accept list. Do not modify — write new assertions in the replacement test.
+- `test-payout-admin-cancel.sh` — admin cancel via `PUT /api/v1/payouts/:id/cancel` (PR #228 `153a4f6`, `controllers/PayoutController.go:999-1159`). 4-step cascade: queue-first guard → payout flip → wallet refund (amount + fee) → callback. 4 phases — happy path (asserts payout.status=cancelled + WQ.status=cancelled + wallet refunded + 1 wallets_change_logs entry tagged reference_type=payout); re-cancel guard (already-cancelled → 400 "Only pending", no double refund); bot-processing guard (WQ flipped to processing → 400 "bot is currently processing", payout stays pending, wallet unchanged); non-existent OID → 404. No real bot — bot never starts. **Expected GREEN**.
 - `test-settlement-cancel.sh` — ยกเลิก settlement ที่ pending (status=0) → status=3 (cancelled), wallet refund (amount+fee)
 - `test-deposit-min-max-limit.sh` — ทดสอบขีดจำกัด min/max deposit ต่อ client → ต่ำกว่า min / สูงกว่า max = rejected
 - `test-payout-insufficient.sh` — payout เมื่อ wallet ไม่พอ → rejected พร้อม error message ชัดเจน
