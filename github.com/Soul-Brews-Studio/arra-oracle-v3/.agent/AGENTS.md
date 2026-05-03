@@ -389,12 +389,132 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
 
 **Eviction:** when a thread reaches `status=closed`, the watcher drops the corresponding `<oracle>/thread-<N>.session-id` file. TTL backstop: a session-id not resumed for 30 days is dropped (assume thread cold/abandoned). Eviction does not violate P-001 — `~/.cache/` is ephemeral state, not vault content; the thread itself remains intact in Oracle.
 
-### 11g. Phase status (as of 2026-04-30)
+### 11g. Loop termination
 
-- **Phase 1 (current):** Manual fire — sender writes inbox file, human/sender invokes `maw wake <oracle>` directly. Used to validate envelope format on real consult traffic before automating. Dogfooded 2026-04-30 with thread #56 (ADR-9 dispatcher placement) — round-trip ~3 min, envelope format validated. Routing-key correction (oracle name not role label) applied same day before any cross-oracle wake fired. Cold cross-oracle wake test 2026-04-30 18:22 GMT+7 was aborted at startup by the maw-wake silent-fail described under Phase 2b — see learning `2026-04-30_title-maw-wake-template-silent-fail-blocks-phase` and the prior `2026-04-22_maw-wake-role-fresh-prompt-exits-0-as-so`.
-- **Phase 2b (now blocking — must land first):** PR into `kxlahsimx09/maw-js` (target `feat/all-prs-rebased` per SKILL.md maw-js workflow). Two scope items, in priority order: **(i) fix `maw wake` silent-fail** — when no continuable session exists for the target oracle, the current `claude --continue || claude -p '<prompt>'` template exits 0 and skips the fallback, leaving the pane at an empty shell. This breaks every `--fresh` wake to a clean worktree. Fix in maw so a `--fresh --task '<prompt>'` invocation always lands at a running claude session that has received the prompt. **(ii) add `maw wake <oracle> --thread <N>` native flag** so maw handles the session-id mapping internally and watcher / future `arra_inbox` MCP / manual ops all become provider-agnostic. Phase 2a is blocked until at least scope item (i) ships and a new local `maw` is installed; without it, every Phase 2a inbox wake silent-fails.
-- **Phase 2a (blocked on Phase 2b-i):** Watcher extension in `scripts/w2-watcher.sh` to scan inbox dirs every poll and fire `maw wake <oracle>` automatically. Implements session-per-thread mapping (§11f) entirely in the watcher: lookup `~/.cache/w2-watcher/inbox-sessions/<oracle>/thread-<N>.session-id`, wake with `--resume <sid>` or `--fresh` accordingly. Capture new session-id from newest JSONL after a `--fresh` wake. Floor: `INBOX_MIN_GAP=300s` per oracle. Toggle: `INBOX_SCAN_ENABLED=1` env (default off until merge soak). Implementation deferred until Phase 2b-i lands so the watcher does not need to repeat the template-fallback workaround already carried by `scripts/w2-watcher.sh` commit `6b3662d`.
-- **Phase 3:** Telegram alerts for `priority: high` (escalate) envelopes via brew-ops-bot's existing `[BLOCK_*]` detector pattern. `arra_inbox` MCP tool gains `type=directed, oracle=X` filter. "Step 0.5: directed inbox sweep" added to writer/tester workflows fleet-wide (sibling-sync per §3a discipline). When this lands for `pg-writer` / `bot-writer` / `pg-tester`, create their `for-{oracle}/` dirs at the same time.
+A directed-inbox conversation ends in one of three ways:
+
+| Termination | Trigger | What happens |
+|---|---|---|
+| **Resolved** | Sender (initiator) is satisfied with the answer | Sender: `arra_thread_update(threadId=N, status="closed")`, archive last received envelope (no follow-up envelope). |
+| **Moot** | Receiver finds the thread already closed (e.g. user ratified out-of-band) | Receiver: archive incoming envelope with `handled_note: thread N already closed at message <last>` (no reply envelope, no thread message — closed thread is read-only by convention). |
+| **Escalated** | Either side cannot continue without human input | See §11h. |
+
+**Receiver discipline when reading any inbox file:**
+
+1. After `arra_thread_read(threadId)` in Step 0.5 sweep, check the thread's `status` field.
+2. If `status == "closed"`:
+   - Don't post a new message in the thread (closed = read-only).
+   - Don't write a reply envelope.
+   - Just archive the incoming envelope with `handled_note: thread N already closed at message <last>`.
+3. If `status == "active"` or `"pending"`:
+   - Process the envelope normally (consult/escalate/notify per §11c).
+
+**Sender discipline when satisfied with a consult:**
+
+1. Last message in thread is the answer; sender writes nothing more in the thread (or writes a brief "thanks, closing" note if helpful for trace clarity).
+2. `arra_thread_update(threadId=N, status="closed")` to mark the thread closed.
+3. Archive the final reply envelope received (per §11d).
+4. Resume primary work — `[AWAITING_AGENT:{oracle}:thread-N]` markers in own work doc are now resolvable.
+
+**Loop guards (advisory, not enforced in v1):**
+
+- Soft round limit: if a thread exceeds 6 round-trips between two oracles without converging, treat as an escalation candidate.
+- Idle timeout: a thread with no activity for 24h triggers a sender-side review (is the thread still relevant? close or escalate).
+
+The watcher (§11i) surfaces stuck threads via the failure-detection pipeline (`failed_stuck` state).
+
+### 11h. Escalation to human
+
+Escalation = the agents cannot resolve the question among themselves and need the human to weigh in. Two flavors:
+
+| Flavor | Marker | Action |
+|---|---|---|
+| **Block-on-human** | `[ESCALATE_TO_HUMAN:thread-N:reason]` in own work doc | Stop work on the dependent path; thread stays `active`/`pending`; brew-ops-bot detector (see SKILL.md operations infrastructure) picks up the marker and sends a Telegram alert with the marker text. Phase 3 wires the auto-alert; until then, the marker is a documentation signal that an `rrr` retro carries forward. |
+| **Soft-ask** | Thread message addressed to user (`@user` mention or "needs ratification") | Thread stays `pending`; user reads in studio dashboard (`/forum`) and responds when ready. No Telegram unless the marker pattern above is also written. |
+
+**When to escalate:**
+
+- Decision exceeds either agent's authority (e.g. architectural direction, security trade-off, merging to upstream).
+- Two agents disagree after a fair exchange (3+ rounds without convergence).
+- New surface area is exposed that wasn't in scope (e.g. a consult about ADR-9 reveals an ADR-11 gap).
+- Either agent hits a non-obvious gate (auth, credentials, infra change) that the human owns.
+
+**Don't escalate for:**
+
+- Fact lookups one agent can do alone (`arra_search`, `git log`).
+- Work the agent is qualified to do (per its role's "what I own" table in the SKILL.md).
+- Mere lack of context — that's what the thread is for.
+
+**Marker placement convention:**
+
+The `[ESCALATE_TO_HUMAN:thread-N:reason]` marker lives in the agent's own work artifact (`docs/adr.md`, `docs/current-system.md`, retro file, etc.) — wherever the work would have continued if the escalation hadn't happened. The marker is a beacon: any reader of the work doc sees the escalation, the reason, and the thread for context.
+
+### 11i. Watcher integration + delivery verification
+
+The watcher (`scripts/inbox-watcher.sh`) closes the directed-inbox loop by firing `maw wake` in response to new envelopes and verifying that each wake actually delivered. Without verification, silent-fails (claude crashed, prompt truncated, agent stuck) accumulate invisibly.
+
+**Cadence + state directory:**
+
+- Poll every `INBOX_POLL_INTERVAL=60s` (default; configurable via env).
+- State at `~/.cache/inbox-watcher/state/<oracle>/<filename>.state` per envelope.
+- Session-per-thread map at `~/.cache/inbox-watcher/sessions/<oracle>/thread-<N>.session-id`.
+- Log at `~/.cache/inbox-watcher/inbox-watcher.log`.
+
+**State machine per envelope file:**
+
+```
+NEW                                      (no state file)
+  └─ fire_wake → status=fired, fired_at=<ts>, wt_path=<resolved-from-maw-output>
+
+fired                                    (T1 gate — delivery probe)
+  ├─ JSONL has user message containing "inbox: <fname>"
+  │                                      → status=verified + capture session-id
+  ├─ T1_DELIVERY_DEADLINE elapsed (default 60s) and no JSONL/no prompt
+  │                                      → status=failed_no_prompt + alert
+  └─ otherwise                           → keep polling
+
+verified                                 (T2 gate — processing)
+  ├─ envelope file moved out of for-{oracle}/ root
+  │                                      → status=completed
+  ├─ T2_PROCESSING_DEADLINE elapsed (default 1800s = 30 min) and file still present
+  │                                      → status=failed_stuck + alert
+  └─ otherwise                           → keep polling
+
+completed | failed_*                     (terminal — kept for audit)
+```
+
+**Three failure modes the watcher distinguishes:**
+
+| Status | Cause | Operator action |
+|---|---|---|
+| `failed_no_prompt` | `maw wake` returned 0 but JSONL never appeared, or JSONL exists without a user message containing the inbox filename. Indicates a wake-mechanism regression (silent-fail returned, prompt was truncated, JSONL written to unexpected path). | Re-read silent-fail learnings (`2026-04-22`, `2026-04-30`); `maw peek <pane>`; rebuild maw if recently changed; re-fire manually for that envelope. |
+| `failed_stuck` | Wake delivered (JSONL has the prompt) but envelope is still in `for-{oracle}/` after T2. Agent received the prompt but didn't archive — could be stuck in a tool, errored, lost the protocol thread, or simply slow. | Read the agent's JSONL to see what they did; manually archive if appropriate; raise to Telegram if the pattern repeats per receiver. |
+| `completed` | Envelope archived under `handled/YYYY-MM/`. | None — clear state file after audit retention window (default 7 days). |
+
+**Toggle:** `INBOX_SCAN_ENABLED=1` env (default on once `inbox-watcher.sh` is running).
+
+**Idempotency:**
+
+The watcher is safe to restart. State files are per-envelope and only re-fire on `NEW` (no state file). Restart never re-fires a `fired`/`verified` envelope unless its state file is manually deleted.
+
+**Operational integration:**
+
+- Lives alongside `w2-watcher.sh` and `brew-ops-bot/` in `arra-oracle-v3/scripts/` (see SKILL.md operations infrastructure).
+- Started under `nohup ... & disown` like the other daemons.
+- `pgrep -fl inbox-watcher` for liveness.
+- `bash scripts/inbox-watcher.sh status` for state + recent transitions.
+
+**Failure alerting (Phase 3):**
+
+Phase 1 surfaces failures via the watcher log only. Phase 3 wires `failed_no_prompt` and `failed_stuck` into `brew-ops-bot/detector.sh` so Telegram alerts go out automatically without reading the log.
+
+### 11j. Phase status (as of 2026-05-03)
+
+- **Phase 1 (shipped 2026-04-30):** Manual fire — envelope spec + 3 flows + archive protocol + session-per-thread wake decision rule. Dogfooded with thread #56 (ADR-9 dispatcher placement) — manual round-trip ~3 min. Cold cross-oracle wake test 2026-04-30 21:00 GMT+7 passed end-to-end after Phase 2b-i landed: next-architect (no §11 in own charter) self-discovered the protocol via vault grep and followed §11d archive correctly.
+- **Phase 2b-i (shipped 2026-04-30):** `maw wake` silent-fail fix in `kxlahsimx09/maw-js` PR #3 → merge `4e441b57` on `feat/all-prs-rebased`. Filesystem-probe `~/.claude/projects/<encoded>/` before emitting the command; `--fresh` strips `--continue`/`--resume` and the `||` fallback; prompt baked into both branches when fallback emitted. Verified end-to-end: clean `claude -p '<prompt>'` lands at running session, prompt delivered.
+- **Phase 2a (in progress 2026-05-03):** `scripts/inbox-watcher.sh` per §11i. Implements 3-gate state machine (delivery T1 + processing T2 + stuck-detect), session-per-thread capture from JSONL, fail-aware logging. PR target arra-oracle-v3 fork main per `feedback_fork_prs_not_upstream`. No template-fallback workaround needed (Phase 2b-i removed the silent-fail root cause).
+- **Phase 2b-ii (deferred):** `maw wake <oracle> --thread <N>` native flag in maw-js. Useful but not blocking — Phase 2a watcher implements the session-per-thread mapping client-side. Becomes ergonomics improvement when picked up.
+- **Phase 3:** Telegram escalation alerts (extend `brew-ops-bot/detector.sh` for `[ESCALATE_TO_HUMAN:*]` markers and `failed_*` watcher states); `arra_inbox` MCP tool gains `type=directed, oracle=X` filter so `for-{oracle}/` files are first-class in the tool surface (currently Step 0.5 sweep falls back to `Read` on the vault path); §11 sibling-sync to writer/tester/architect AGENTS.md (cold-test proved self-discovery is sufficient, so this drops to convenience-only priority).
 
 Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles need the same notification, write multiple files (one per recipient) referencing the same thread. Each recipient gets its own session-per-thread mapping.
 
@@ -403,3 +523,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Created:** 2026-04-16 (GMT+7)
 **Maintainers:** `brew-ops` proposes edits; human approves via PR.
 **Updated:** 2026-04-30 — added §11 (directed inbox protocol); same-day fix: routing key is oracle name (not role label), envelope gains `to_role` / `from_role` documentation fields. Same-day discovery: maw wake silent-fail blocks Phase 2a; Phase 2b reordered to land first with the silent-fail root fix as scope item (i).
+**Updated:** 2026-05-03 — added §11g (Loop termination), §11h (Escalation to human), §11i (Watcher integration + delivery verification); §11j renamed from §11g (Phase status) and updated to reflect Phase 2b-i shipped + Phase 2a in progress.
