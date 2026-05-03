@@ -306,6 +306,8 @@ to: brew-ops                   # oracle name — must match an entry in `maw ora
 to_role: brew-ops              # role label (optional; redundant when oracle == role)
 type: consult                  # consult | escalate | notify
 thread: 56                     # omit for notify-without-thread
+parent_thread: 100             # optional — set by orchestrator when fanning out
+parent_oracle: orchestrator    # optional — pairs with parent_thread; identifies who is aggregating
 subject: pre-Input-5 checkpoint externalization proposal
 context: see thread #56 — if pass-2 still misses, need tooling fix
 needs_response: true           # consult/escalate=true; notify=false
@@ -319,6 +321,8 @@ created: 2026-04-30T14:00:00+07:00
 
 (optional short body — full discussion belongs in the thread)
 ```
+
+`parent_thread` + `parent_oracle` are introduced for the orchestrator fan-out pattern (§11k). They are optional fields with no impact on routing — recipients ignore them in the standard sweep. The orchestrator's Step 0.5 sweep groups incoming reply envelopes by `parent_thread` to know which sub-tasks of which parent request have completed.
 
 `from`/`to` are the **routing keys** — they must match oracle names. `from_role`/`to_role` are documentation only; the watcher and Step 0.5 sweep do not parse them. They exist so the receiver immediately understands what the sender does in fleet terms (e.g., "this came from `next-architect` who plays the `system-architect` role"), without a round-trip to `maw oracle ls`.
 
@@ -508,6 +512,61 @@ The watcher is safe to restart. State files are per-envelope and only re-fire on
 
 Phase 1 surfaces failures via the watcher log only. Phase 3 wires `failed_no_prompt` and `failed_stuck` into `brew-ops-bot/detector.sh` so Telegram alerts go out automatically without reading the log.
 
+### 11k. Orchestrator fan-out pattern
+
+The `orchestrator` oracle is a coordinator role (Phase 4). It does not do agent work — it dispatches to other agents and aggregates their replies. The fan-out pattern uses two optional envelope fields, `parent_thread` and `parent_oracle` (§11b), to link sub-task threads back to a parent request thread.
+
+**Fan-out shape (orchestrator's perspective):**
+
+```
+User request → orchestrator opens parent thread #100
+                                        │
+              ┌─────────────────────────┼─────────────────────────┐
+              ▼                         ▼                         ▼
+         sub-thread #101           sub-thread #102           sub-thread #103
+         (ortho ↔ writer)          (ortho ↔ tester)          (ortho ↔ arch)
+              │                         │                         │
+         envelope                  envelope                  envelope
+         to: pg-writer             to: pg-tester             to: next-architect
+         thread: 101               thread: 102               thread: 103
+         parent_thread: 100        parent_thread: 100        parent_thread: 100
+         parent_oracle: orchestrator (×3)
+              │                         │                         │
+              ▼                         ▼                         ▼
+         (each agent runs §11e Step 0.5 sweep, replies in own sub-thread,
+          writes notify envelope back to for-orchestrator/)
+              │                         │                         │
+              └─────────────────────────┼─────────────────────────┘
+                                        ▼
+              orchestrator's Step 0.5 sweep groups by parent_thread
+              ↓ when all subs are closed (or stuck)
+              orchestrator posts aggregated final to parent #100
+              orchestrator closes parent #100
+              orchestrator notifies user (via orchestrator-bot daemon)
+```
+
+**Parent-thread lifecycle:**
+
+| Stage | Trigger | Action |
+|---|---|---|
+| Open | New request envelope arrives at `for-orchestrator/` | Open parent thread, post plan; for each sub-task, open sub-thread + write envelope with `parent_thread=<parent>` |
+| Mid-stream | Each time orchestrator wakes via inbox sweep (sub reply landed) | Post short progress update to parent thread; chat-watcher mirrors to user Telegram |
+| Aggregate | Last sub-thread reaches `closed` status | Post aggregated final to parent thread (cite each sub by id); close parent (`status=closed`) |
+| Stuck | Watcher reports `failed_stuck` for any sub | Post warning to parent; either retry, redirect, or escalate per §11h |
+
+**Recipient discipline (other agents):**
+
+Other agents are **unchanged** by §11k. They process incoming envelopes per §11e Step 0.5, reply in their own sub-thread, and write a reply envelope back to `for-{from}/` per §11d. The `parent_thread` field is metadata they ignore for their own routing — only the orchestrator reads it during aggregation.
+
+**Why parent + sub (not single thread):**
+
+- Voice separation: parent thread is user ↔ orchestrator's reasoning; sub threads are orchestrator ↔ specific agent (1-on-1, focused).
+- Existing infrastructure reuse: sub-threads use the same session-per-thread mapping (§11f) as any other directed-inbox conversation, so warm-context resume works per agent per topic.
+- Studio UI shows hierarchy cleanly (parent thread links to its subs).
+- Closing logic cascades: sub closes when its agent finishes, parent closes when all subs close.
+
+Multi-recipient broadcast (one envelope to many recipients) is still **not** in scope. Fan-out writes one envelope per recipient — that's the explicit, observable contract.
+
 ### 11j. Phase status (as of 2026-05-03)
 
 - **Phase 1 (shipped 2026-04-30):** Manual fire — envelope spec + 3 flows + archive protocol + session-per-thread wake decision rule. Dogfooded with thread #56 (ADR-9 dispatcher placement) — manual round-trip ~3 min. Cold cross-oracle wake test 2026-04-30 21:00 GMT+7 passed end-to-end after Phase 2b-i landed: next-architect (no §11 in own charter) self-discovered the protocol via vault grep and followed §11d archive correctly.
@@ -515,6 +574,7 @@ Phase 1 surfaces failures via the watcher log only. Phase 3 wires `failed_no_pro
 - **Phase 2a (in progress 2026-05-03):** `scripts/inbox-watcher.sh` per §11i. Implements 3-gate state machine (delivery T1 + processing T2 + stuck-detect), session-per-thread capture from JSONL, fail-aware logging. PR target arra-oracle-v3 fork main per `feedback_fork_prs_not_upstream`. No template-fallback workaround needed (Phase 2b-i removed the silent-fail root cause).
 - **Phase 2b-ii (deferred):** `maw wake <oracle> --thread <N>` native flag in maw-js. Useful but not blocking — Phase 2a watcher implements the session-per-thread mapping client-side. Becomes ergonomics improvement when picked up.
 - **Phase 3:** Telegram escalation alerts (extend `brew-ops-bot/detector.sh` for `[ESCALATE_TO_HUMAN:*]` markers and `failed_*` watcher states); `arra_inbox` MCP tool gains `type=directed, oracle=X` filter so `for-{oracle}/` files are first-class in the tool surface (currently Step 0.5 sweep falls back to `Read` on the vault path); §11 sibling-sync to writer/tester/architect AGENTS.md (cold-test proved self-discovery is sufficient, so this drops to convenience-only priority).
+- **Phase 4 (in progress 2026-05-03):** Orchestrator role + Telegram daemon (§11k fan-out pattern). User → Telegram → `orchestrator-bot/bot.sh` writes envelope → watcher fires orchestrator → orchestrator dispatches via fan-out, aggregates, reports back via chat-watcher. New daemon under `scripts/orchestrator-bot/` mirroring `scripts/brew-ops-bot/` shape. New role at `.agent/skills/orchestrator/`. New chat: `mb_orchrestrator_bot` (chat 2002026175).
 
 Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles need the same notification, write multiple files (one per recipient) referencing the same thread. Each recipient gets its own session-per-thread mapping.
 
@@ -524,3 +584,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Maintainers:** `brew-ops` proposes edits; human approves via PR.
 **Updated:** 2026-04-30 — added §11 (directed inbox protocol); same-day fix: routing key is oracle name (not role label), envelope gains `to_role` / `from_role` documentation fields. Same-day discovery: maw wake silent-fail blocks Phase 2a; Phase 2b reordered to land first with the silent-fail root fix as scope item (i).
 **Updated:** 2026-05-03 — added §11g (Loop termination), §11h (Escalation to human), §11i (Watcher integration + delivery verification); §11j renamed from §11g (Phase status) and updated to reflect Phase 2b-i shipped + Phase 2a in progress.
+**Updated:** 2026-05-03 (later) — added §11b `parent_thread`/`parent_oracle` fields and §11k Orchestrator fan-out pattern (Phase 4). Phase 2a watcher PR merged; Phase 4 daemon + role next.
