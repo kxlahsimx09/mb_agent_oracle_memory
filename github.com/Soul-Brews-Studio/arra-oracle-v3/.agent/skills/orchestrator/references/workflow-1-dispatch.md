@@ -15,9 +15,49 @@ Standard. Read every file under `for-orchestrator/`, including the one
 that woke me. For each:
 
 1. Parse YAML frontmatter (`from`, `type`, `thread`, `parent_thread`, `priority`).
-2. If the file is a **continuation** (i.e. has `parent_thread` and that thread is in `arra_threads(status=active|pending)` and matches the daemon's current active-thread for this chat) → treat as ongoing conversation, jump to **Step 5 — mid-stream**.
-3. If the file is a **fresh request** (no `parent_thread`, or `parent_thread` references a closed thread) → continue with Step 1.
-4. If the file is a **cancellation** envelope (`type=notify`, subject starts with `cancel:`) → jump to Step 7 with cancellation handling.
+
+2. **Closed-thread guard (mandatory — §11g moot path).** If the envelope
+   carries a `thread:` or `parent_thread:` field, run
+   `arra_thread_read <id>` *before* any other classification work and
+   inspect `status`. **If `status == "closed"`:**
+   - Do **not** post any message in the thread (closed = read-only by
+     convention; see §11g).
+   - Do **not** write a reply envelope.
+   - Append `handled_at` + `handled_note: "thread N already closed at message <last>"`
+     to the envelope's frontmatter and `git mv` it to `handled/YYYY-MM/`
+     per §11d.
+   - Continue to the next envelope; **do not enter Step 1**.
+
+   This is the §11g "moot" termination. Without this guard, envelopes that
+   landed after a thread was closed by another orchestrator session (or by
+   the user out-of-band) sit in `for-orchestrator/` until T2 expires and
+   the watcher marks them `failed_stuck` — silent breakage.
+   **Precedent:** thread #74 incident 2026-05-04, where four envelopes
+   (two `_reply`, one `_smoke-test-pass`, one `_continuation`) all reached
+   `failed_stuck` because the orchestrator did not run this guard after
+   the thread was closed mid-conversation.
+
+3. If the file is a **continuation** (has `parent_thread` referencing an
+   `active` or `pending` thread, and matches the daemon's current
+   active-thread for this chat) → treat as ongoing conversation, jump to
+   **Step 5 — mid-stream**.
+
+4. If the file is a **fresh request** (no `parent_thread`, or
+   `parent_thread` references a thread already handled per the guard
+   above) → continue with Step 1.
+
+5. If the file is a **cancellation** envelope (`type=notify`, subject
+   starts with `cancel:`, or filename ends in `_cancel.md`) → jump to
+   **Step 7** with cancellation handling.
+
+### Recovery from `failed_stuck`
+
+If `arra_search` (Step 1) or the user notes that envelopes were stuck
+in a previous run, the human can clear them via Telegram `/retry`,
+which removes the watcher's terminal state files so the next scan
+re-fires the affected envelopes. The orchestrator should then process
+them through the closed-thread guard above; for envelopes whose threads
+are *still* open the work proceeds normally.
 
 ## Step 0.5 — Read daemon state for this chat
 
