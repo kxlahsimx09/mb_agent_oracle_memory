@@ -4,6 +4,10 @@
     {
       "name": "next-architect-oracle",
       "repo": "kxlahsimx09/mb-next-payment-gateway"
+    },
+    {
+      "name": "next-impl-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway"
     }
   ],
   "sync_peers": [],

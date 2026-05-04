@@ -83,6 +83,7 @@ This repo is the **next system** — currently in design phase. Initial roster i
 | Role | tmux window | Responsibility |
 |---|---|---|
 | `system-architect` | `next-architect-oracle` | Designs the next-gen payment gateway architecture. Gathers requirements, produces high-level designs, data models, API contracts, scale/reliability plans, and trade-off analyses. Owns `docs/design/`, `docs/adr/`, architecture diagrams. Does **not** write feature code — provides clarity so implementation agents (future) can act. |
+| `implementation-architect` (next-impl) | `next-impl-oracle` | Materializes each ratified ADR as a cheap, runnable PoC + spec tests asserting ADR-promised claims + a drift report when execution falsifies a claim. Mines `#current` evidence (vault learnings, integration-tests, docs/flows) to seed PoC fixtures + spec-test docstrings; outputs land under `poc/<adr-id>/`. Sibling — not replacement — to next-dev (the future builder). Falsifier / prover, not designer or builder. Activated 2026-05-04. |
 
 **Sibling fleet members (different repos, reachable via Oracle + `maw hey`):**
 

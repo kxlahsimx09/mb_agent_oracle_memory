@@ -153,6 +153,7 @@ If a rule in this charter appears to conflict with a principle, **the principle 
 | `technical-writer` (bot-writer) | `kokarat/bank-bot` | `#current` | Keeps docs synced with the Playwright bank-bot. |
 | `tester` (pg-tester) | `kokarat/mobiz-payment-gateway` | `#current` | Static-analysis auditor for integration-tests + mock-bank contract. |
 | `system-architect` (next-architect) | `kxlahsimx09/mb-next-payment-gateway` | `#next` | Designs the next-generation payment gateway. Reads current-system learnings via Oracle, produces ADRs + subsystem designs. Activated 2026-04-22. |
+| `implementation-architect` (next-impl) | `kxlahsimx09/mb-next-payment-gateway` | `#next` | Materializes ratified ADRs as cheap runnable PoCs + spec tests + drift reports. Mines `#current` evidence into PoC fixtures + spec-test cite blocks. Sibling to next-architect (upstream) and future next-dev (downstream). Activated 2026-05-04. |
 
 **System-lifecycle tagging (ecosystem-wide).** Two families of product systems live in parallel:
 
@@ -263,6 +264,7 @@ Inbox directories are named after the **oracle** (the maw fleet entity that `maw
 |---|---|
 | `brew-ops` | `brew-ops` |
 | `system-architect` | `next-architect` |
+| `implementation-architect` | `next-impl` |
 | `technical-writer` | `pg-writer`, `bot-writer` (two oracles, same role) |
 | `tester` | `pg-tester` |
 
