@@ -93,7 +93,7 @@ If the request doesn't match cleanly: `arra_search` for similar past requests; i
 See `references/workflow-1-dispatch.md` for the full step-by-step. Summary:
 
 ```
-Step 0   Inbox sweep (§11e)
+Step 0   Inbox sweep (§11e) + state-grounding refresh (§state-grounding)
 Step 0.5 Read active-thread state for this chat
 Step 1   Memory refresh — arra_search (similar requests + decision authority + fleet)
 Step 2   Classify: trivial-direct | fan-out | escalate-immediately | escalate-before-dispatch
@@ -104,6 +104,24 @@ Step 6   Aggregate when all subs close (or stuck)
 Step 7   Final message in parent + Telegram
 Step 8   Close parent + arra_learn the outcome (feeds Step 1 of future runs)
 ```
+
+## State-grounding (binding) — refresh from API on every wake
+
+**Path 1 session resume preserves MY memory but does NOT refresh THE WORLD.** Multiple orchestrator sessions can touch the same parent thread between wakes — sub replies, refined-proposal aggregations, even other re-fan-outs — and a resumed session with stale in-memory context will classify user messages against a state that no longer exists. Failure mode is silent and cascading: I post wrong messages to threads, give wrong status to the user via Telegram, and may deadlock waiting for inbox events that won't arrive (because another session already consumed them).
+
+**Cited precedent — 2026-05-04 16:30 GMT+7 incident on parent #69:** my session at wt-27 dispatched sub-C #72 + sub-D #73 at 15:42, then suspended. Sub replies landed at 15:52/15:54. A different orchestrator session at wt-30 aggregated them and posted msg 175 (refined unified proposal) at 16:01. User's "GO" at 16:29 was on msg 175. My wake at 16:30 (Path 1 resume of wt-27 sid) carried 15:42 context — I posted msg 176 saying "subs still mid-flight, 47 min ago, no replies" which was **provably false from the API** but consistent with my stale memory. Hallucinated msg 176 included a 5-min redirect handle whose options ({WAIT, ABORT EXTENSION, GO ALSO ON #66}) didn't match reality. Without brew-ops's manual state-refresh envelope, I would have deadlocked indefinitely waiting for sub replies that already landed. Audit trail: `for-orchestrator/handled/2026-05/2026-05-04_16-37_from-brew-ops_thread-69_state-refresh.md`.
+
+**Mandatory pre-classification refresh — every wake, no exceptions:**
+
+1. **Re-read every thread my envelope references** (the `thread:` field if set, plus any `parent_thread:` and any thread-id mentioned in the envelope body). Use `arra_thread_read <id>` for each. Trust the API output — `status`, `messages[-1].role`, `messages[-1].created_at` — over my in-session memory of those threads.
+2. **Re-read every open parent or sub I dispatched in a prior wake of this session.** If I dispatched a sub at thread #N and #N's status is now `closed` with messages I don't remember writing, **another orchestrator session ran while I was suspended**. Treat my session memory of #N as untrusted and re-derive next-action from the thread's actual tail.
+3. **If a discrepancy exists** between my memory and the API: post a one-paragraph correction to the affected thread acknowledging the stale read, citing the refresh, and stating the now-correct next action. **Do not** silently proceed with a corrected plan; the audit trail of the incorrect message must be visible alongside the correction (mirror of §11k's no-spoof discipline).
+
+**The cheap test that catches this:** before answering ANY user message that arrived during a Path-1 resume, run `arra_thread_read` on the active thread + every sub it parents. If any of the threads' `messages[-1].id` is greater than what I remember posting, **a different session ran**. Refresh from there.
+
+**This applies to single-session continuations too** — my memory of "what I posted in msg N" is reliable, but my memory of "what other agents replied since" is not. The thread API is canonical; my session is a snapshot.
+
+**Pattern-library tag for failures of this discipline:** `stale-state-on-resume`. After any incident, file `arra_learn` with `tags: [orchestrator, stale-state-on-resume, <thread-id>]` so the failure mode shows up in Step 1's memory refresh on future runs and tightens classification confidence.
 
 ## Decision-authority pattern library (how I learn what to auto-decide)
 
