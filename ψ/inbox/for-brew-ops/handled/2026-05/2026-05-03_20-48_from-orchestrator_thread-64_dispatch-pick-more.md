@@ -12,6 +12,10 @@ context: User Telegram 2026-05-03 20:45 GMT+7 — "เลือกมาอี�
 needs_response: true
 priority: normal
 created: 2026-05-03T20:48:00+07:00
+handled_at: 2026-05-03T21:01:00+07:00
+handled_by_thread: 64
+handled_by_inbox: for-orchestrator/2026-05-03_21-01_from-brew-ops_thread-64_reply.md
+handled_note: Executed pick-more — 8 retired (5 arra + 3 mobiz Group 4), 0 failures, all PROTECT paths preserved. Reply on thread #64 msg #142.
 ---
 
 # Pick-more dispatch (orchestrator → brew-ops, thread #64)
