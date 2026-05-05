@@ -155,6 +155,49 @@ Cite as `file.go:42@<commit-sha>` in the ADR. Pin the commit — the claim is fr
 
 ---
 
+## Port-from-mobiz protocol
+
+When porting logic, schema, or invariants from `mobiz-payment-gateway` (or `bank-bot`) into the next-system ADR — that is, copying behavior verbatim because "current does it this way" — three rules apply.
+
+### 1. Verify rationale, not just code
+
+Pre-Input-5 (verify-before-port) extends from code-claim verification to architectural-rationale verification. Before porting, answer in the ADR or revision log:
+
+> Does the rationale for current's behavior still hold in next-system context?
+
+Concrete checks:
+
+- Is there a legacy data class current must preserve that next-system doesn't have? (Greenfield migration removes the rationale.)
+- Does the deployment timeline differ (gradual vs cutover)?
+- Does an upstream/downstream schema constraint still apply?
+- Does the original failure mode (rate, blast radius) match the new context?
+
+If the rationale **does not** apply → divergence is justified. Document explicitly in the ADR section being amended with a paragraph naming the obsolete rationale and the next-system replacement. Cost: ~5 min/port at port-time. Saves a post-ratification refinement cycle later.
+
+### 2. Pattern threshold = 3 → durable + brew-ops handoff
+
+At the end of every pass, count instances of any architectural pattern surfaced this session. When a pattern reaches **3 instances**, it is no longer a candidate — promote it to **durable architectural rule** and queue a brew-ops handoff (an `arra_inbox` envelope to `for-brew-ops`) requesting the rule land in this workflow doc or the role's `SKILL.md`.
+
+Do not wait for instance #5+. Earlier promotion = rule applied to subsequent passes from instance #4 onward, not retrofitted at instance #6.
+
+### 3. Confirmed durable rule — Deliberate divergence from mobiz current
+
+Five confirmed instances as of 2026-05-05:
+
+| # | Decision | Divergence | Obsolete rationale (mobiz) |
+|---|---|---|---|
+| 1 | §ADR-4c D10 | view-contract for `effective_status` | scattered status fields |
+| 2 | §ADR-13 D2 | trigger-based denorm | audit topology |
+| 3 | §ADR-4b amendment B2 | RPC + advisory lock | count-based loop |
+| 4 | §ADR-4b amendment B6 | hybrid schema | MongoDB schemaless |
+| 5 | §ADR-4d amendment V2 Layer 1 | fail-closed on partial data | fail-open (legacy data class) |
+
+**The rule**: "port from mobiz" is the default, but is conditional on rule 1 (rationale verification). Append new instances to this table as they're confirmed in subsequent passes.
+
+Source retro: `ψ/memory/retrospectives/2026-05/05/20.53_w1-adr-4d-amendment-v2-fail-closed-refinement.md`.
+
+---
+
 ## Outputs you will produce
 
 Required:
@@ -548,6 +591,7 @@ Ordered newest-first. Each refine pass appends a single entry here using the for
 - **Opening threads without anchors.** Every thread must have a matching `[AWAITING_THREAD:<id>]` in `docs/adr.md` (or the targeted design doc) in the **same commit** that opens it. A thread with no anchor is a workflow bug.
 - **Closing threads without posting a citation.** Per the fleet's thread-resolve discipline: before `arra_thread_update(status="closed")`, post a message citing the commit (doc-update or code-fix) that resolved the question. Cross-repo closers are especially vulnerable to this — the closer's local commit history isn't reachable from the other instance.
 - **Designing without current-system prior art.** For any subsystem that has a mobiz or bank-bot analogue, §Prior art must not be empty. If it's empty, you skipped Input 2 or 3. Go back.
+- **Porting current-system logic without rationale check.** Pre-Input-5 covers code-claim verification; the same discipline applies to architectural decisions inherited verbatim. Check whether the rationale that justified the behavior in mobiz still holds in next-system context. See §Port-from-mobiz protocol rule 1.
 - **Committing straight to `main`.** AGENTS.md §9. Always branch → PR → wait for human approval before merge.
 - **Over-scoping the focus theme.** If the pass takes more than 2 hours, the theme was too broad. Split next time. Record the split in the retro's "what would make the next pass cheaper" section.
 - **Reading current-system code on every pass.** Input 5 is a last resort. If your recent passes cite code repeatedly on the same file, that's a signal to ask `pg-writer` or `bot-writer` to publish a learning on it (via `arra_inbox`) so the next pass gets the fact at Input 1 cost.
@@ -578,3 +622,4 @@ If any checkbox fails, the pass is incomplete. Do not mark the session done in t
 
 - 2026-04-22 — Initial version. Defines baseline vs refine modes, five-input priority order (Oracle memory → current-system docs → flow maps → constraints → current-system code), Step 0 thread sweep shared with the fleet, Step 2 focus-theme discipline, `docs/adr.md` skeleton template, revision-log format, definition-of-done checklist. Paired with `system-architect` activation (central commit `5d28531`) and brew-ops inventory update (central commit `4c3911c`).
 - 2026-04-29 — Promote `arra_trace` from "Optional" (old line 194 — conditional on "≥ 2 evidence sources") into Step 8 main flow as a mandatory call after `arra_learn`/`arra_supersede`. Add `arra_trace_link` as the chain primitive when a prior trace exists. Add 2 Definition-of-Done checkboxes (`arra_trace` filed; `arra_trace_link` filed OR `"no chain candidate"` declared in retro). Trigger: thread #54 — brew-ops surfaced that `mb-next-payment-gateway` had 0 traces in 30 days, so 8+ retros flagging "missed `arra_trace_link`" actually meant `arra_trace` itself was never called. Old "≥ 2 evidence" trigger framed the call as conditional when W1's structure satisfies it by default — fixed framing here. Companion: `arra_learn` MCP response now includes `trace_link_hint` field at learn-time (PRs #14 + #15 in `Soul-Brews-Studio/arra-oracle-v3`, merged via `feat/all-prs-rebased`).
+- 2026-05-05 — Add §Port-from-mobiz protocol with three rules: (1) verify rationale (not just code) at port-time — Pre-Input-5 extends from code-claim to architectural-rationale verification; (2) pattern-instance threshold = 3 → promote to durable + queue brew-ops handoff (do not wait for instance #5+); (3) confirmed durable rule "Deliberate divergence from mobiz current" with 5-instance reference table (§ADR-4c D10, §ADR-13 D2, §ADR-4b B2, §ADR-4b B6, §ADR-4d V2). Add anti-pattern entry "Porting current-system logic without rationale check" citing rule 1. Trigger: architect handoff retro `2026-05/05/20.53_w1-adr-4d-amendment-v2-fail-closed-refinement.md` flagged that the deliberate-divergence pattern reached instance #5 before being explicitly promoted (should have promoted at #3-4), and that initial port at §ADR-4d C2 ratification used mobiz fail-open without verifying the legacy-data rationale still applied to greenfield next-system — costing one post-ratification refinement cycle. Both gaps now closed in workflow rules.
