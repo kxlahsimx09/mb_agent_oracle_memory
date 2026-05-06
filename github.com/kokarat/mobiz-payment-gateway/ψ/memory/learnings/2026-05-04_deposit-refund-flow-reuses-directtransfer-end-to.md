@@ -1,0 +1,14 @@
+---
+title: Deposit refund flow reuses direct_transfer end-to-end (issue #289, `815418e` #39
+tags: [technical-writer, repo:mobiz-payment-gateway, current, deposit, deposit-refund, direct-transfer, withdrawal-queue, issue-289, money-out]
+created: 2026-05-04
+source: controllers/DepositController.go:2524-3210, services/depositRefundSync.go, services/withdrawalQueue.go:1471-1495, services/callbackService.go:39-46, models/deposit.go:170-185, models/direct_transfer.go:88-97 @ 815418e
+project: github.com/kokarat/mobiz-payment-gateway
+---
+
+# Deposit refund flow reuses direct_transfer end-to-end (issue #289, `815418e` #39
+
+Deposit refund flow reuses direct_transfer end-to-end (issue #289, `815418e` #399, 2026-05-05). Money math: walletDebit = deposit.final_amount + refund_transfer_fee (default 5 from app_settings.refund_transfer_fee); DT.Amount = deposit.amount (full to player); partners keep MDR (system absorbs the loss). New endpoints: POST /api/v1/deposits/:id/refund + POST /:id/refund/resolve; both gated by deposit:refund permission AND step-up TOTP (helpers.VerifyTOTPStepUp); /refund additionally gated by app_settings.enable_deposit_refund flag (default OFF). Bot doesn't know it's a refund — sees a normal pending_approval DT with transfer_type="refund" + refund_for_deposit_id linkage. processPostCompletion's new SourceTypeDirectTransfer branch fires services.SyncDepositRefundStatus(dt, outcome) where outcome translates bot "failed" → "uncertain" (deposit held at refund_pending_review, wallet untouched, admin reconciles via /refund/resolve). Three-way sync: success → deposit.status="refunded" + EventDepositRefunded callback; uncertain → status="refund_pending_review" + EventDepositRefundPendingReview; cancelled (only emitted by CancelDirectTransfer for pending_approval DTs) → CLAIM-FIRST CAS then $inc wallet by walletDebit + EventDepositRefundFailed. CancelDirectTransfer also branches on prior DT status: pending_approval → "cancelled"; approved → "uncertain" (closes pre-merge cancel-hook double-spend hole). Status whitelist on every CAS guards stale callbacks. Race protection: stamp uses {refund_transfer_id: nil} filter (matches null OR missing) + partial unique index on ts_deposits.refund_transfer_id (scripts/create_deposit_refund_index.go); both ResolveRefund branches CLAIM-FIRST (deposit CAS) before crediting wallet so double-clicks cannot double-credit. Models: ts_deposits +6 fields (RefundedAt, RefundTransferID *primitive.ObjectID, RefundTransferRequestID, RefundTransferFee, RefundReason, RefundedBy); direct_transfers +3 (TransferType, RefundForDepositID *primitive.ObjectID, RefundForDepositRequestID). Pointer ObjectIDs because [12]byte value-type ignores omitempty. Status filter allow-list widened: refunded + refund_pending_review now accepted on GetAllDeposits.
+
+---
+*Added via Oracle Learn*
