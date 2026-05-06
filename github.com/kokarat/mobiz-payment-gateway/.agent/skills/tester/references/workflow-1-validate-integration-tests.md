@@ -224,8 +224,11 @@ not to derived docs like this index). Structure:
 ## Summary
 
 - Total tests: N
-- VALID: N  |  STALE: N  |  WRONG-SETUP: N  |  FLAKY: N  |  SUPERSEDED: N  |  UNKNOWN: N
-- Newly-broken since prior baseline: N
+- VALID: N  |  STALE: N  |  WRONG-SETUP: N  |  FLAKY: N  |  SUPERSEDED: N  |  ON_HOLD: N  |  UNKNOWN: N
+- Newly-broken since prior baseline: N  <!-- REQUIRED: regression watcher's W1 gate greps this exact prefix; dropping it aborts every nightly regression run -->
+- Newly-added since prior baseline: N
+- Status promotions since prior baseline: N
+- Status changes since prior baseline: N status flips. <commentary on production-surface commits in range and why each is NEUTRAL / breaking>
 
 ## Top findings (human-facing)
 
