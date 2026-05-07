@@ -116,13 +116,31 @@ Tags (mandatory 3-layer + features):
 `source:` `docs/requirements/epic-<slug>.md@<commit>`.
 `project:` `github.com/kxlahsimx09/mb-next-payment-gateway`.
 
-### Step 8 — Retro
+### Step 8 — Deploy to docs hub (Vercel)
+
+After `arra_learn` lands, mirror the requirements to the live docs hub so humans see the change without pulling the repo:
+
+```bash
+cd docs-site
+npm run vercel:deploy
+```
+
+What it does, in order:
+1. `bash scripts/vercel-bootstrap.sh` — hydrates `.vercel/project.json` from `mb_agent_oracle_memory/.vercel-projects/mb-next-payment-gateway-docs.json` (idempotent; safe to run on every pass).
+2. `vercel deploy --prod` — uploads, runs the remote build (which itself runs `prebuild` → `scripts/sync-content.sh` → mirrors `docs/requirements/` into `content/`), and promotes to production.
+
+If the bootstrap script fails because no link metadata exists in central memory, that means the human hasn't done the one-time `vercel link` + copy-to-central setup yet. Stop here and surface the error in your retro (Step 9); do **not** attempt `vercel link` yourself — the human owns the org-binding decision.
+
+For a preview deploy first (recommended on a contentious epic), run `vercel deploy` (no `--prod`) and paste the URL into the PR description for review. Promote to production only after human approval.
+
+### Step 9 — Retro
 
 Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_w1-author-<epic>.md`. AI Diary + Honest Feedback are mandatory. Specifically capture:
 
 - Which sources were richest? Which were silent?
 - Did any story end up `[S4 reverse-engineered]` because nothing else covered it? That is a hint to the architect that an ADR is missing.
 - Did any cross-repo boundary surface that wasn't anticipated? Capture for `cross-repo.md`.
+- Did the docs-hub deploy succeed, fail, or get skipped? If skipped, *why* — link metadata missing, token absent, build break in `content/`?
 
 ---
 
@@ -131,6 +149,7 @@ Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory
 - **Don't write a story without a Sources block.** Half-finished requirements are worse than none — they leak into design and test as if they were ratified.
 - **Don't paraphrase ADR text into the story body.** The body is product-facing English; the link to the ADR is in Sources. If the human can't read the story without ADR context, the story is in the wrong voice.
 - **Don't invent trust.** A story drawn only from current-system code is `[S4]`, not `[S2]`. Even if you are confident the next system will preserve the behavior, until an ADR ratifies it the trust label stays low.
+- **Don't claim "X's wallet/balance/state is updated" without verifying which discriminator** (e.g. `owner_type`) the underlying code filters on. Reverse-engineering from a change-log collection alone (e.g. `wallets_change_logs`) is misleading because secondary effects (MDR distribution to partners) can outnumber the primary effect (client credit) and skew the inferred shape. Pre-flight: a Mongo aggregate by the discriminator + a code-line read of the function that does the update + a search of `pg-writer`/`bot-writer` drift learnings for past actor-rename corrections. Lesson learned the hard way 2026-05-07 on `epic-deposit` DEPOSIT-002 — see vault learning `2026-05-07_correction-deposit-credit-target-is-client-wal`.
 - **Don't write epics for unscoped subsystems.** If the architect has not produced an ADR for "feature X", do not pre-write epic-x.md "to save time later." The story will drift from the eventual ADR; cleanup is more expensive than re-authoring after ratification.
 - **Don't extend `pg-writer`'s lane.** The current system is pg-writer / bot-writer's home. If a current-system flow doc is missing or wrong, file `arra_learn #drift #current-doc-gap` for them — do not write into `mobiz-payment-gateway/docs/`.
 - **Don't merge ADR amendments into existing stories silently.** Amendments → revision-log entry + `arra_supersede` of the old story id, with a pointer.
