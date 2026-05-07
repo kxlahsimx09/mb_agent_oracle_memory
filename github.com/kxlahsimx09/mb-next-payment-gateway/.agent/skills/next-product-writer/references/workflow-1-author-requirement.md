@@ -116,22 +116,56 @@ Tags (mandatory 3-layer + features):
 `source:` `docs/requirements/epic-<slug>.md@<commit>`.
 `project:` `github.com/kxlahsimx09/mb-next-payment-gateway`.
 
-### Step 8 — Deploy to docs hub (Vercel)
+### Step 8 — Open the PR (Vercel deploys automatically)
 
-After `arra_learn` lands, mirror the requirements to the live docs hub so humans see the change without pulling the repo:
+The docs hub at `mb-next-docs.vercel.app` is wired to the GitHub
+integration on `main`: every push to `main` triggers a Vercel build
++ deploy automatically (Root Directory = `docs-site/`, "Include source
+files outside the Root Directory" = ON, so the build's `prebuild`
+hook can read `../docs/requirements/`). The agent does **not** run
+`vercel deploy` directly — the human's PR-merge IS the deploy
+gate.
+
+So the workflow's exit step is just:
 
 ```bash
-cd docs-site
-npm run vercel:deploy
+cd <product-repo>
+git checkout -b writer/<epic-slug>-<short-suffix>
+git add docs/requirements/
+git commit -m "next-writer: <epic-slug> — <N stories>, S<trust-mix>"
+git push -u origin writer/<epic-slug>-<short-suffix>
+gh pr create --base main --head writer/<epic-slug>-<short-suffix> \
+   --title "next-writer: epic-<slug> — <N stories>" \
+   --body "..."   # link to the arra_learn id from Step 7
 ```
 
-What it does, in order:
-1. `bash scripts/vercel-bootstrap.sh` — hydrates `.vercel/project.json` from `mb_agent_oracle_memory/.vercel-projects/mb-next-payment-gateway-docs.json` (idempotent; safe to run on every pass).
-2. `vercel deploy --prod` — uploads, runs the remote build (which itself runs `prebuild` → `scripts/sync-content.sh` → mirrors `docs/requirements/` into `content/`), and promotes to production.
+Important PR-body conventions for this role:
 
-If the bootstrap script fails because no link metadata exists in central memory, that means the human hasn't done the one-time `vercel link` + copy-to-central setup yet. Stop here and surface the error in your retro (Step 9); do **not** attempt `vercel link` yourself — the human owns the org-binding decision.
+- Cite the `arra_learn` id from Step 7 so reviewers can pull provenance from the vault.
+- Include the **trust-mix** (e.g. "3×S2, 1×S3") so reviewers see at a glance how settled the epic is.
+- List sources cited (ADR ids, PoC paths, flow doc paths, mongo collections) in a "Sources" section.
+- Flag any open `[AWAITING_THREAD:<id>]` so they don't get lost in review.
+- Mention which existing files are touched (always at least `epic-<slug>.md` + `INDEX.md` + maybe `glossary.md` + maybe `cross-repo.md`).
 
-For a preview deploy first (recommended on a contentious epic), run `vercel deploy` (no `--prod`) and paste the URL into the PR description for review. Promote to production only after human approval.
+After the human merges:
+
+- Vercel auto-builds from `main` (~1-2 minutes).
+- The new epic appears at `mb-next-docs.vercel.app/epic-<slug>` immediately after the deploy turns Ready.
+- A `_pagefind` re-index runs on every build, so search picks up the new content.
+
+If the agent wants to preview a deploy *before* merge, Vercel's GitHub
+integration also creates a Preview deployment per PR — its URL is in
+the PR's automated "Vercel" check at the bottom of the GitHub PR page.
+The agent can paste that URL into the PR description for the human's
+visual review.
+
+**Optional escape hatch** (rarely needed): if Vercel's git integration
+is unavailable for some reason, `docs-site/scripts/vercel-bootstrap.sh`
++ `npm run vercel:deploy` can deploy directly via the Vercel CLI —
+but this requires the human to first populate
+`mb_agent_oracle_memory/.vercel-projects/mb-next-payment-gateway-docs.json`
+with the link metadata (see `docs-site/README.md`). Use this only when
+git integration is broken; default is "open PR, let main-deploy fire".
 
 ### Step 9 — Retro
 
@@ -140,7 +174,7 @@ Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory
 - Which sources were richest? Which were silent?
 - Did any story end up `[S4 reverse-engineered]` because nothing else covered it? That is a hint to the architect that an ADR is missing.
 - Did any cross-repo boundary surface that wasn't anticipated? Capture for `cross-repo.md`.
-- Did the docs-hub deploy succeed, fail, or get skipped? If skipped, *why* — link metadata missing, token absent, build break in `content/`?
+- Was the PR opened cleanly with all the expected sections (trust-mix, sources, awaiting-thread flags)? Surface any template gaps for the next pass.
 
 ---
 
