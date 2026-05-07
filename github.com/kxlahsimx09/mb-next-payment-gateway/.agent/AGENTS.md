@@ -84,6 +84,7 @@ This repo is the **next system** — currently in design phase. Initial roster i
 |---|---|---|
 | `system-architect` | `next-architect-oracle` | Designs the next-gen payment gateway architecture. Gathers requirements, produces high-level designs, data models, API contracts, scale/reliability plans, and trade-off analyses. Owns `docs/design/`, `docs/adr/`, architecture diagrams. Does **not** write feature code — provides clarity so implementation agents (future) can act. |
 | `implementation-architect` (next-impl) | `next-impl-oracle` | Materializes each ratified ADR as a cheap, runnable PoC + spec tests asserting ADR-promised claims + a drift report when execution falsifies a claim. Mines `#current` evidence (vault learnings, integration-tests, docs/flows) to seed PoC fixtures + spec-test docstrings; outputs land under `poc/<adr-id>/`. Sibling — not replacement — to next-dev (the future builder). Falsifier / prover, not designer or builder. Activated 2026-05-04. |
+| `next-product-writer` | `next-writer-oracle` | Translates ratified ADRs + design docs + `#poc-ready` outcomes + current-system ground truth (Mongo + pg-writer/bot-writer flow docs) into human-readable product requirements: vision (L0), epics (L1), stories (L2) with user journeys + Given/When/Then acceptance criteria. Every story carries a Sources block + trust label (S2 ratified / S3 provisional / S4 reverse-engineered) so humans see the shape and downstream agents (designer, dev, tester) can lift verbatim. Owns `docs/requirements/`. Sibling — not replacement — to pg-writer/bot-writer (current-system technical-writers) and system-architect (architect authors ADRs; product-writer translates them). Activated 2026-05-07. |
 
 **Sibling fleet members (different repos, reachable via Oracle + `maw hey`):**
 
@@ -229,14 +230,31 @@ mb-next-payment-gateway/
 ├── .agent/                             # → symlink to mb_agent_oracle_memory/...
 │   ├── AGENTS.md                       # ← you are here
 │   ├── fleet/
-│   │   └── 20-mb-next-payment-gateway.json  # maw tmux-window config
+│   │   └── 20-mb-next-payment-gateway.json  # maw tmux-window config (3 windows: architect, impl, writer)
 │   └── skills/
-│       └── system-architect/
-│           ├── SKILL.md                # identity + system-design framework
-│           └── references/             # workflow-N-*.md (to be authored)
-└── docs/                               # (empty — system-architect populates)
-    ├── design/                         # high-level design docs (owned by system-architect)
-    └── adr/                            # architecture decisions (MADR template)
+│       ├── system-architect/           # ADR + design author (next-architect)
+│       │   ├── SKILL.md
+│       │   └── references/             # workflow-1-refine-adr.md, workflow-2-sync-clean.md
+│       ├── implementation-architect/   # PoC + drift report (next-impl)
+│       │   ├── SKILL.md
+│       │   └── references/             # workflow-1-poc-from-adr.md, workflow-2-drift-report-to-architect.md
+│       └── next-product-writer/        # human-readable requirements (next-writer)
+│           ├── SKILL.md
+│           └── references/             # workflow-1-author-requirement.md
+└── docs/
+    ├── adr.md                          # all ratified ADRs in one file (system-architect)
+    ├── design/                         # subsystem deep-dives (system-architect)
+    │   ├── withdrawal-lane/
+    │   ├── bot-gateway-dispatch/
+    │   ├── deposit-auto-expire/
+    │   └── bot-infra/
+    ├── requirements/                   # human-facing PRD (next-product-writer)
+    │   ├── README.md                   # L0 vision + epic index
+    │   ├── INDEX.md                    # flat story-id list (agent handoff surface)
+    │   ├── glossary.md                 # plain-English domain terms
+    │   ├── cross-repo.md               # next-* boundary contracts
+    │   └── epic-<slug>.md              # one file per epic
+    └── (poc/ may appear at repo root, owned by implementation-architect)
 ```
 
 As more agents are spawned (backend-developer, qa-engineer, etc.), their skills and owned directories are appended here and to §5.
@@ -251,3 +269,5 @@ Append-friendly. New rules go at the bottom with a dated header. Old rules are n
 **Maintainers:** `system-architect` proposes edits; human approves via PR against `mb_agent_oracle_memory`.
 **Revision history:**
 - 2026-04-22 — charter created. Initial roster: `system-architect` (`next-architect-oracle`). Tag lifecycle: `#next` (this repo) parallels `#current` (mobiz + bank-bot).
+- 2026-05-04 — `implementation-architect` (`next-impl-oracle`) added per orchestrator thread #69. Owns `poc/<adr-id>/` PoC + spec tests; sibling to next-architect (upstream) and the future next-dev (downstream).
+- 2026-05-07 — `next-product-writer` (`next-writer-oracle`) added per brew-ops session 2026-05-07. Owns `docs/requirements/` — human-facing vision + epics + stories with Sources blocks + trust labels. Distinct from pg-writer/bot-writer (technical writers for `#current`); product-writer translates ratified `#next` artifacts for stakeholders + downstream agents. Scope spans the next-* fleet (this repo today; bankbot v2 + future next-* repos as they spawn).
