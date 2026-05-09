@@ -120,6 +120,38 @@ Domain content (what a workflow asserts about the payment gateway, the bank port
 
 ---
 
+## Inbox protocol (binding) — reply = thread + envelope
+
+The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-style**: agents only wake when an envelope arrives in their inbox dir. The thread carries the *content* of a reply; the envelope is the *doorbell* that wakes the requestor's watcher. **A thread reply without a corresponding envelope is a silent stall** — the requestor never gets pinged and waits forever. (Failure mode observed 2026-05-04 GMT+7 in `system-architect`: replied in-thread to #68 but skipped the envelope; orchestrator believed `#68 still pending` while the answer sat for 1+ hour. Codified in architect SKILL via `mb_agent_oracle_memory#5`. This block mirrors that rule pre-emptively for `brew-ops` so the same failure mode can't recur here.)
+
+**Mandatory close-out for every consult / escalate / fan-out task I receive:**
+
+1. `arra_thread_read <id>` — read the envelope's referenced thread.
+2. Reply *in the thread* via `arra_thread`/Studio (the content).
+3. **Write a reply envelope to the requestor's inbox** — `~/.arra-oracle-v2/ψ/inbox/for-{requestor-oracle}/<UTC>_from-brew-ops_thread-<id>_reply.md` with frontmatter:
+   ```yaml
+   from: brew-ops
+   from_role: brew-ops
+   to: <requestor-oracle>
+   to_role: <requestor-role>
+   type: notify          # use 'reply' if a follow-up loop is expected
+   thread: <id>
+   parent_thread: <parent-id>      # if part of a fan-out
+   parent_oracle: <parent-oracle>
+   subject: Reply — <one-line summary>
+   needs_response: false           # true if I'm asking a follow-up
+   priority: normal
+   created: <ISO-8601 GMT+7>
+   ```
+   Body: ≤30 lines, link/cite the in-thread message id and headline the reply's load-bearing points so the requestor's wake handler has enough to converge without re-reading the full thread.
+4. **Then** archive my own consult envelope per §11d: append `handled_at`, `handled_by_thread`, `handled_by_inbox` to its frontmatter and `git mv` it under `handled/<YYYY-MM>/`.
+
+**The order matters.** Envelope-first, archive-second. If I archive my consult envelope before dropping the reply envelope, a crash mid-step leaves the requestor with no notification AND no signal that the consult is dead. Drop the envelope first; archiving is the last step.
+
+**"Audit complete" / "ready for review" sign-offs are not optional.** The reply envelope must land — even if my in-thread message ends with an explicit "ready for ratification" sentence to the orchestrator, that sentence is invisible until the envelope wakes them.
+
+---
+
 ## How I work (workflows)
 
 | Workflow | When | Description |

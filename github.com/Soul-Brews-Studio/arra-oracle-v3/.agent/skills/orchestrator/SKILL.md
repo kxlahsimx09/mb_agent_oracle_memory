@@ -88,6 +88,21 @@ I refresh this list at the start of every workflow run via `maw oracle ls`. The 
 
 If the request doesn't match cleanly: `arra_search` for similar past requests; if still ambiguous, escalate.
 
+## Inbox protocol (binding) — reply = thread + envelope
+
+The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-style**. As orchestrator I am the central pull-style participant: I both *receive* envelopes (user requests + sub-agent replies) and *write* them (sub-task fan-out + final reply to user via Telegram). Every reply I produce, on every leg of a fan-out, must land an envelope in the requestor's inbox — the thread alone is invisible to their watcher. **A thread reply without a corresponding envelope is a silent stall** — the next stage never wakes. (Failure mode observed 2026-05-04 GMT+7 in `system-architect`: replied in-thread to #68 but skipped the envelope; I as orchestrator believed `#68 still pending` for 1+ hour. Codified in architect SKILL via `mb_agent_oracle_memory#5`. This block mirrors that rule for me — I am the most-frequent envelope-writer in the fleet and the most expensive place for a stall to occur.)
+
+**Mandatory close-out — every leg of every fan-out:**
+
+1. **Sub-task envelope going out** — when I dispatch to an agent, the envelope I write is the doorbell. Required fields: `from: orchestrator`, `to: <oracle>`, `thread: <sub-id>`, `parent_thread: <parent-id>`, `parent_oracle: orchestrator`, `subject:`, `needs_response: true`. No envelope = sub-agent never wakes.
+2. **Mid-stream progress note** — when I wake on a sub-thread reply and post progress to the parent thread, the user is reading via chat-watcher → Telegram. No envelope needed for the parent thread; chat-watcher handles user notification. But the sub-thread reply that woke me is itself an envelope I must archive (step 4 below).
+3. **Final aggregate to user** — when all subs close, I post the aggregate to the parent thread and chat-watcher pushes it to Telegram. Then I close the parent thread (`status: closed`) so future `/threads` listings stay clean.
+4. **Archive every envelope I read.** For each `for-orchestrator/` envelope I process, append `handled_at`, `handled_by_thread`, `handled_by_inbox` to its frontmatter and `git mv` it under `handled/<YYYY-MM>/`. Skipping this leaves the studio Inbox UI showing the envelope as "active" forever (the "ss" stuck-envelope incident from 2026-05-03 happened exactly because of this).
+
+**The order matters.** When I respond to a sub-agent: write the next-stage envelope **first**, archive the prior envelope **second**. A mid-step crash with this ordering is recoverable; with the reverse ordering the chain breaks silently.
+
+**Honesty sign-offs.** When the bot writes a status message to Telegram, it must reflect what I will actually do. The pre-2026-05-04 lying message ("📨 new request received (orchestrator will open a parent thread)") was retired exactly because the orchestrator agent might do something else (smart-default attach to existing thread). Bot UX text and orchestrator behavior must agree. If they diverge, fix the UX.
+
 ## How I work — Workflow 1: dispatch
 
 See `references/workflow-1-dispatch.md` for the full step-by-step. Summary:
