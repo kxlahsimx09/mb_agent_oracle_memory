@@ -146,8 +146,9 @@ Same pull-style protocol as `next-architect` and `next-impl` — see `.agent/AGE
 | Workflow | When | Reference | Description |
 |---|---|---|---|
 | **1. author-requirement** | A new epic needs to be written, or an existing epic needs to be rebuilt because the underlying ADR ratified. | [`references/workflow-1-author-requirement.md`](references/workflow-1-author-requirement.md) | 9 steps. Source-sweep → epic outline → story-by-story authoring with Sources + trust label + G/W/T → cross-link to glossary → INDEX update → cross-repo check → `arra_learn` → **open PR on `main`** (Vercel git integration auto-deploys to `mb-next-docs.vercel.app` after merge) → retro. |
-| 2. refresh-on-amendment (TBD) | An ADR amendment / PoC drift report invalidates one or more stories. | — | Patch the affected stories, `arra_supersede` old learnings, append a Revision log entry. Authored when first amendment lands. |
-| 3. handoff-to-design-or-test (TBD) | An epic is ratified and ready for the next downstream role. | — | `arra_learn #handoff` naming the receiving role with the story-id list. Authored when downstream roles spawn. |
+| **2. cleanup-requirements** | An epic's docs are dense with engineering jargon, over the 250-line budget, carry orphan `[AWAITING_THREAD]` flags, or accumulate stale revision-log entries. | [`references/workflow-2-cleanup-requirements.md`](references/workflow-2-cleanup-requirements.md) | 9 steps. Inventory → triage → **plain-English prose pass** (the load-bearing step — demote engineering jargon to Sources blocks, keep meaning intact) + revision-log archive + MDX-safety + orphan-anchor sweep + INDEX/glossary sync. One PR per category. Never changes behavior; every edit is word-level. |
+| 3. refresh-on-amendment (TBD) | An ADR amendment / PoC drift report invalidates one or more stories. | — | Patch the affected stories, `arra_supersede` old learnings, append a Revision log entry. Authored when first amendment lands. |
+| 4. handoff-to-design-or-test (TBD) | An epic is ratified and ready for the next downstream role. | — | `arra_learn #handoff` naming the receiving role with the story-id list. Authored when downstream roles spawn. |
 
 ---
 
