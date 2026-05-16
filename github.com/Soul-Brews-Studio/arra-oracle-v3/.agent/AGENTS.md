@@ -375,6 +375,8 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
 | `type=notify` with `thread:` field | `--resume` if session-id exists, else `--fresh` |
 | Session-id lookup misses (cache evicted, JSONL gone, claude version migration) | Fallback `--fresh` + log warning. Correctness preserved because the thread itself carries content. |
 
+**Wake key — orchestrator fan-out exception (§11k):** the session-per-thread map is keyed by a *wake key*, not always the envelope's own `thread:`. For `to: orchestrator` envelopes carrying a `parent_thread:` (a §11k fan-out reply), the wake key is `parent_thread` — so every reply of one fan-out campaign resumes the **same** orchestrator session instead of each `--fresh`-spawning its own. Without this, N concurrent sub-thread replies spawn N orchestrator sessions that each re-run Step 0.5 and re-dispatch the same follow-up (the 2026-05-16 triple-dispatch incident — see §11k). All other envelopes — and orchestrator envelopes with no `parent_thread` — key on their own `thread:` id, unchanged. The session-id file is `sessions/<oracle>/thread-<wake-key>.session-id`.
+
 **Why session-per-thread is correct:**
 
 - A consult exchange is a **conversation about a topic**, not a continuation of `O`'s most-recent unrelated work.
@@ -463,14 +465,25 @@ The watcher (`scripts/inbox-watcher.sh`) closes the directed-inbox loop by firin
 
 - Poll every `INBOX_POLL_INTERVAL=60s` (default; configurable via env).
 - State at `~/.cache/inbox-watcher/state/<oracle>/<filename>.state` per envelope.
-- Session-per-thread map at `~/.cache/inbox-watcher/sessions/<oracle>/thread-<N>.session-id`.
+- Session map at `~/.cache/inbox-watcher/sessions/<oracle>/thread-<wake-key>.session-id` — the wake key is `parent_thread` for orchestrator fan-out replies, else the envelope's own `thread:` (§11f).
 - Log at `~/.cache/inbox-watcher/inbox-watcher.log`.
 
 **State machine per envelope file:**
 
 ```
 NEW                                      (no state file)
-  └─ fire_wake → status=fired, fired_at=<ts>, wt_path=<resolved-from-maw-output>
+  ├─ orchestrator envelope whose parent campaign already has a live or
+  │  in-flight session (§11k dedup)       → status=deferred, deferred_since=<ts>
+  │                                        (no wake fired — queued, not dropped)
+  └─ otherwise                            → fire_wake → status=fired,
+                                            fired_at=<ts>, wt_path=<from maw>
+
+deferred                                  (re-checked every scan)
+  ├─ parent campaign idle (no fired/verified sibling for the wake key, prior
+  │  claude not active)                   → fire_wake (--resume into the
+  │                                          campaign worktree) → fired
+  └─ parent campaign still busy           → keep deferring (alert past T2,
+                                            but the envelope is never dropped)
 
 fired                                    (T1 gate — delivery probe)
   ├─ JSONL has user message containing "inbox: <fname>"
@@ -488,6 +501,8 @@ verified                                 (T2 gate — processing)
 
 completed | failed_*                     (terminal — kept for audit)
 ```
+
+`deferred` is **not** a failure — it is a queued state for orchestrator fan-out dedup (§11k). A deferred envelope has had no wake fired yet; it is re-evaluated each scan and fires (as a `--resume`) the moment its parent campaign's session goes idle. It is never dropped.
 
 **Three failure modes the watcher distinguishes:**
 
@@ -567,6 +582,12 @@ Other agents are **unchanged** by §11k. They process incoming envelopes per §1
 - Studio UI shows hierarchy cleanly (parent thread links to its subs).
 - Closing logic cascades: sub closes when its agent finishes, parent closes when all subs close.
 
+**Watcher dedup — one orchestrator session per campaign:**
+
+The §11i watcher keys orchestrator wakes on `parent_thread` (the *wake key*, §11f), not on the individual sub-thread. When a fan-out reply lands while the campaign's orchestrator session is still live or in-flight, the watcher does **not** `--fresh`-spawn a sibling — it marks the envelope `deferred` and, once that session goes idle, fires `--resume` into the **same** worktree so the reply is processed by the one orchestrator session. This serializes a campaign's replies through a single session.
+
+Without this, N concurrent sub-thread replies each spawned a separate orchestrator session, and each ran its own Step 0.5 sweep and independently re-dispatched the same follow-up — one fan-out task implemented N times in parallel (the 2026-05-16 triple-dispatch incident: PR #129/#130/#131 for one task; escalation #348, thread #134). Genuinely distinct campaigns (different `parent_thread`) are unaffected and still run concurrently.
+
 Multi-recipient broadcast (one envelope to many recipients) is still **not** in scope. Fan-out writes one envelope per recipient — that's the explicit, observable contract.
 
 ### 11j. Phase status (as of 2026-05-03)
@@ -587,3 +608,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-04-30 — added §11 (directed inbox protocol); same-day fix: routing key is oracle name (not role label), envelope gains `to_role` / `from_role` documentation fields. Same-day discovery: maw wake silent-fail blocks Phase 2a; Phase 2b reordered to land first with the silent-fail root fix as scope item (i).
 **Updated:** 2026-05-03 — added §11g (Loop termination), §11h (Escalation to human), §11i (Watcher integration + delivery verification); §11j renamed from §11g (Phase status) and updated to reflect Phase 2b-i shipped + Phase 2a in progress.
 **Updated:** 2026-05-03 (later) — added §11b `parent_thread`/`parent_oracle` fields and §11k Orchestrator fan-out pattern (Phase 4). Phase 2a watcher PR merged; Phase 4 daemon + role next.
+**Updated:** 2026-05-16 — §11f/§11i/§11k: watcher keys orchestrator wakes on `parent_thread` (wake key) and adds the `deferred` state, so a fan-out campaign's replies converge on ONE orchestrator session instead of spawning parallel siblings (fixes the triple-dispatch incident — escalation #348, thread #134).
