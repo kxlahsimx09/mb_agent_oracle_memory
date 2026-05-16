@@ -683,27 +683,37 @@ for (const r of rows) console.log(`  #${r.id} ${r.status} msgs=${r.message_count
 '
 ```
 
-### 13c.2 For each closed thread, grep ALL flow docs across known repos
+### 13c.2 Run the live-anchor detector
+
+> **Why this step was rewritten (2026-05-16).** The original §13c.2 grepped `\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED-STEP):N\]` and counted *every* literal occurrence. That counts P-001 historical narration as live drift — marker tokens quoted inside `## Change log` / `### Revision log` bullets, inside `revision-log-archive-*.md` files, inside `[RESOLVED:…]` drift entries, and inside backtick-wrapped past-tense strip prose. The metric then grew every time a strip step *succeeded* and could never reach zero. Campaign #108 sub-threads #86 (51→**0** genuine) and #87 (92→**3** genuine) both invalidated their own input counts; the "156-marker" fleet headline was ~97% recounted narration. See learning `2026-05-16_workflow-5-13c-orphan-detector-overcounts-narrati`.
+
+A **live anchor** is a marker on a *current, unresolved claim line*. A **genuine orphan** is a live anchor whose referenced thread is `closed` or `answered`. The detector keeps only live anchors by applying four filters:
+
+| # | Filter | Rationale |
+|---|---|---|
+| 1 | **Doc scope** — keep `docs/flows/*.md` + the live `docs/adr.md` only | current-system.md / test-index.md / runbooks are §13c.7 out-of-scope; `revision-log-archive-*.md` is whole-file history |
+| 2 | **History section** — drop any line whose enclosing heading chain contains a `Change log` / `Revision log` heading | change-log bullets narrate *past* strips, not live drift |
+| 3 | **Resolved entry** — drop lines containing `[RESOLVED:…]` / `DRIFT-N … RESOLVED` | already-reconciled drift, retained per P-001 |
+| 4 | **Strip narration** — drop lines with past-tense strip prose (`stripped`, `replaced with`, `originally filed`, `have been stripped`, …) | catches backtick-wrapped past-tense prose that sits outside log sections (e.g. a `## Resolved questions` blockquote) |
+
+The detector ships as a versioned script next to this spec — `references/w5-orphan-marker-detect.mjs`. Run it:
 
 ```bash
 KNOWN_REPOS=(
   "$HOME/Code/github.com/kokarat/mobiz-payment-gateway"
   "$HOME/Code/github.com/kokarat/bank-bot"
+  "$HOME/Code/github.com/kxlahsimx09/mb-next-payment-gateway"
 )
-
-for tid in <list of thread ids from 13c.1>; do
-  for repo in "${KNOWN_REPOS[@]}"; do
-    grep -rnE "\[(AWAITING_THREAD|RATIFICATION_PENDING|UNDOCUMENTED-STEP):${tid}\]" \
-      "$repo/docs/" 2>/dev/null
-  done
-done
+bun .agent/skills/brew-ops/references/w5-orphan-marker-detect.mjs "${KNOWN_REPOS[@]}"
 ```
 
-Add new repos to `KNOWN_REPOS` as the fleet grows. Future enhancement: derive from `oracle_documents.project DISTINCT` rather than a hardcoded list.
+It reads `forum_threads.status` from `~/.arra-oracle-v2/oracle.db` directly, so it needs no thread-id list from §13c.1 — §13c.1 stays as *context* (which threads closed recently), not as a grep filter. Output is per-repo `raw hits / excluded / live anchors / genuine orphans`, with each live anchor printed as `file:line  marker  thread=<status>`. Only the `ORPHAN`-flagged lines feed §13c.3.
 
-### 13c.3 Classify each surviving marker
+Add new repos to `KNOWN_REPOS` (the script's argv) as the fleet grows. Future enhancement: derive the list from `oracle_documents.project DISTINCT` rather than a hardcoded array.
 
-For each `(thread_id, repo, file:line)` triplet:
+### 13c.3 Classify each genuine orphan
+
+§13c.2's detector has already discarded narration and out-of-scope hits — §13c.3 operates **only** on the `ORPHAN`-flagged set (live anchors whose thread is `closed`/`answered`). For each `(thread_id, repo, file:line)` triplet:
 
 | Pattern | Likely cause | Severity hint |
 |---|---|---|
@@ -773,7 +783,8 @@ P2 (<3d, informational — within natural cadence):
 
 ### 13c.7 Limitations (be honest about what this doesn't catch)
 
-- Markers in non-flow docs (`current-system.md`, runbooks) — V1 scope is `docs/flows/*.md` only. Extend to other paths if a real incident appears outside flow docs.
+- Markers in non-flow / non-ADR docs (`current-system.md`, `test-index.md`, runbooks) — detector scope is `docs/flows/*.md` + the live `docs/adr.md` only (§13c.2 filter 1). A real live marker in `current-system.md` (e.g. `[AWAITING_THREAD:49]`) is therefore not swept; extend `inScope()` in `w5-orphan-marker-detect.mjs` if a real incident appears outside those paths.
+- Genuinely-not-strippable closed-thread markers (wont-fix / permanent forward-references — e.g. an `[AWAITING_THREAD:N]` deferring scope to a future ADR). The detector counts these as genuine orphans because thread N is closed; §13c.3 classification + the closer's `// permanent-historical-marker:thread-<id>` annotation (see below) are how they get triaged out. The detector does not read that annotation yet — a future filter-5 could.
 - File rename / move since marker was filed — grep hits old path miss the new location. Future: integrate `git log --follow` for renames. V1 punts.
 - Multi-thread interactions (one marker depends on 2+ threads) — V1 treats each thread independently. Rare in practice.
 - Markers in commit messages, code comments, or retros — out of scope. Doc-level markers only.

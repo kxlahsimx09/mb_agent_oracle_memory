@@ -284,13 +284,23 @@ Step 4's classifier targets *pointer-level* drift (Class A/B for hash/line shift
 
 When the W9 pass's commit range contains a fix that closes one of those threads, the **section-level markers must be swept in the same pass** — not deferred to "the next W9 sweep" or to a "small follow-up PR" that easily gets forgotten. See learning `2026-04-21_workflow-bug-orphan-marker-thread-16-driftb` for a real-world case where the deferral rule produced 2 days of orphan markers in a load-bearing flow doc (`bank-bot/docs/flows/ktb-single-transfer-withdrawal.md`, 4 markers stranded across §Purpose / §Error paths / §Postconditions while line 133's `// impl:` pointer correctly recorded `[DRIFT-N RESOLVED]`).
 
-For each flow doc touched in this pass:
+For each flow doc touched in this pass, list its **live** section-level markers — markers on current unresolved claims, *not* the ones quoted inside the doc's own `## Change log` (every prior strip narrates the marker it removed). A naive `grep -nE` over-counts that narration as live drift; see workflow-5 §13c.2 + learning `2026-05-16_workflow-5-13c-orphan-detector-overcounts-narrati`:
 
 ```bash
-grep -nE '\[(AWAITING_THREAD|RATIFICATION_PENDING):[0-9]+\]' docs/flows/<slug>.md
+# live markers only: stop at the Change log heading; skip [RESOLVED:…]
+# entries and past-tense strip prose.
+awk '
+  /^#+[[:space:]]+([Cc]hange|[Rr]evision)[[:space:]]*([Ll]og|[Hh]istory)/ { skip=1 }
+  skip { next }
+  /\[(AWAITING_THREAD|RATIFICATION_PENDING):[0-9]+\]/ &&
+  !/\[RESOLVED:|RESOLVED via|DRIFT-[0-9]+.*RESOLVED/ &&
+  !/(stripped|replaced with|originally filed)/ { print FILENAME ":" NR ": " $0 }
+' docs/flows/<slug>.md
 ```
 
-For each marker found:
+A hit that survives this filter is a **live marker**. (For the audited fleet-wide equivalent — same four narration filters plus a thread-status cross-check — run `bun .agent/skills/brew-ops/references/w5-orphan-marker-detect.mjs <repo-root>`.)
+
+For each live marker found:
 
 1. Look up the thread id via `arra_threads(status="closed")` + `arra_threads(status="answered")`.
 2. **If status = `pending` or absent from the closed/answered lists**: leave the marker. That's the intended state — the thread is still open.
@@ -694,3 +704,4 @@ If unsure whether to escalate: file a P2 handoff with `expected outcome: investi
   2. **Step 9 path discipline + §The ψ/ trap section added** — port from W2's 2026-04-19 fix after the live retro-leak incident at mobiz/ψ/memory/retrospectives/2026-04/19/15.06_w2-track-commit-admin-cancel-payout.md. Step 9 now mandates pre-write `readlink` check + absolute-path-via-symlink + post-write stray-find + recovery recipe. New §The ψ/ trap section explains the topology + cites historical incidents. DoD adds two lines (pre-write check passed, post-write stray-check empty). W9 had not been bitten by the trap (only W2 was 2026-04-19) but inherits the same discipline preemptively.
   3. **Step 8 split into 8.0 (detect) → 8.A (amend) / 8.B (new), with a new DoD line "one open W9 PR per repo".** Mirrors W2 Step 8.0/8.A/8.B (mb_agent_oracle_memory `0357769`) using the `docs/flow-track-` branch prefix. Independent gate from W2's `docs/track-` PR gate. Important caveat: the daily W9 cron infrastructure does NOT yet exist (P2 follow-up flagged in the 2026-04-19 brew-ops audit, learning `2026-04-19_pattern-w9-step3-extractor-regex-fix`); when it lands, this Step 8 split prevents the same overnight stack-up that hit W2. Until then, manual W9 runs benefit from the same gate when humans run W9 multiple times in a day.
 - 2026-04-22 (brew-ops, Gap 1 root-cause fix — incident #2) — **Step 0.5 added: consume sibling cross-repo-sync learnings before Step 2 commit scan.** Fetches bank-bot-filed `#cross-repo-sync` learnings created since `docs/flows/.baseline` last-verified-at; for each, greps mobiz flow docs for the mentioned bot file/contract and adds matches to this pass's affected-flows list. Sibling-synced to bank-bot workflow-9-track-flows.md (symmetric rule, swaps producer/consumer direction). Driven by `2026-04-19_cross-repo-sync-pr-84-bank-bot-3359d08-is-the.md` — filed with complete content at bot-commit time 2026-04-20 but sat unconsumed for 2 days because W9 scanned only mobiz commits. Closes the consumer gap (producer side already filed; no mobiz touch-point read them).
+- 2026-05-16 (brew-ops, campaign #108 / thread #112 — sibling-synced with bank-bot W9) — **Step 4b marker grep made narration-aware.** The plain `grep -nE '\[(AWAITING_THREAD|RATIFICATION_PENDING):N\]'` counted P-001 historical narration — `## Change log` bullets, `[RESOLVED:…]` entries, past-tense strip prose — as live markers. That is the same over-count bug that broke the workflow-5 §13c audit metric: campaign #108 found the "156 orphan markers" fleet headline was ~97% recounted narration (genuine fleet total = **3**, all in mb-next `docs/adr.md`). Step 4b's grep is now an `awk` filter that stops at the `## Change log` heading and drops `[RESOLVED:…]` / strip-prose lines, listing only live markers. See workflow-5 §13c.2 + learning `2026-05-16_workflow-5-13c-orphan-detector-overcounts-narrati`.
