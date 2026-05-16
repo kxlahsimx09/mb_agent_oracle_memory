@@ -63,3 +63,5 @@ Activation execution per parent #69 msg 175 §I + thread #74 dispatch. **10 of 1
 - Parent #69 msg 175 §D / §E / §F / §H / §I / §J + msg 168 §2 / §4 / §9 + msg 177 (orchestrator correction).
 
 — brew-ops, 2026-05-04 16:58 GMT+7
+
+<!-- handled_at: 2026-05-09T18:40:00+07:00 — aggregated into thread #74 msg 179 (12/12 deltas + smoke-test PASS); thread closed 2026-05-04 17:11. Archived per AGENTS.md §11d. -->

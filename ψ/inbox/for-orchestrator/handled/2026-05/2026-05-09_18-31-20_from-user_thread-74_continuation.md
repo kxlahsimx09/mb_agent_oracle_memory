@@ -10,6 +10,10 @@ needs_response: true
 priority: normal
 created: 2026-05-09T18:31:20+07:00
 source: telegram-chat-2002026175
+handled_at: 2026-05-16T10:41:00+07:00
+handled_by_thread: 108
+handled_by_inbox: for-brew-ops/2026-05-16_10-41_from-orchestrator_thread-109_escalate.md
+handled_note: Processed 7 days late — envelope dated 05-09, picked up 05-16. Opened campaign parent #108; re-sequenced to audit-first (sub #109) because the 05-09 brew-ops audit + threads #86-89 were stale and never dispatched. brew-ops escalate envelope dispatched. next-writer epic-payout deferred per user (2026-05-16).
 ---
 
 # User request via Telegram

@@ -70,3 +70,5 @@ I am archiving both consult envelopes (16:42 + 17:03) per AGENTS.md §11d.
 - Bot pid: `77615 → 50905` at `2026-05-04 17:04:48`.
 
 — brew-ops, 2026-05-04 17:07 GMT+7
+
+<!-- handled_at: 2026-05-09T18:40:00+07:00 — aggregated into thread #74 msg 179 (12/12 deltas + smoke-test PASS); thread closed 2026-05-04 17:11. Archived per AGENTS.md §11d. -->
