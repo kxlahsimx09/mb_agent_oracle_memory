@@ -375,7 +375,12 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
 | `type=notify` with `thread:` field | `--resume` if session-id exists, else `--fresh` |
 | Session-id lookup misses (cache evicted, JSONL gone, claude version migration) | Fallback `--fresh` + log warning. Correctness preserved because the thread itself carries content. |
 
-**Wake key — orchestrator fan-out exception (§11k):** the session-per-thread map is keyed by a *wake key*, not always the envelope's own `thread:`. For `to: orchestrator` envelopes carrying a `parent_thread:` (a §11k fan-out reply), the wake key is `parent_thread` — so every reply of one fan-out campaign resumes the **same** orchestrator session instead of each `--fresh`-spawning its own. Without this, N concurrent sub-thread replies spawn N orchestrator sessions that each re-run Step 0.5 and re-dispatch the same follow-up (the 2026-05-16 triple-dispatch incident — see §11k). All other envelopes — and orchestrator envelopes with no `parent_thread` — key on their own `thread:` id, unchanged. The session-id file is `sessions/<oracle>/thread-<wake-key>.session-id`.
+**Wake key — campaign-scoped, not always `thread:` (§11k):** the session map is keyed by a *wake key*, not always the envelope's own `thread:`. **Any** envelope carrying a `parent_thread:` (a §11k fan-out sub-task envelope) keys on `parent_thread` — for **every** oracle, not just the orchestrator. This bounds sessions to **one per oracle per campaign**, not one per sub-thread:
+
+- **orchestrator:** every reply of one fan-out campaign resumes the **same** orchestrator session instead of each `--fresh`-spawning its own. Without this, N concurrent sub-thread replies spawn N orchestrator sessions that each re-run Step 0.5 and re-dispatch the same follow-up (the 2026-05-16 triple-dispatch incident — see §11k).
+- **worker agents** (`next-impl` / `next-writer` / `pg-writer` / `bot-writer` / `next-architect`): a new sub-thread of an in-flight campaign `--resume`s the agent's campaign session rather than `--fresh`-spawning a per-sub-thread session — the per-thread session-sprawl source. A **new** campaign (new `parent_thread`) still gets a new session, so context stays campaign-scoped: no cross-campaign bias bleed, parallelism across campaigns preserved. It is deliberately **not** collapsed to one-session-per-agent-forever.
+
+Envelopes with no `parent_thread` (campaign-parent threads, standalone consults) key on their own `thread:` id, unchanged. The session-id file is `sessions/<oracle>/thread-<wake-key>.session-id`.
 
 **Why session-per-thread is correct:**
 
@@ -395,7 +400,7 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
     └── thread-56.session-id           ← different session from brew-ops's thread-56
 ```
 
-**Eviction:** when a thread reaches `status=closed`, the watcher drops the corresponding `<oracle>/thread-<N>.session-id` file. TTL backstop: a session-id not resumed for 30 days is dropped (assume thread cold/abandoned). Eviction does not violate P-001 — `~/.cache/` is ephemeral state, not vault content; the thread itself remains intact in Oracle.
+**Eviction:** when a campaign's worktree is retired (thread `status=closed` + safety gates pass), the watcher drops the corresponding `<oracle>/thread-<wake-key>.session-id` file — guarded so a live campaign sibling keeps its session. TTL backstop: the §11i Path 2b GC sweep drops any session-id idle for 30 days (assume the campaign is cold/abandoned). Eviction does not violate P-001 — `~/.cache/` is ephemeral state, not vault content; the thread itself remains intact in Oracle.
 
 ### 11g. Loop termination
 
@@ -465,7 +470,7 @@ The watcher (`scripts/inbox-watcher.sh`) closes the directed-inbox loop by firin
 
 - Poll every `INBOX_POLL_INTERVAL=60s` (default; configurable via env).
 - State at `~/.cache/inbox-watcher/state/<oracle>/<filename>.state` per envelope.
-- Session map at `~/.cache/inbox-watcher/sessions/<oracle>/thread-<wake-key>.session-id` — the wake key is `parent_thread` for orchestrator fan-out replies, else the envelope's own `thread:` (§11f).
+- Session map at `~/.cache/inbox-watcher/sessions/<oracle>/thread-<wake-key>.session-id` — the wake key is `parent_thread` for any fan-out sub-task envelope (every oracle), else the envelope's own `thread:` (§11f).
 - Log at `~/.cache/inbox-watcher/inbox-watcher.log`.
 
 **State machine per envelope file:**
@@ -516,7 +521,17 @@ completed | failed_*                     (terminal — kept for audit)
 
 **Idempotency:**
 
-The watcher is safe to restart. State files are per-envelope and only re-fire on `NEW` (no state file). Restart never re-fires a `fired`/`verified` envelope unless its state file is manually deleted.
+The watcher is safe to restart. State files are per-envelope and only re-fire on `NEW` (no state file). Restart never re-fires a `fired`/`verified` envelope unless its state file is manually deleted. The state dir (`~/.cache/inbox-watcher/`) persists across restart, so a code-swap restart (`stop` → swap → `start`) drops no in-flight envelopes.
+
+**Path 2b — periodic campaign GC sweep:**
+
+The per-envelope retire (`maybe_retire_worktree`) only fires the instant an envelope reaches `completed`. A periodic sweep (`gc_sweep`, cadence `INBOX_GC_INTERVAL`, default 600s; gated by `INBOX_AUTO_CLEAN`) mops up what it misses:
+
+1. **Late-close retire** — an envelope that reached `completed` *before* its thread closed had its retire SKIPPED (`thread-not-closed` gate) and the thread closing later triggers nothing. The sweep re-runs the retire gate on every `completed`-but-not-`retired_at` envelope.
+2. **Session-id eviction** — drops session-id cache files on retire (§11f) and via a 30-day idle TTL.
+3. **Orphan-worktree prune** — worktrees abandoned by crashes / manual `tmux` kills (no tmux window, no live claude, not referenced by any envelope state) are removed under the same git-clean + no-unpushed gate as the per-envelope retire (#116). This makes the manual 47→5 worktree purge routine.
+
+`.agent.bak-*` directories are deliberately **not** GC'd — they can hold pre-symlink `.agent/` memory content, so auto-deletion would risk a P-001 violation (see §3a). Pruning them stays a human-ratified action.
 
 **Operational integration:**
 
@@ -573,7 +588,9 @@ User request → orchestrator opens parent thread #100
 
 **Recipient discipline (other agents):**
 
-Other agents are **unchanged** by §11k. They process incoming envelopes per §11e Step 0.5, reply in their own sub-thread, and write a reply envelope back to `for-{from}/` per §11d. The `parent_thread` field is metadata they ignore for their own routing — only the orchestrator reads it during aggregation.
+Other agents are **unchanged** by §11k at the *behaviour* level. They process incoming envelopes per §11e Step 0.5, reply in their own sub-thread, and write a reply envelope back to `for-{from}/` per §11d. The `parent_thread` field is metadata they ignore for their own routing — only the orchestrator reads it during aggregation.
+
+What *did* change (2026-05-16): the **watcher** now keys every oracle's wake on `parent_thread` (§11f), so a worker agent's repeated sub-task envelopes for one campaign `--resume` a single campaign session instead of `--fresh`-spawning one per sub-thread. This is session reuse only — workers do **not** get the orchestrator's `deferred`/dedup logic below (a worker each sub-task is genuine new work, not a re-dispatch of the same follow-up).
 
 **Why parent + sub (not single thread):**
 
@@ -609,3 +626,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-05-03 — added §11g (Loop termination), §11h (Escalation to human), §11i (Watcher integration + delivery verification); §11j renamed from §11g (Phase status) and updated to reflect Phase 2b-i shipped + Phase 2a in progress.
 **Updated:** 2026-05-03 (later) — added §11b `parent_thread`/`parent_oracle` fields and §11k Orchestrator fan-out pattern (Phase 4). Phase 2a watcher PR merged; Phase 4 daemon + role next.
 **Updated:** 2026-05-16 — §11f/§11i/§11k: watcher keys orchestrator wakes on `parent_thread` (wake key) and adds the `deferred` state, so a fan-out campaign's replies converge on ONE orchestrator session instead of spawning parallel siblings (fixes the triple-dispatch incident — escalation #348, thread #134).
+**Updated:** 2026-05-16 (later) — §11f/§11i/§11k: `parent_thread` wake-keying extended to **all** oracles (worker agents now reuse one campaign session, not one per sub-thread); §11i gains Path 2b — the periodic campaign GC sweep (late-close retire, session-id eviction + TTL, orphan-worktree prune). Thread #139, PR #71.

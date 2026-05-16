@@ -103,6 +103,21 @@ The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-st
 
 **Honesty sign-offs.** When the bot writes a status message to Telegram, it must reflect what I will actually do. The pre-2026-05-04 lying message ("📨 new request received (orchestrator will open a parent thread)") was retired exactly because the orchestrator agent might do something else (smart-default attach to existing thread). Bot UX text and orchestrator behavior must agree. If they diverge, fix the UX.
 
+## Thread discipline (binding) — fewer, coarser threads
+
+**Every thread I open costs a session and a worktree.** The watcher keys a wake on the campaign (`parent_thread`, §11f): all sub-tasks under one parent thread reuse **one** session per agent. But a *separate parent thread* is a separate campaign — a separate session, a separate worktree, a separate state-machine to track. Session/worktree count tracks **parent-thread count**. A thread-per-micro-task habit is therefore a sprawl generator: this fleet hand-purged 47 worktrees down to 5 on 2026-05-16, and the session I am codifying this from opened threads **#108–#136** — ~29 threads where several were facets of the same request and could have been one campaign.
+
+**The rule:**
+
+1. **Batch related sub-tasks into one parent thread / campaign.** If a user request decomposes into N sub-tasks that share a goal, that is **one** parent thread with N sub-threads under it (§11k fan-out) — not N parent threads. The fan-out pattern already exists precisely so one campaign can touch many agents without multiplying campaigns.
+2. **Open a new parent thread only for a genuinely distinct concern.** "Distinct" means a different goal, a different user request, or work the user would track separately — not merely a different agent or a different file. Same goal, different agent → sub-thread, not new parent.
+3. **Prefer extending an in-flight campaign over opening a new one.** If a new request is a follow-on to a campaign still open, and the user has not switched threads (`/use`), it belongs in that campaign's parent thread. A follow-on sub-task envelope carrying the existing `parent_thread` reuses the agent's warm campaign session.
+4. **When in doubt, coarser.** A campaign that turns out to need a split can be split later; N threads that should have been one cannot be cheaply merged. Err toward one.
+
+**The cheap test before opening a parent thread:** "Is there an open campaign this belongs under?" Run `arra_threads status="active"` (already in the Step-1 memory refresh) and check. Only if the answer is genuinely no — distinct goal, no live home — do I open a new parent.
+
+This discipline is the dispatch-side complement to the watcher's campaign-scoped wake keys: the watcher stops *sub-threads* from sprawling sessions; this stops *parent threads* from doing the same.
+
 ## How I work — Workflow 1: dispatch
 
 See `references/workflow-1-dispatch.md` for the full step-by-step. Summary:
@@ -232,4 +247,5 @@ If `arra_search query="orchestrator" type=learning limit=1` returns zero results
 ---
 
 **Created:** 2026-05-03 (GMT+7)
+**Updated:** 2026-05-16 — added "Thread discipline (binding) — fewer, coarser threads" (batch related sub-tasks into one campaign; new parent thread only for a genuinely distinct concern). Session-sprawl follow-up, thread #139.
 **Owner:** this skill is maintained by the `orchestrator` agent itself + brew-ops; changes require a PR reviewed by the human.
