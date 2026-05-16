@@ -116,7 +116,28 @@ Tags (mandatory 3-layer + features):
 `source:` `docs/requirements/epic-<slug>.md@<commit>`.
 `project:` `github.com/kxlahsimx09/mb-next-payment-gateway`.
 
-### Step 8 — Open the PR (Vercel deploys automatically)
+### Step 8 — Mermaid parser gate (mandatory, blocking — no PR without it)
+
+Every epic this role ships embeds mermaid sequence diagrams (Step 3.3). Mermaid's render breaks on characters that are ordinary in English prose but are **structural tokens** in mermaid's grammar: `;` ends a statement; `->`, `-=`, `--`, `-x`, `-)` open arrow tokens. One of these inside a sequence-message string renders as a hard error on the docs hub — a blank red box where the diagram should be.
+
+**Do not validate mermaid by grepping for known-bad characters.** A character allowlist is whack-a-mole: it catches the token class you already know about and silently passes the next one. This regressed twice — the PAYOUT-002/003/004 `;` saga (fixed in PR #126), and again on PAYOUT-009 (thread #132), where a `-`-starter-token grep waved through a `;` it was never written to know about. The only check that catches every class — the ones you know and the ones you do not — is the **real parser**.
+
+**The gate:** before opening the PR, parse every fenced mermaid block in every changed requirements file with the actual mermaid grammar and require a clean parse on all of them.
+
+```bash
+# one-time per machine — a throwaway dir with the real parser + the checker
+mkdir -p /tmp/mmv && cd /tmp/mmv && bun add mermaid
+cp <memory-repo>/.agent/skills/next-product-writer/references/check-mermaid.mjs /tmp/mmv/
+
+# every authoring pass — run on each changed requirements file:
+node /tmp/mmv/check-mermaid.mjs <product-repo>/docs/requirements/epic-<slug>.md
+```
+
+`check-mermaid.mjs` (committed alongside this workflow in `references/`) extracts every fenced mermaid block and runs `mermaid.parse()` on it — the same grammar Nextra renders the docs hub with. It needs no browser/DOM, runs in ~1 s, prints `PASS`/`FAIL` per block with a line number, and **exits non-zero if any block would break the render**.
+
+This step is **blocking**. A non-zero exit is a hard stop, exactly like a failed test: fix the diagram, re-run, and only open the PR (Step 9) once the gate is green. When mermaid's grammar later adds a new reserved token, the parser already knows it — no workflow edit, no new grep pattern. That is the entire reason this is a parser check and not a character scan.
+
+### Step 9 — Open the PR (Vercel deploys automatically)
 
 The docs hub at `mb-next-docs.vercel.app` is wired to the GitHub
 integration on `main`: every push to `main` triggers a Vercel build
@@ -167,7 +188,7 @@ but this requires the human to first populate
 with the link metadata (see `docs-site/README.md`). Use this only when
 git integration is broken; default is "open PR, let main-deploy fire".
 
-### Step 9 — Retro
+### Step 10 — Retro
 
 Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory/retrospectives/YYYY-MM/DD/HH.MM_w1-author-<epic>.md`. AI Diary + Honest Feedback are mandatory. Specifically capture:
 
@@ -186,6 +207,7 @@ Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory
 - **Don't claim "X's wallet/balance/state is updated" without verifying which discriminator** (e.g. `owner_type`) the underlying code filters on. Reverse-engineering from a change-log collection alone (e.g. `wallets_change_logs`) is misleading because secondary effects (MDR distribution to partners) can outnumber the primary effect (client credit) and skew the inferred shape. Pre-flight: a Mongo aggregate by the discriminator + a code-line read of the function that does the update + a search of `pg-writer`/`bot-writer` drift learnings for past actor-rename corrections. Lesson learned the hard way 2026-05-07 on `epic-deposit` DEPOSIT-002 — see vault learning `2026-05-07_correction-deposit-credit-target-is-client-wal`.
 - **Don't use kramdown-style heading anchors `{#anchor-id}` in story or epic files.** GitHub-flavored Markdown supports them, but MDX (used by Nextra v4 to render the docs hub) interprets `{...}` as a JSX expression and the build fails on `Error compiling`. Either: (a) keep heading text short enough that Nextra's auto-slug from the heading text is itself the stable id you want (e.g. `## DEPOSIT-001` → slug `deposit-001`), and put the trust label + one-line summary in a paragraph below the heading; or (b) drop a self-closing HTML anchor right above the heading: `<a id="deposit-001" />`. Default to (a) — it doubles as cleaner table-of-contents. Lesson learned 2026-05-07 when `docs-site/` first deploy on Vercel failed with this exact pattern.
 - **Don't write `{...}` outside backticks anywhere in the body, including Sources blocks.** MDX evaluates *every* `{...}` outside fenced code or inline code as a JSX expression — so `{client, partner}`, `{status=pending, expires_at}`, `{owner_type=merchant}`, even `{a, b}` get treated as JS and explode at prerender time with `ReferenceError: <name> is not defined` (digest changes each iteration; this one bit on the second build, 2026-05-07). Always wrap data shapes, set notation, and pseudo-code in backticks: `` `{client, partner}` ``. The author's eye scans markdown for `{#...}` (the kramdown trap) but misses `{a, b}` set notation — pre-flight your file by piping it through this regex before pushing: ``rg -nP '(?<![\`\\\\])\{[^}\`]+\}' docs/requirements/*.md | grep -v '\\\\.md:[0-9]*: *\\\\` '`` (zero hits = clean). Examples that survived past human review and bit on Vercel: ``mongo collections `wallets` (owner_type ∈ {client, partner} — verified count: ...)`` ← `{client, partner}` is bare here because the `wallets` backtick already closed.
+- **Don't validate mermaid diagrams by grepping for known-bad characters.** `;`, `->`, `-=`, `--`, `-x`, `-)` and friends break the docs-hub render when they land in sequence-message text — but a grep allowlist only ever catches the character class you already know about. It passed a `;` straight through on PAYOUT-009 (thread #132) because the grep was written to know only `-`-starter tokens, and the same `;` had already caused the PAYOUT-002/003/004 saga before that. Run the real parser instead — the Step 8 `check-mermaid.mjs` gate (`mermaid.parse()` on every fenced block). A parser catches every structural-token class, known and future; a character grep never will. Validate mermaid by parsing, not by character-grep.
 - **Don't write epics for unscoped subsystems.** If the architect has not produced an ADR for "feature X", do not pre-write epic-x.md "to save time later." The story will drift from the eventual ADR; cleanup is more expensive than re-authoring after ratification.
 - **Don't extend `pg-writer`'s lane.** The current system is pg-writer / bot-writer's home. If a current-system flow doc is missing or wrong, file `arra_learn #drift #current-doc-gap` for them — do not write into `mobiz-payment-gateway/docs/`.
 - **Don't merge ADR amendments into existing stories silently.** Amendments → revision-log entry + `arra_supersede` of the old story id, with a pointer.
