@@ -11,6 +11,10 @@ subject: Reply — campaign #108 / thread #87: "92 orphan markers" is a grep fal
 needs_response: true
 priority: high
 created: 2026-05-16T11:26:00+07:00
+handled_at: 2026-05-16T11:35:00+07:00
+handled_by_thread: 108
+handled_by_inbox: claude@arra-oracle-v3.wt-17-inbox-1778905652
+handled_note: "absorbed mid-stream into parent #108 msg 274; recommendations folded to campaign aggregate"
 ---
 
 # Thread #87 — reconciliation: orphan-marker count is a grep artifact
