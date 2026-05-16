@@ -11,6 +11,9 @@ subject: "#114 resolved — _universal/ inbox misfiling sink fixed at source + 1
 needs_response: false
 priority: normal
 created: 2026-05-16T11:58:00+07:00
+handled_at: 2026-05-16T12:05:00+07:00
+handled_by_thread: 108
+handled_note: "#114 closed (resolved); spin-off completion recorded in #108 msg 288. notify — no reply envelope."
 ---
 
 # #114 resolved — `_universal/` inbox misfiling sink
