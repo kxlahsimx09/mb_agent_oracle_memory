@@ -324,6 +324,15 @@ nohup bash scripts/brew-ops-bot/detector.sh > /dev/null 2>&1 & disown
 
 Verify: `pgrep -fl 'w2-watcher\|brew-ops-bot/bot.sh\|brew-ops-bot/detector.sh\|chat-watcher.sh'`
 
+### `scripts/inbox-loop-closure-hook.sh` — §11d loop-closure gate
+
+Not a daemon — a Claude Code `Stop` hook. It blocks a dispatched oracle's session from ending while its inbox loop is open: an inbound envelope still unarchived in `for-{oracle}/`, or a `needs_response: true` envelope archived without a reply (frontmatter missing both `handled_by_inbox` and `handled_note`). Fixes the gap diagnosed on thread #140 — agents skip the §11e Step 0.5 close-out, so a workflow step is replaced by a harness gate. See AGENTS.md §11l.
+
+- **Self-gating:** identifies the oracle by reverse-looking-up the session id against the inbox-watcher's `state/`+`sessions/` maps. No watcher record → silent no-op, so non-oracle sessions are never affected (a global install in `~/.claude/settings.json` is therefore safe).
+- **Circuit breaker:** after 3 blocks it stops blocking, writes a `priority: high` notify envelope to `for-orchestrator/`, and logs to `~/.cache/inbox-loop-closure/escalations.log`.
+- **Fail-open:** any hook error allows the stop; the inbox-watcher T2 `failed_stuck` gate is the backstop.
+- Install / re-deploy after edits: `bash scripts/install-inbox-loop-closure-hook.sh` (repo copy is canonical; `~/.claude/hooks/` holds the deployed copy). State in `~/.cache/inbox-loop-closure/`.
+
 ### Common debug entry points
 
 - "wake fired but no PR landed" → check `~/w2-watcher.stdout.log` for SILENT-FAIL alerts; check pane for auth 401 / busy state

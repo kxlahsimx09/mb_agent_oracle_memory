@@ -607,6 +607,25 @@ Without this, N concurrent sub-thread replies each spawned a separate orchestrat
 
 Multi-recipient broadcast (one envelope to many recipients) is still **not** in scope. Fan-out writes one envelope per recipient — that's the explicit, observable contract.
 
+### 11l. Loop-closure enforcement (the Stop hook)
+
+§11c–§11g describe what a recipient *must* do; §11e Step 0.5 puts it in every workflow. But a workflow step is advice — agents skip it. **Observed 2026-05-17 (thread #140):** next-impl (PR #135) and next-writer (PR #139) were dispatched `needs_response: true` on thread #132, did the work, pushed their PRs — and exited without sending a reply envelope or posting to the thread. Several inbound envelopes also sat unarchived (threads #124/#125/#128/#130/#136). Two recurring gaps: (a) no reply envelope on `needs_response: true`; (b) no §11d archive of the inbound envelope.
+
+The fix is **not** another workflow step. It is a harness-level gate: `scripts/inbox-loop-closure-hook.sh`, registered as a Claude Code `Stop` hook (installed via `scripts/install-inbox-loop-closure-hook.sh` into `~/.claude/settings.json`). A dispatched oracle's session **cannot end** while its loop is open.
+
+**What the hook checks**, every time an oracle session tries to stop:
+
+1. **Who am I?** Reverse-looks-up the session id (from the Stop-hook payload) against the inbox-watcher's `state/<oracle>/*.state` and `sessions/<oracle>/*.session-id` maps. **Self-gating:** if the session was not spawned by the inbox-watcher to handle an envelope, the hook is a silent no-op. Regular dev sessions and non-oracle panes are never affected — which is why a global install is safe.
+2. **Archive gap.** Any `*.md` still in `for-{oracle}/` root → block the stop (exit 2; the agent sees the reason and continues). The agent must run §11c/§11d — reply, then `git mv` to `handled/`.
+3. **Reply gap.** Any envelope in `for-{oracle}/handled/` (recent mtime window) with `needs_response: true` but missing **both** `handled_by_inbox` and `handled_note` → block. A `needs_response` envelope archived with neither field was archived without a reply (a correctly-closed one has `handled_by_inbox`; a §11g moot one has `handled_note`).
+4. **Circuit breaker.** After `MAX_BLOCKS` (default 3) consecutive blocks on the same session the hook stops blocking — but it does **not** fail silently: it writes a `priority: high` `notify` envelope to `for-orchestrator/` and logs to `~/.cache/inbox-loop-closure/escalations.log`. A genuinely stuck agent becomes a visible orchestrator signal, not a silent stall.
+
+**Fail-open.** Any unexpected error in the hook allows the stop — a hook must never wedge a session. The inbox-watcher T2 `failed_stuck` gate (§11i) remains the out-of-band backstop.
+
+The hook is the enforcement layer; §11c–§11g remain the source of truth for *what* correct close-out looks like. Owner: `brew-ops`. Re-run the installer after editing the hook (the repo copy is canonical; `~/.claude/hooks/` holds the deployed copy).
+
+**Follow-up (not yet done):** move hook injection into `maw wake` (set `ARRA_ORACLE` + a fleet `--settings`) so the gate is fleet-runtime-owned and survives multi-node, instead of relying on a node-global `~/.claude/settings.json`.
+
 ### 11j. Phase status (as of 2026-05-03)
 
 - **Phase 1 (shipped 2026-04-30):** Manual fire — envelope spec + 3 flows + archive protocol + session-per-thread wake decision rule. Dogfooded with thread #56 (ADR-9 dispatcher placement) — manual round-trip ~3 min. Cold cross-oracle wake test 2026-04-30 21:00 GMT+7 passed end-to-end after Phase 2b-i landed: next-architect (no §11 in own charter) self-discovered the protocol via vault grep and followed §11d archive correctly.
@@ -627,3 +646,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-05-03 (later) — added §11b `parent_thread`/`parent_oracle` fields and §11k Orchestrator fan-out pattern (Phase 4). Phase 2a watcher PR merged; Phase 4 daemon + role next.
 **Updated:** 2026-05-16 — §11f/§11i/§11k: watcher keys orchestrator wakes on `parent_thread` (wake key) and adds the `deferred` state, so a fan-out campaign's replies converge on ONE orchestrator session instead of spawning parallel siblings (fixes the triple-dispatch incident — escalation #348, thread #134).
 **Updated:** 2026-05-16 (later) — §11f/§11i/§11k: `parent_thread` wake-keying extended to **all** oracles (worker agents now reuse one campaign session, not one per sub-thread); §11i gains Path 2b — the periodic campaign GC sweep (late-close retire, session-id eviction + TTL, orphan-worktree prune). Thread #139, PR #71.
+**Updated:** 2026-05-17 — added §11l (loop-closure enforcement): the `Stop`-hook gate that blocks a dispatched oracle session from ending while its inbox loop is open (no reply envelope / no §11d archive). Fixes the gap observed on thread #132 → diagnosed on thread #140.
