@@ -357,6 +357,7 @@ type: consult                  # consult | escalate | notify
 thread: 56                     # omit for notify-without-thread
 parent_thread: 100             # optional — set by orchestrator when fanning out
 parent_oracle: orchestrator    # optional — pairs with parent_thread; identifies who is aggregating
+parent_session: /Users/dev01/Code/.../arra-oracle-v3.wt-9-inbox-…  # optional — §151 sticky ownership; the dispatcher's own worktree path (its cwd)
 subject: pre-Input-5 checkpoint externalization proposal
 context: see thread #56 — if pass-2 still misses, need tooling fix
 needs_response: true           # consult/escalate=true; notify=false
@@ -372,6 +373,8 @@ created: 2026-04-30T14:00:00+07:00
 ```
 
 `parent_thread` + `parent_oracle` are introduced for the orchestrator fan-out pattern (§11k). They are optional fields with no impact on routing — recipients ignore them in the standard sweep. The orchestrator's Step 0.5 sweep groups incoming reply envelopes by `parent_thread` to know which sub-tasks of which parent request have completed.
+
+`parent_session` (§151 sticky thread→session ownership) is set by the **dispatcher** on every **outbound dispatch** envelope it writes — its value is the dispatcher's own worktree path (its `pwd`). It carries the worktree, not the session-id UUID, because a Claude session cannot reliably self-discover its UUID mid-run but always knows its cwd; the watcher derives the UUID from the worktree when it needs one. Only the dispatcher populates it, and only on dispatch envelopes — workers do **not** echo it onto reply envelopes. The watcher reads it off the outbound dispatch envelope and records the campaign owner (see §11f); reply routing then sends the reply back to that exact session. Absent `parent_session` ⇒ the watcher falls back to its pre-§151 behaviour (a fresh session becomes de-facto owner).
 
 `from`/`to` are the **routing keys** — they must match oracle names. `from_role`/`to_role` are documentation only; the watcher and Step 0.5 sweep do not parse them. They exist so the receiver immediately understands what the sender does in fleet terms (e.g., "this came from `next-architect` who plays the `system-architect` role"), without a round-trip to `maw oracle ls`.
 
@@ -428,6 +431,19 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
 - **worker agents** (`next-impl` / `next-writer` / `pg-writer` / `bot-writer` / `next-architect`): a new sub-thread of an in-flight campaign `--resume`s the agent's campaign session rather than `--fresh`-spawning a per-sub-thread session — the per-thread session-sprawl source. A **new** campaign (new `parent_thread`) still gets a new session, so context stays campaign-scoped: no cross-campaign bias bleed, parallelism across campaigns preserved. It is deliberately **not** collapsed to one-session-per-agent-forever.
 
 Envelopes with no `parent_thread` (campaign-parent threads, standalone consults) key on their own `thread:` id, unchanged. The session-id file is `sessions/<oracle>/thread-<wake-key>.session-id`.
+
+**Sticky thread→session ownership (§151) — routing replies to the OWNER.** The wake key tells the watcher *which campaign* a reply belongs to; it does not tell it *which session* owns that campaign. Before §151, the owner was whatever session the watcher itself last spawned — so a thread opened *inside* an already-running session (a human-driven session, or any session that called `arra_thread` directly) was never recorded as owner, and the first reply `--fresh`-spawned a new session that usurped ownership (the #140/#141 context-fragmentation + session-sprawl incident).
+
+§151 closes this: the dispatcher stamps `parent_session` (its worktree path) on outbound dispatch envelopes (§11b); the watcher records `sessions/<parent_oracle>/thread-<parent_thread>.owner = <worktree path>` the moment it scans that dispatch envelope — before any reply exists. A later reply for that campaign routes back to the **owner**:
+
+| Owner worktree state | Watcher action |
+|---|---|
+| process up, JSONL **active** (mid-turn) | `deferred` — re-checked each scan |
+| process up, JSONL **idle** (at prompt) | `tmux send-keys` the prompt into the owner's live window — `status=delivered_to_owner` |
+| **no process**, worktree present | `maw wake --resume` the owner's session in its own worktree |
+| worktree **gone** | `--fresh` spawn; new worktree **inherits ownership** (owner record rewritten) |
+
+An owned campaign's replies are serialized through the one owner session (`campaign_inflight`): one reply is routed at a time, the rest defer. Owner-routed worktrees are retire-exempt — the watcher never retires a worktree it did not spawn. Human-collision policy: send-keys fires only on the JSONL-idle gate (never mid-turn); a human who typed-but-did-not-submit sees the appended text in their input buffer — visible and recoverable, the accepted residual.
 
 **Why session-per-thread is correct:**
 
@@ -652,6 +668,8 @@ The §11i watcher keys orchestrator wakes on `parent_thread` (the *wake key*, §
 
 Without this, N concurrent sub-thread replies each spawned a separate orchestrator session, and each ran its own Step 0.5 sweep and independently re-dispatched the same follow-up — one fan-out task implemented N times in parallel (the 2026-05-16 triple-dispatch incident: PR #129/#130/#131 for one task; escalation #348, thread #134). Genuinely distinct campaigns (different `parent_thread`) are unaffected and still run concurrently.
 
+**Sticky ownership (§151, 2026-05-17) — the dedup target is the OWNER.** The dedup above keyed a campaign onto whatever session the watcher last spawned. But a campaign opened *inside* an already-running orchestrator session (a human-driven one, or any session that called `arra_thread` directly) has no watcher-spawn event — so the first reply still `--fresh`-spawned a new orchestrator that became de-facto owner (the #140/#141 fragmentation + sprawl, on top of what the 2026-05-16 fix already addressed). §151 fixes this: the dispatcher stamps `parent_session` on the dispatch envelope (§11b), the watcher records the campaign owner, and replies route back to that exact session — `send-keys` into it if live, `--resume` it if down, `--fresh` + ownership-transfer only if its worktree is gone (full routing table in §11f). The recipient discipline for **other agents is still unchanged** — they reply in their sub-thread and write a reply envelope per §11d; only the watcher's routing changed.
+
 Multi-recipient broadcast (one envelope to many recipients) is still **not** in scope. Fan-out writes one envelope per recipient — that's the explicit, observable contract.
 
 ### 11l. Loop-closure enforcement (the Stop hook)
@@ -695,3 +713,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-05-16 (later) — §11f/§11i/§11k: `parent_thread` wake-keying extended to **all** oracles (worker agents now reuse one campaign session, not one per sub-thread); §11i gains Path 2b — the periodic campaign GC sweep (late-close retire, session-id eviction + TTL, orphan-worktree prune). Thread #139, PR #71.
 **Updated:** 2026-05-17 — added §11l (loop-closure enforcement): the `Stop`-hook gate that blocks a dispatched oracle session from ending while its inbox loop is open (no reply envelope / no §11d archive). Fixes the gap observed on thread #132 → diagnosed on thread #140.
 **Updated:** 2026-05-17 (later) — added §3c (runtime-checkout deploy discipline): both primary checkouts stay on `feat/all-prs-rebased`; new code lands by merge-then-pull, never by live-editing the running checkout or parking it on a feature branch. Codified after the thread #149 fleet re-sync.
+**Updated:** 2026-05-17 (§151) — §11b gains the optional `parent_session` envelope field; §11f gains the sticky thread→session ownership routing table; §11k notes the dedup target is now the recorded campaign owner. The dispatcher stamps `parent_session` (its worktree path) on outbound dispatch envelopes; the watcher records the owner and routes every reply back to the owning session (send-keys / --resume / --fresh+transfer) instead of spawning a fresh orchestrator. Fixes the #140/#141 context-fragmentation + session-sprawl. Watcher impl: arra-oracle-v3 fork PR #75; design ratified on thread #151.

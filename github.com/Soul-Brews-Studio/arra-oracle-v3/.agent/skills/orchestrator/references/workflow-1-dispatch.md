@@ -184,6 +184,7 @@ type: consult
 thread: ${sub_id}
 parent_thread: ${parent_id}
 parent_oracle: orchestrator
+parent_session: $(pwd)
 subject: <task summary>
 context: see thread #${sub_id} — coordinated under request thread #${parent_id}
 needs_response: true
@@ -194,6 +195,16 @@ created: $(date -Iseconds)
 <task body — keep brief; thread carries detail>
 EOF
 ```
+
+**`parent_session` is mandatory on every dispatch envelope (§151 sticky
+thread→session ownership).** Its value is **my own worktree path** —
+`$(pwd)`, the cwd of this orchestrator session. The inbox-watcher reads it
+off this outbound envelope and records me as the campaign owner, so the
+agent's reply later routes back to **this exact session** (`send-keys` into
+my live window) instead of `--fresh`-spawning a different orchestrator that
+would fragment the campaign's context. Omitting it silently degrades to
+pre-§151 behaviour (a fresh session usurps ownership — the #140/#141 bug).
+Stamp it on the dispatch envelope only; do not put it on reply envelopes.
 
 Post a brief "dispatched" line to the parent thread:
 
