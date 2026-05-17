@@ -342,6 +342,17 @@ Not a daemon — a one-time-per-repo helper. `.secrets/` (runtime credentials, e
 - Refuses to delete a real `.secrets/` directory — warns for manual review instead (never destroys credentials).
 - Onboarding a new repo to the scheme = populate `fleet-secrets/<repo>/`, then run this once. See AGENTS.md §3b.
 
+### Runtime checkout re-sync (deploy discipline)
+
+The two primary checkouts are live runtimes: `~/Code/github.com/Soul-Brews-Studio/arra-oracle-v3` (the `inbox-watcher.sh` daemon's cwd) and `~/Code/github.com/Soul-Brews-Studio/maw-js` (what `~/.local/bin/maw` execs). Both stay on `feat/all-prs-rebased`; new code lands by **merge-then-pull**, never by live-editing the running checkout or parking it on a feature branch. Full rule + rationale: **AGENTS.md §3c**.
+
+When I re-sync a checkout (the recurring brew-ops task — e.g. thread #149):
+
+1. **Verify before discarding.** If the working tree carries an uncommitted edit, `git diff <remote>/feat/all-prs-rebased -- <file>` first. Empty → contained in the merged PRs, safe to discard + fast-forward. Non-empty → unmerged work; stop and flag it on the thread.
+2. **Fast-forward only.** `git fetch <remote> feat/all-prs-rebased` → confirm ancestry (`git merge-base --is-ancestor`) → `git merge --ff-only`. The branch lives on the **fork** (`feedback_fork_prs_not_upstream`), so fetch from `fork`, not `origin`.
+3. **Restart `inbox-watcher.sh` after re-syncing the arra-oracle-v3 primary** — a running bash daemon re-reads its own file, so `stop` → `start` (no `restart` subcommand) to run committed code cleanly. `maw` re-execs `src/cli.ts` per call → no restart needed for the maw-js primary.
+4. Confirm the new watcher pid (`cat ~/.cache/inbox-watcher/inbox-watcher.pid`) and report it.
+
 ### Common debug entry points
 
 - "wake fired but no PR landed" → check `~/w2-watcher.stdout.log` for SILENT-FAIL alerts; check pane for auth 401 / busy state

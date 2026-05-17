@@ -139,6 +139,28 @@ If the target is missing or points elsewhere, stop and ask before writing.
 
 ---
 
+## 3c. Runtime checkouts: `feat/all-prs-rebased` is the deploy source-of-truth
+
+Two **primary checkouts** are live runtimes, not scratch space:
+
+| Primary checkout | Runtime role |
+|---|---|
+| `~/Code/github.com/Soul-Brews-Studio/arra-oracle-v3` | cwd of the `inbox-watcher.sh` daemon — the fleet's wake mechanism |
+| `~/Code/github.com/Soul-Brews-Studio/maw-js` | what `~/.local/bin/maw` execs (`bun src/cli.ts`) on every invocation |
+
+**The discipline (binding on every agent):**
+
+1. **Both primary checkouts stay on `feat/all-prs-rebased`.** That branch is the integration branch every fork PR targets (SKILL.md §maw-js PR workflow) and the deploy source-of-truth. A primary checkout must never be parked on a feature branch.
+2. **New code lands by merge-then-pull.** Branch → PR into `feat/all-prs-rebased` → merge → fast-forward the primary checkout (`git fetch` + `git merge --ff-only`). Never live-edit a file in a running checkout, and never `git checkout <feature-branch>` inside a primary checkout.
+3. **A live hotfix is a debt, not a workflow.** If a genuine emergency forces a direct edit to a running checkout, that edit is *unmerged work*: until it is PR'd, merged, and the checkout re-synced, the runtime has drifted from source control and nobody else can reproduce it. Close the loop promptly — merge, then re-sync.
+4. **A running bash daemon re-reads its own file.** After re-syncing the arra-oracle-v3 primary, restart `inbox-watcher.sh` (`stop` → `start`) so it executes the committed branch code, not a file that changed under it. `maw` re-execs `src/cli.ts` per invocation, so the maw-js primary needs no restart — but it still must be on `feat/all-prs-rebased`.
+
+**Verify before discarding.** When re-syncing a checkout that carries an uncommitted edit, first diff the working-tree file against the merged tip — `git diff <remote>/feat/all-prs-rebased -- <file>`. Empty diff → the edit is fully contained in the merged PRs; safe to discard and fast-forward. Non-empty → there is unmerged work; **stop and flag it**, do not discard.
+
+> Precedent: the 2026-05-17 re-sync (thread #149) cleaned up exactly this drift — a #71/#72 hotfix had been live-edited into `scripts/inbox-watcher.sh`, and the maw-js primary had been parked on `feat/worktree-secrets-injection` instead of `feat/all-prs-rebased`.
+
+---
+
 ## 4. Oracle / Shadow philosophy (non-negotiable)
 
 Every agent abides by the root principles stored in the Oracle vault under `type: principle, tags: [soul-brews-core]`. These are **not restated here** — the Oracle is the single source of truth.
@@ -672,3 +694,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-05-16 — §11f/§11i/§11k: watcher keys orchestrator wakes on `parent_thread` (wake key) and adds the `deferred` state, so a fan-out campaign's replies converge on ONE orchestrator session instead of spawning parallel siblings (fixes the triple-dispatch incident — escalation #348, thread #134).
 **Updated:** 2026-05-16 (later) — §11f/§11i/§11k: `parent_thread` wake-keying extended to **all** oracles (worker agents now reuse one campaign session, not one per sub-thread); §11i gains Path 2b — the periodic campaign GC sweep (late-close retire, session-id eviction + TTL, orphan-worktree prune). Thread #139, PR #71.
 **Updated:** 2026-05-17 — added §11l (loop-closure enforcement): the `Stop`-hook gate that blocks a dispatched oracle session from ending while its inbox loop is open (no reply envelope / no §11d archive). Fixes the gap observed on thread #132 → diagnosed on thread #140.
+**Updated:** 2026-05-17 (later) — added §3c (runtime-checkout deploy discipline): both primary checkouts stay on `feat/all-prs-rebased`; new code lands by merge-then-pull, never by live-editing the running checkout or parking it on a feature branch. Codified after the thread #149 fleet re-sync.
