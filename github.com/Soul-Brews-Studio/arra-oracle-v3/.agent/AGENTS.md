@@ -114,6 +114,31 @@ If the target is missing or points elsewhere, stop and ask before writing.
 
 ---
 
+## 3b. `.secrets/` files: central fleet store + per-repo worktree symlinks
+
+`.secrets/` holds runtime credentials (e.g. `.secrets/supabase.env`). Like `.agent/`, it is **gitignored** — so it is **not carried into a fresh git worktree**. Before this convention, agents reconstructed `.secrets/supabase.env` by hand in every new worktree; worse, some values — a hosted DB password needed by `supabase db push` — **cannot be reconstructed from any API**, so manual recovery physically could not restore them.
+
+**The fix mirrors §3a's `.agent` pattern:** one central, non-git store; per-repo worktree symlinks.
+
+**Layout:**
+
+```
+~/.arra-oracle-v2/fleet-secrets/            ← central store root (outside any git repo)
+└── <repo>/                                 ← one dir per repo, chmod 700
+    └── supabase.env                         ← chmod 600 — the canonical credentials
+
+<repo>.wt-*/.secrets → ~/.arra-oracle-v2/fleet-secrets/<repo>     ← symlink, gitignored
+```
+
+**Rules:**
+
+- The central store is the **single source of truth**. Never copy a secret value into a worktree, a thread, an envelope, a commit, or a retro — refer to the store by path only.
+- Worktree `.secrets` symlinks are injected automatically by `maw` at worktree-creation and wake (`injectWorktreeSymlinks()` in maw-js `src/commands/shared/wake-session.ts`) — the same mechanism that injects the `.agent` symlink. **Never reconstruct `.secrets/` by hand.**
+- Onboarding another repo is purely populating `fleet-secrets/<repo>/` — no code change. `arra-oracle-v3/scripts/backfill-worktree-secrets.sh <repo>` links any pre-existing worktrees.
+- A worktree `.secrets` that is a *real directory* (a legacy hand-reconstructed copy) shadows the store — replace it with the symlink.
+
+---
+
 ## 4. Oracle / Shadow philosophy (non-negotiable)
 
 Every agent abides by the root principles stored in the Oracle vault under `type: principle, tags: [soul-brews-core]`. These are **not restated here** — the Oracle is the single source of truth.

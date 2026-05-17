@@ -333,6 +333,15 @@ Not a daemon — a Claude Code `Stop` hook. It blocks a dispatched oracle's sess
 - **Fail-open:** any hook error allows the stop; the inbox-watcher T2 `failed_stuck` gate is the backstop.
 - Install / re-deploy after edits: `bash scripts/install-inbox-loop-closure-hook.sh` (repo copy is canonical; `~/.claude/hooks/` holds the deployed copy). State in `~/.cache/inbox-loop-closure/`.
 
+### `scripts/backfill-worktree-secrets.sh` — fleet-secret store backfill
+
+Not a daemon — a one-time-per-repo helper. `.secrets/` (runtime credentials, e.g. `.secrets/supabase.env`) is gitignored, so it never carries into a fresh worktree. `maw`'s `injectWorktreeSymlinks()` (`wake-session.ts`) symlinks `<worktree>/.secrets` → `~/.arra-oracle-v2/fleet-secrets/<repo>/` at worktree-creation/wake — the same mechanism as the `.agent` symlink. This script backfills worktrees that pre-date that wiring.
+
+- Usage: `bash scripts/backfill-worktree-secrets.sh <repo-name>` — symlinks `.secrets` in the primary checkout + every `.wt-*` worktree to the central store. Idempotent.
+- Central store (single source of truth, outside any git repo): `~/.arra-oracle-v2/fleet-secrets/<repo>/` — `chmod 700` dir, `supabase.env` `chmod 600`. Holds values (e.g. a hosted DB password) that cannot be re-fetched from any API.
+- Refuses to delete a real `.secrets/` directory — warns for manual review instead (never destroys credentials).
+- Onboarding a new repo to the scheme = populate `fleet-secrets/<repo>/`, then run this once. See AGENTS.md §3b.
+
 ### Common debug entry points
 
 - "wake fired but no PR landed" → check `~/w2-watcher.stdout.log` for SILENT-FAIL alerts; check pane for auth 401 / busy state

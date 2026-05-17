@@ -259,6 +259,19 @@ mb-next-payment-gateway/
 
 As more agents are spawned (backend-developer, qa-engineer, etc.), their skills and owned directories are appended here and to §5.
 
+### 11a. Worktree `.secrets` — central fleet store, never reconstruct
+
+`.secrets/` (runtime credentials, e.g. `.secrets/supabase.env`) is **gitignored**, so it is **not carried into a fresh worktree**. Do **not** reconstruct it by hand — and you physically cannot fully: the hosted **DB password** (`SUPABASE_DB_PASSWORD`, needed by `supabase db push`) is not retrievable via `supabase projects api-keys`.
+
+Instead, every worktree's `.secrets` is a **symlink** to the central, non-git fleet store:
+
+```
+~/.arra-oracle-v2/fleet-secrets/mb-next-payment-gateway/supabase.env   ← canonical, all 5 keys
+<worktree>/.secrets → ~/.arra-oracle-v2/fleet-secrets/mb-next-payment-gateway
+```
+
+`maw` injects this symlink automatically at worktree-creation and wake — the same mechanism as the `.agent` symlink. If you ever land in a worktree whose `.secrets` is missing, run `arra-oracle-v3/scripts/backfill-worktree-secrets.sh mb-next-payment-gateway` — **never recreate the file**. The central store is the single source of truth; never copy a secret value into a thread, envelope, commit, or retro.
+
 ---
 
 ## 12. Versioning this charter
@@ -271,3 +284,4 @@ Append-friendly. New rules go at the bottom with a dated header. Old rules are n
 - 2026-04-22 — charter created. Initial roster: `system-architect` (`next-architect-oracle`). Tag lifecycle: `#next` (this repo) parallels `#current` (mobiz + bank-bot).
 - 2026-05-04 — `implementation-architect` (`next-impl-oracle`) added per orchestrator thread #69. Owns `poc/<adr-id>/` PoC + spec tests; sibling to next-architect (upstream) and the future next-dev (downstream).
 - 2026-05-07 — `next-product-writer` (`next-writer-oracle`) added per brew-ops session 2026-05-07. Owns `docs/requirements/` — human-facing vision + epics + stories with Sources blocks + trust labels. Distinct from pg-writer/bot-writer (technical writers for `#current`); product-writer translates ratified `#next` artifacts for stakeholders + downstream agents. Scope spans the next-* fleet (this repo today; bankbot v2 + future next-* repos as they spawn).
+- 2026-05-17 — added §11a: worktree `.secrets` is a symlink to the central fleet store (`~/.arra-oracle-v2/fleet-secrets/<repo>/`), injected by `maw` like the `.agent` symlink; never reconstruct it by hand. Per orchestrator thread #147 (brew-ops).
