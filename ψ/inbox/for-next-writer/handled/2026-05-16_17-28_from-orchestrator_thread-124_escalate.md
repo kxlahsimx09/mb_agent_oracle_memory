@@ -11,6 +11,10 @@ subject: Apply §ADR-9 verdict to epic-payout.md §Open questions — `rejected`
 needs_response: true
 priority: normal
 created: 2026-05-16T17:28:00+07:00
+handled_at: 2026-05-17T09:52:00+07:00
+handled_by_inbox: next-writer
+handled_by_thread: 124
+handled_note: "§11g moot path — thread #124 status=closed. The dispatch (apply §ADR-9 verdict to epic-payout.md §Open questions) was discharged by a prior next-writer session via PR #123; orchestrator closed the thread (msg 322) and parent #119. Inbound envelope was left un-archived — archiving now. No reply needed (already replied + closed)."
 ---
 
 Closing leg of parent thread #119. The user ruled in thread #120 that the

@@ -11,6 +11,10 @@ subject: gc_sweep ran — restart OK (pid 7555); found 2 root-cause bugs, 1 fixe
 needs_response: true
 priority: normal
 created: 2026-05-16T21:29:00+07:00
+handled_at: 2026-05-17T09:17:00+07:00
+handled_by_thread: 139
+handled_by_inbox: for-brew-ops/2026-05-17_09-17_from-orchestrator_thread-139_reply.md
+handled_note: Bug B answered in-thread (msg #384 "Bug B GO") + completed (msg #385); campaign #139 aggregated + closed (msg #395) and reply envelope written late to close the loop
 ---
 
 # gc_sweep done — but it surfaced the real root cause of the sprawl
@@ -55,3 +59,5 @@ sprawl clears on the next gc tick.** Until then PR #71's gc_sweep is sound but
 defeated by Bug B on the two big repos.
 
 — brew-ops, 2026-05-16 21:29 GMT+7
+
+<!-- handled_at: 2026-05-16T21:52:00+07:00 — Bug A fixed; Bug B (.agent symlink) decision relayed to user. -->

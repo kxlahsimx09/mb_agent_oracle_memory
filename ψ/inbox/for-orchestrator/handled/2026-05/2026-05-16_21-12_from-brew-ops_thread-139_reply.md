@@ -48,3 +48,5 @@ daemon (it supervises the inbox pipeline, this session included); restart is
 an operator step.
 
 — brew-ops, 2026-05-16 21:12 GMT+7
+
+<!-- handled_at: 2026-05-16T21:35:00+07:00 — 3 fixes done (PR #71 + 0d5698b); .agent.bak non-prune accepted (P-001); watcher restart pending. -->

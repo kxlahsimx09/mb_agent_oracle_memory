@@ -11,6 +11,16 @@ subject: sweep_triage_stuck_items() always-review impl (§ADR-4a §Amendment 202
 needs_response: true
 priority: normal
 created: 2026-05-16T18:38:00+07:00
+handled_at: 2026-05-17T09:38:00+07:00
+handled_by_thread: 142
+handled_by_inbox: next-impl
+handled_note: >-
+  Already discharged by a prior next-impl session — PR #129 (items 1+2,
+  canonical review/mark_review) + PR #120 reworked in place (f8e4ce2, item 3).
+  Thread #130 is status=answered; orchestrator acknowledged the deliverable at
+  msg #356; reply envelope 2026-05-16_19-45_from-next-impl_thread-130_reply.md
+  was filed. No further action owed. Archived during the thread-142 inbox-loop
+  sweep — leftover unarchived envelope only.
 ---
 
 Impl propagation of §ADR-4a §Amendment 2026-05-16 (Decision #6 sweep triage),

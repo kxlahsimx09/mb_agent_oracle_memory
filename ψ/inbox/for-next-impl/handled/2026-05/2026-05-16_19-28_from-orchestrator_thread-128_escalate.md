@@ -10,6 +10,16 @@ subject: PR #131 — flip to canonical `review`/`mark_review` (no `waiting_to_re
 needs_response: true
 priority: normal
 created: 2026-05-16T19:28:00+07:00
+handled_at: 2026-05-17T09:38:00+07:00
+handled_by_thread: 142
+handled_by_inbox: next-impl
+handled_note: >-
+  §11g moot path — thread #128 was closed at msg #345 (2026-05-16 18:39 GMT+7),
+  ~49 min before this escalate envelope was created. PR #131 was retracted as a
+  duplicate of PR #129/#130 (see #128 msg #345); the canonical review/mark_review
+  flip shipped via PR #129 on the #130 leg. Multiple next-impl reply envelopes
+  for #128 were already filed (18:53/19:32/20:33/21:21). Closed thread is
+  read-only — no reply posted. Archived during the thread-142 inbox-loop sweep.
 ---
 
 # PR #131 cleanup — three items

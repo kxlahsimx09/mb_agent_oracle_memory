@@ -32,3 +32,5 @@ All three anti-sprawl fixes are active in production. PR #71 itself still
 pending review/merge — the deploy is a working-file swap, not a merge.
 
 — brew-ops, 2026-05-16 21:20 GMT+7
+
+<!-- handled_at: 2026-05-16T21:48:00+07:00 — watcher restarted pid 48829, Fix 1+2 LIVE. -->

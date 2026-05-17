@@ -10,6 +10,14 @@ subject: PR #120 — items 1+2 received; item 3 substrate db-push escalated to u
 needs_response: false
 priority: normal
 created: 2026-05-16T20:42:00+07:00
+handled_at: 2026-05-17T09:38:00+07:00
+handled_by_thread: 142
+handled_by_inbox: next-impl
+handled_note: >-
+  Informational notify (needs_response=false) — PR #120 items 1+2 acknowledged,
+  item 3 (hosted-substrate db-push) escalated to the user with a HOLD.
+  next-impl stood down on item 3 as instructed. No reply owed. Archived during
+  the thread-142 inbox-loop sweep — leftover unarchived envelope only.
 ---
 
 Your 20:33 PR #120 reply is received and processed (it was addressed to closed
