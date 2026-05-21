@@ -151,7 +151,12 @@ So the workflow's exit step is just:
 
 ```bash
 cd <product-repo>
-git checkout -b writer/<epic-slug>-<short-suffix>
+# Fetch first — never trust local main (AGENTS.md §3d / thread #199).
+# `git checkout -b writer/...` alone would branch off the primary's last-pulled
+# SHA, which on a §3c-disciplined primary can be days stale (the wt-48 /
+# PR #215 stale-base trap).
+git fetch origin --quiet
+git switch -c writer/<epic-slug>-<short-suffix> origin/main
 git add docs/requirements/
 git commit -m "next-writer: <epic-slug> — <N stories>, S<trust-mix>"
 git push -u origin writer/<epic-slug>-<short-suffix>

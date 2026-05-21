@@ -239,18 +239,21 @@ Report: total docs, vector status, fleet agents found, any errors.
 All fixes to `maw-js` go through individual feature branches that PR into `feat/all-prs-rebased` (not `main`):
 
 ```bash
-# 1. Branch from feat/all-prs-rebased
-git checkout feat/all-prs-rebased
-git checkout -b fix/<slug>
+# 1. Branch from fork's feat/all-prs-rebased — fetch first (AGENTS.md §3d):
+#    NEVER `git checkout feat/all-prs-rebased && git checkout -b ...` blindly —
+#    local feat/all-prs-rebased can be stale relative to the fork (the wt-48 /
+#    PR #215 stale-base trap, thread #199).
+git fetch fork --quiet
+git switch -c fix/<slug> fork/feat/all-prs-rebased
 
 # 2. Make changes + commit
 git add <files>
 git commit -m "fix(...): ..."
 
-# 3. Push to fork + open PR targeting feat/all-prs-rebased
+# 3. Push to fork + open PR targeting fork/feat/all-prs-rebased (self-review)
 git push fork fix/<slug>
-gh pr create --base feat/all-prs-rebased --head kxlahsimx09:fix/<slug> \
-  --repo Soul-Brews-Studio/maw-js --title "..." --body "..."
+gh pr create --base feat/all-prs-rebased --head brew-ops/fix-<slug> \
+  --repo kxlahsimx09/maw-js --title "..." --body "..."
 ```
 
 **Never** commit directly to `feat/all-prs-rebased` — it is the integration branch, not a working branch.

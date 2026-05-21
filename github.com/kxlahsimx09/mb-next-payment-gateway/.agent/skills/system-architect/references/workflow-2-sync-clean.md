@@ -216,7 +216,11 @@ If any check fails, fix before committing.
 ### Step 5 — Commit and push (5 min)
 
 ```bash
-git checkout -b architect/w2-sync-clean-<YYYY-MM-DD>
+# Fetch first — never trust local main (AGENTS.md §3d / thread #199).
+# `git checkout -b architect/...` alone branches off the primary's last-pulled
+# SHA which can be days stale (the wt-48 / PR #215 stale-base trap).
+git fetch origin --quiet
+git switch -c architect/w2-sync-clean-<YYYY-MM-DD> origin/main
 git add docs/architecture.md
 git commit -m "architect: W2 sync-clean — generate architecture.md snapshot (<YYYY-MM-DD>)"
 git push -u origin HEAD

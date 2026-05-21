@@ -382,7 +382,14 @@ Append a new entry to `## Revision log` at the bottom of `docs/adr.md`. Use the 
 Per AGENTS.md §9 safety rules:
 
 ```bash
-git checkout -b architect/w1-refine-adr-<theme-slug>-<YYYY-MM-DD>
+# Fetch first — never trust local main (AGENTS.md §3d / thread #199).
+# `git checkout -b architect/...` alone branches off the primary's last-pulled
+# SHA which can be days stale — the wt-48 / PR #215 stale-base trap, which
+# would have caught §CR2/§CR3 enum-value-count drift earlier had this been in
+# place. Companion to your `feedback_amendment_check_enum_migration_chain`
+# durable rule: this is the doctrine fix; that one is the substrate-grounding fix.
+git fetch origin --quiet
+git switch -c architect/w1-refine-adr-<theme-slug>-<YYYY-MM-DD> origin/main
 git add docs/adr.md
 # if migration-map was touched: git add docs/migration-map.md
 git commit -m "architect: W1 refine — <theme> (pass <N>)"

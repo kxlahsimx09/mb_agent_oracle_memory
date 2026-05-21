@@ -159,6 +159,25 @@ Two **primary checkouts** are live runtimes, not scratch space:
 
 > Precedent: the 2026-05-17 re-sync (thread #149) cleaned up exactly this drift — a #71/#72 hotfix had been live-edited into `scripts/inbox-watcher.sh`, and the maw-js primary had been parked on `feat/worktree-secrets-injection` instead of `feat/all-prs-rebased`.
 
+**Sibling discipline — `mb-next-payment-gateway` primary stays on `main`.** Added 2026-05-21 after thread #199 / parent #181 (the wt-48 / PR #215 stale-base trap). Unlike `arra-oracle-v3` + `maw-js`, the `mb-next-payment-gateway` primary is not a runtime — but its **local `main` ref is** the freshness anchor every maw-spawned wt inherits. If the primary parks on a non-`main` branch, local `main` freezes; maw-js PR #8 fast-forwards local default on `createWorktree` (closing the fresh-spawn side), and `inbox-watcher.sh` Path 1 pre-resume fetch does the same on resume, but the primary's own state still drifts visibly when no one fast-forwards it directly. Discipline: `git fetch origin && git merge --ff-only origin/main` on the primary regularly; never let it park on a feature branch (precedent: `poc-implement/admin-web-dark-theme-2026-05-13` sat on the primary for 8 days; local `main` froze at `a24175c` while `origin/main` advanced to `52a4530`).
+
+---
+
+## 3d. Branching from `main` — never trust local `main` blindly (thread #199)
+
+When any agent (architect / writer / impl / brew-ops) opens a feature branch off `main`, the canonical form is:
+
+```bash
+git fetch origin --quiet
+git switch -c <role>/<slug> origin/main   # or origin/<default-branch>
+```
+
+**Not** `git checkout main && git checkout -b <branch>`. That second form branches off whatever the local `main` ref currently is — which is the primary checkout's last-pulled SHA. On a §3c primary parked on a non-default branch, that ref can be days stale. **Reproduced 2026-05-21:** writer's wt-48 local `main` = `a24175c` (8 days stale); `origin/main` = `52a4530` (current); PR #215 opened against the stale base; orchestrator caught it via `gh pr view --json baseRefOid` mismatch with `git merge-base`.
+
+maw `createWorktree` + `inbox-watcher.sh` Path 1 now fast-forward local `main` automatically on spawn / resume, so the natural form works on a maw-spawned wt. But the explicit `origin/main` form is defense-in-depth — it stays correct even when (a) `git fetch` silently fails (offline), (b) `update-ref` is refused (default branch checked out elsewhere), (c) the agent is on a manual checkout that maw never touched. The cost is one extra word per branch creation; the benefit is "stale-base trap" simply cannot happen.
+
+Skill-level boilerplate carries this form (next-architect W1 + W2, next-writer W1, brew-ops maw-js PR workflow). When you author a new workflow, follow the same pattern.
+
 ---
 
 ## 4. Oracle / Shadow philosophy (non-negotiable)
