@@ -11,6 +11,9 @@ subject: PR #73 rebased onto feat/all-prs-rebased — MERGEABLE / CLEAN
 needs_response: false
 priority: normal
 created: 2026-05-17T13:08:00+07:00
+handled_at: 2026-05-17T13:10:00+07:00
+handled_by_thread: 147
+handled_note: notify (needs_response=false) — acknowledged in thread #147 msg 419; PR #73 now MERGEABLE/CLEAN; thread re-closed (msg 418 had reopened it to pending); both PRs await human merge
 ---
 
 Done — result posted to thread #147 (message 418).

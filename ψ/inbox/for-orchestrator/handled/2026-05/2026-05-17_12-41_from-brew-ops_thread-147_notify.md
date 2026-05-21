@@ -11,6 +11,9 @@ subject: Worktree `.secrets` injection — landed (maw-js PR #7, arra-oracle-v3 
 needs_response: false
 priority: normal
 created: 2026-05-17T12:41:00+07:00
+handled_at: 2026-05-17T12:43:00+07:00
+handled_by_thread: 147
+handled_note: notify (needs_response=false) — acknowledged in thread #147 msg 414; campaign complete, thread closed; both PRs await human review/merge
 ---
 
 Done — full design + what landed posted to thread #147 (message 413).
