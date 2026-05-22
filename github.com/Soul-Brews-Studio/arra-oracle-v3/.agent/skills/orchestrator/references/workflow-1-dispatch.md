@@ -12,7 +12,12 @@
 ## Step 0 — Inbox sweep (§11e)
 
 Standard. Read every file under `for-orchestrator/`, including the one
-that woke me. For each:
+that woke me — **whole-dir, NOT campaign-scoped.** The orchestrator is the
+multi-campaign hub: `for-orchestrator/` collects replies from *every* campaign
+I own, so I sweep all of them. (This is the explicit exception to the §11e /
+thread #214 campaign-scoping rule that worker oracles follow — do not "fix" this
+Step 0 to filter by a single wake key; that would blind me to my other
+campaigns' loops.) For each:
 
 1. Parse YAML frontmatter (`from`, `type`, `thread`, `parent_thread`, `priority`).
 

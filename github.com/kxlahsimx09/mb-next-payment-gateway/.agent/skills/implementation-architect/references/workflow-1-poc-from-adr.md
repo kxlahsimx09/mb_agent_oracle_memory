@@ -87,7 +87,7 @@ Resolve any `[AWAITING_THREAD:N]` anchors I or peer roles left in `poc/*/README.
 
 ### Step 0.5 — Directed-inbox sweep
 
-Sweep `~/.arra-oracle-v2/ψ/inbox/for-next-impl/*.md` per AGENTS.md §11e. For each unread envelope:
+Sweep `~/.arra-oracle-v2/ψ/inbox/for-next-impl/*.md` per AGENTS.md §11e. **Campaign-scope it (§11e / thread #214):** `for-next-impl/` is shared with any sibling `next-impl` session running a different campaign — handle **only** envelopes whose wake key (`parent_thread` else `thread`) matches the campaign you were woken for (the `inbox: <fname>` envelope); leave a sibling's envelopes in place (the watcher routes them to the right session). For each **in-scope** unread envelope:
 
 - `consult` / `escalate` — read the cited thread, reply in-thread, then write the reply envelope to `for-{requestor-oracle}/`, then archive my own consult envelope per §11d.
 - `notify` — fold the heads-up into my working notes; archive immediately.
@@ -230,7 +230,8 @@ Mandatory tags: `implementation-architect` + `repo:mb-next-payment-gateway` + `n
 # Threads I'm anchored on
 arra_search query="AWAITING_THREAD next-impl" type=all limit=20
 
-# Inbox
+# Inbox — then campaign-scope: handle only envelopes whose wake key
+# (parent_thread||thread) matches the campaign you were woken for (§11e / #214)
 ls ~/.arra-oracle-v2/ψ/inbox/for-next-impl/*.md 2>/dev/null
 
 # Drifts on ADRs I might pick
