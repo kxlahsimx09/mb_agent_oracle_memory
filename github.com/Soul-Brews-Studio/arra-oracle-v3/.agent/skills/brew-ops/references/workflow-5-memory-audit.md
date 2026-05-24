@@ -64,7 +64,7 @@ created: <YYYY-MM-DD>T<HH:MM>+07:00
 <which §steps of workflow-5 are most relevant — e.g., "§3 vector + §4 path corruption", "§13c orphan markers only">
 ```
 
-**Format scope clarification.** This structured frontmatter is **brew-ops-specific** — required only for `to: brew-ops` escalations so the fresh-wake claude can parse trigger context, severity, and scope hints reliably. Pre-existing handoffs in `ψ/inbox/handoff/closed/` use a different, free-form markdown convention for agent-to-agent project status updates (e.g., "PR #N opened, here's context") — that convention remains valid for non-brew-ops handoffs. Don't retrofit old ones; do enforce this frontmatter on every new brew-ops escalation.
+**Format scope clarification.** This structured frontmatter is **brew-ops-specific** — required only for `to: brew-ops` escalations so the fresh-wake agent session can parse trigger context, severity, and scope hints reliably. Pre-existing handoffs in `ψ/inbox/handoff/closed/` use a different, free-form markdown convention for agent-to-agent project status updates (e.g., "PR #N opened, here's context") — that convention remains valid for non-brew-ops handoffs. Don't retrofit old ones; do enforce this frontmatter on every new brew-ops escalation.
 
 **Non-blocking contract.** Filing this handoff does NOT block the calling workflow. The writer/tester/thread-resolve pass that files the handoff finishes its own Step N normally (retro, commit, PR) and does NOT wait on brew-ops to process. brew-ops picks up asynchronously on next fresh wake. No `[AWAITING_...]` anchor is used for handoffs — the handoff file itself is the durable record, and this directory is where brew-ops looks on every startup.
 
@@ -74,7 +74,7 @@ To trigger brew-ops to pick up the handoff in a fresh wake:
 maw wake brew-ops --fresh "อ่าน handoff ใหม่ใน \$(ghq list -p kxlahsimx09/mb_agent_oracle_memory)/ψ/inbox/handoff/ ที่ to:brew-ops แล้วยังไม่ถูก process. รัน workflow-5 audit ตามบริบทของ handoff: ถ้า scope hint ระบุ §steps แคบ ให้ scope ตามนั้น; ถ้าไม่ระบุ ให้รันเต็ม. ส่ง Telegram report (Step 17) ทุกครั้ง พร้อม cite handoff filename ใน trigger field."
 ```
 
-The fresh-wake claude reads the handoff(s) → scopes the audit → reports back via Telegram (§17) AND files an `arra_learn` summary (§16). The handoff file is moved to `ψ/inbox/handoff/done/<YYYY-MM-DD>/` after processing (per inbox protocol).
+The fresh-wake agent session reads the handoff(s) → scopes the audit → reports back via Telegram (§17) AND files an `arra_learn` summary (§16). The handoff file is moved to `ψ/inbox/handoff/done/<YYYY-MM-DD>/` after processing (per inbox protocol).
 
 ### C — Scheduled (cron / launchd)
 
@@ -722,7 +722,7 @@ Add new repos to `KNOWN_REPOS` (the script's argv) as the fleet grows. Future en
 | Closed 3-7d, repo had no W9/W2 pass since close | Overdue but explainable | **P1** |
 | Closed 3-7d, repo had W9/W2 pass since close, single missed marker | Step 4b missed it (the 2026-04-21 case shape) | **P1** |
 | Closed < 3d, any state | Within natural cadence — give Step 4b / next pass a chance | **P2** (informational) |
-| Closed without human message (`message_count == 1` or `last_role == 'claude'`) | Close-without-fix anti-pattern (workflow-thread-resolve.md) | bump severity 1 level |
+| Closed without human message (`message_count == 1` or `last_role != 'human'`) | Close-without-fix anti-pattern (workflow-thread-resolve.md) | bump severity 1 level |
 
 The 7-day P0 threshold assumes daily audit cadence + agents running W9 at least every 2-3 days. If audit drops to weekly cadence, loosen to 14-day P0 to avoid false-positive noise from agents that just happened to skip a sweep cycle.
 
@@ -986,7 +986,7 @@ tags:
 
 Send a Thai-language summary to the brew-ops alert channel after every workflow-5 run. The audience is non-technical operators who want to know "ปกติไหม?" without opening Studio. The report is brief, easy-to-read, and surfaces P0/P1/P2 counts + top 3 findings.
 
-**Tool**: `mcp__brew-ops-telegram__telegram_send` (registered via `claude mcp add brew-ops-telegram` at user/local scope; bot identity = `brew_ops_alert_bot`, separate from the writer-fleet `telegram` MCP). Token + default chat_id live in `~/.claude.json` env vars (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID=2002026175`); spec stays token-free.
+**Tool**: `mcp__brew-ops-telegram__telegram_send` (registered in the active agent CLI MCP runtime; on Claude nodes this is typically `claude mcp add brew-ops-telegram` at user/local scope; bot identity = `brew_ops_alert_bot`, separate from the writer-fleet `telegram` MCP). Token + default chat_id are sourced from the runtime's MCP env config (for Claude deployments, `~/.claude.json` carries `TELEGRAM_BOT_TOKEN` and `TELEGRAM_DEFAULT_CHAT_ID=2002026175`); spec stays token-free.
 
 **Template (Thai, easy-to-read)**
 

@@ -124,6 +124,8 @@ Domain content (what a workflow asserts about the payment gateway, the bank port
 
 The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-style**: agents only wake when an envelope arrives in their inbox dir. The thread carries the *content* of a reply; the envelope is the *doorbell* that wakes the requestor's watcher. **A thread reply without a corresponding envelope is a silent stall** — the requestor never gets pinged and waits forever. (Failure mode observed 2026-05-04 GMT+7 in `system-architect`: replied in-thread to #68 but skipped the envelope; orchestrator believed `#68 still pending` while the answer sat for 1+ hour. Codified in architect SKILL via `mb_agent_oracle_memory#5`. This block mirrors that rule pre-emptively for `brew-ops` so the same failure mode can't recur here.)
 
+**Campaign-scope the Step 0.5 sweep (§11e / thread #214).** `for-brew-ops/` is shared across concurrent `brew-ops` sessions; handle only envelopes whose wake key (`parent_thread` else `thread`) matches the campaign I was woken for, and leave a sibling session's envelopes in place. (Precedent: the 2026-05-17 wt-47/wt-48 cross-block, where a finished session was held hostage by a sibling's still-open envelope.) The §11l Stop hook enforces the same scoping, so the two never disagree.
+
 **Mandatory close-out for every consult / escalate / fan-out task I receive:**
 
 1. `arra_thread_read <id>` — read the envelope's referenced thread.
@@ -218,7 +220,7 @@ Report: total docs, vector status, fleet agents found, any errors.
 | DB schema | `src/db/schema.ts` | Drizzle ORM: documents, threads, traces, settings |
 | Vector adapters | `src/vector/*.ts` | ChromaDB, LanceDB, Qdrant factory |
 | Config | `src/config/*.ts` | Tool groups, constants |
-| Forum | `src/forum/*.ts` | Q&A threads with Claude |
+| Forum | `src/forum/*.ts` | Q&A threads with agent sessions (`claude`/`codex`) |
 | Traces | `src/trace/*.ts` | Dig points, chains |
 
 ### maw-js
@@ -276,10 +278,10 @@ Polls `origin/main` of mobiz + bank-bot every 5 min. When non-ignored authors pu
 
 Key fixes hardened over Apr 23-29:
 - `--task` flag (not positional) for prompts (commit `4f7c2c8`)
-- `--wt "$wake_ts"` unique pane per wake (prevents silent-attach to stale claude — `45dea0c`)
+- `--wt "$wake_ts"` unique pane per wake (prevents silent-attach to stale agent pane — `45dea0c`)
 - `pull --ff-only origin main` instead of plain fetch so worktrees fork from latest base (`6887ab7`)
 - Silent-fail detector: 60min after wake, if no PR + no commits by `$COMMIT_AUTHOR` exist on any remote → Telegram alert (`140d715`)
-- Template-fallback recovery: if maw's `claude --continue || claude -p ...` template silently exits 0, re-send `claude -p` directly (`6b3662d`)
+- Template-fallback recovery (legacy `claude` template): if maw's `claude --continue || claude -p ...` path silently exits 0, re-send `claude -p` directly (`6b3662d`)
 
 Tunables (env): `POLL_INTERVAL`, `SETTLE_WINDOW`, `MIN_GAP`, `IGNORE_AUTHORS`, `WAKE_VERIFY_TIMEOUT`, `COMMIT_AUTHOR`, `SILENT_FAIL_TG_PROJECT`.
 
@@ -329,12 +331,12 @@ Verify: `pgrep -fl 'w2-watcher\|brew-ops-bot/bot.sh\|brew-ops-bot/detector.sh\|c
 
 ### `scripts/inbox-loop-closure-hook.sh` — §11d loop-closure gate
 
-Not a daemon — a Claude Code `Stop` hook. It blocks a dispatched oracle's session from ending while its inbox loop is open: an inbound envelope still unarchived in `for-{oracle}/`, or a `needs_response: true` envelope archived without a reply (frontmatter missing both `handled_by_inbox` and `handled_note`). Fixes the gap diagnosed on thread #140 — agents skip the §11e Step 0.5 close-out, so a workflow step is replaced by a harness gate. See AGENTS.md §11l.
+Not a daemon — an engine lifecycle `Stop` hook (current implementation: Claude Code hook). It blocks a dispatched oracle's session from ending while its inbox loop is open: an inbound envelope still unarchived in `for-{oracle}/`, or a `needs_response: true` envelope archived without a reply (frontmatter missing both `handled_by_inbox` and `handled_note`). Fixes the gap diagnosed on thread #140 — agents skip the §11e Step 0.5 close-out, so a workflow step is replaced by a harness gate. See AGENTS.md §11l.
 
-- **Self-gating:** identifies the oracle by reverse-looking-up the session id against the inbox-watcher's `state/`+`sessions/` maps. No watcher record → silent no-op, so non-oracle sessions are never affected (a global install in `~/.claude/settings.json` is therefore safe).
+- **Self-gating:** identifies the oracle by reverse-looking-up the session id against the inbox-watcher's `state/`+`sessions/` maps. No watcher record → silent no-op, so non-oracle sessions are never affected (Claude deployment is node-global in `~/.claude/settings.json`; codex parity is tracked separately).
 - **Circuit breaker:** after 3 blocks it stops blocking, writes a `priority: high` notify envelope to `for-orchestrator/`, and logs to `~/.cache/inbox-loop-closure/escalations.log`.
 - **Fail-open:** any hook error allows the stop; the inbox-watcher T2 `failed_stuck` gate is the backstop.
-- Install / re-deploy after edits: `bash scripts/install-inbox-loop-closure-hook.sh` (repo copy is canonical; `~/.claude/hooks/` holds the deployed copy). State in `~/.cache/inbox-loop-closure/`.
+- Install / re-deploy after edits: `bash scripts/install-inbox-loop-closure-hook.sh` (repo copy is canonical; current Claude deployed copy lives in `~/.claude/hooks/`). State in `~/.cache/inbox-loop-closure/`.
 
 ### `scripts/backfill-worktree-secrets.sh` — fleet-secret store backfill
 
@@ -360,7 +362,7 @@ When I re-sync a checkout (the recurring brew-ops task — e.g. thread #149):
 
 - "wake fired but no PR landed" → check `~/w2-watcher.stdout.log` for SILENT-FAIL alerts; check pane for auth 401 / busy state
 - "Telegram bot silent on /command" → `~/.cache/brew-ops-bot/bot.log` for send_tg failures (often HTML-escape mismatch on captured pane content)
-- "watcher pushed nothing after I sent message" → check `~/.cache/brew-ops-bot/watcher.log` for "JSONL dir never appeared — bailing" (claude with large CLAUDE.md > `JSONL_WAIT_SECONDS`); seed `last-line.<chat>` to 0 + restart watcher to backfill
+- "watcher pushed nothing after I sent message" → check `~/.cache/brew-ops-bot/watcher.log` for "JSONL dir never appeared — bailing" (engine startup delay, e.g. claude + large `CLAUDE.md` or codex cold-start > `JSONL_WAIT_SECONDS`); seed `last-line.<chat>` to 0 + restart watcher to backfill
 - "/close all kept everything alive" → `ψ/` literal-rule false positive on legacy repos; check `case` exception list in `delegate_close_to_brew_ops`
 
 ## Memory discipline

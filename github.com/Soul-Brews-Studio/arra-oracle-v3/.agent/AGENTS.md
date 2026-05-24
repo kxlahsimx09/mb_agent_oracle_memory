@@ -35,7 +35,7 @@ We operate inside a three-layer mesh. Every agent must understand what each laye
 - **ghq** — maw uses it to clone and locate repos.
 - **GitHub CLI (`gh`)** — for issues, PRs, context capture.
 - **ChromaDB** (optional) — vector side of hybrid search; absence degrades gracefully to FTS5.
-- **`CLAUDE_CODE_OAUTH_TOKEN`** — for maw to spawn `claude` CLI panes.
+- **Agent-engine credentials** — per role engine in fleet: `CLAUDE_CODE_OAUTH_TOKEN` for `claude`, `OPENAI_API_KEY` (or provider equivalent) for `codex`.
 
 ---
 
@@ -55,8 +55,8 @@ We operate inside a three-layer mesh. Every agent must understand what each laye
                 │ MCP stdio                     │ file writes
                 │                               ▼
    ┌────────────┴──────────────┐   ┌──────────────────────────┐
-   │    Claude / agent panes   │   │ ψ/ vault (md files,      │
-   │    (spawned by maw wake)  │   │   source of truth, git)  │
+   │ Agent CLI panes           │   │ ψ/ vault (md files,      │
+   │ (claude/codex via wake)   │   │   source of truth, git)  │
    └────────────▲──────────────┘   └────────────▲─────────────┘
                 │ tmux send-keys                │ soul-sync
                 │                               │ (new-file copy)
@@ -239,7 +239,7 @@ We spawn a new agent only when the team has a named gap it cannot cover.
 
 Every agent must:
 
-1. **On startup**, read this file (`.agent/AGENTS.md`) and `CLAUDE.md` in the repo root.
+1. **On startup**, read this file (`.agent/AGENTS.md`) and the repo runtime guide (`CLAUDE.md` and/or engine-specific notes) in the repo root.
 2. **Call `arra_search`** for its own role name plus the current task before generating a plan.
 3. **Know who else exists.** Check the active-team table before escalating or claiming work outside its remit.
 4. **Route across roles explicitly.** If the work belongs to another role, stop and say so. Use `maw hey <role>-oracle "<message>"` to hand off.
@@ -393,7 +393,7 @@ created: 2026-04-30T14:00:00+07:00
 
 `parent_thread` + `parent_oracle` are introduced for the orchestrator fan-out pattern (§11k). They are optional fields with no impact on routing — recipients ignore them in the standard sweep. The orchestrator's Step 0.5 sweep groups incoming reply envelopes by `parent_thread` to know which sub-tasks of which parent request have completed.
 
-`parent_session` (§151 sticky thread→session ownership) is set by the **dispatcher** on every **outbound dispatch** envelope it writes — its value is the dispatcher's own worktree path (its `pwd`). It carries the worktree, not the session-id UUID, because a Claude session cannot reliably self-discover its UUID mid-run but always knows its cwd; the watcher derives the UUID from the worktree when it needs one. Only the dispatcher populates it, and only on dispatch envelopes — workers do **not** echo it onto reply envelopes. The watcher reads it off the outbound dispatch envelope and records the campaign owner (see §11f); reply routing then sends the reply back to that exact session. Absent `parent_session` ⇒ the watcher falls back to its pre-§151 behaviour (a fresh session becomes de-facto owner).
+`parent_session` (§151 sticky thread→session ownership) is set by the **dispatcher** on every **outbound dispatch** envelope it writes — its value is the dispatcher's own worktree path (its `pwd`). It carries the worktree, not the session-id UUID, because an agent session cannot reliably self-discover its UUID mid-run but always knows its cwd; the watcher derives the UUID from the worktree when it needs one. Only the dispatcher populates it, and only on dispatch envelopes — workers do **not** echo it onto reply envelopes. The watcher reads it off the outbound dispatch envelope and records the campaign owner (see §11f); reply routing then sends the reply back to that exact session. Absent `parent_session` ⇒ the watcher falls back to its pre-§151 behaviour (a fresh session becomes de-facto owner).
 
 `from`/`to` are the **routing keys** — they must match oracle names. `from_role`/`to_role` are documentation only; the watcher and Step 0.5 sweep do not parse them. They exist so the receiver immediately understands what the sender does in fleet terms (e.g., "this came from `next-architect` who plays the `system-architect` role"), without a round-trip to `maw oracle ls`.
 
@@ -425,14 +425,15 @@ The watcher scans **only** the oracle-root (`for-{oracle}/*.md`); `handled/` is 
 Every agent that participates in directed-inbox flows must add a **Step 0.5: directed inbox sweep** to its workflow, immediately after the existing thread sweep (Step 0). The sweep:
 
 1. `ls ~/.arra-oracle-v2/ψ/inbox/for-{my-oracle-name}/*.md` (or via `arra_inbox` once tool-extended in Phase 3). Use `maw whoami` (or check the active tmux session name) to know your oracle name.
-2. For each unread envelope: read frontmatter → `arra_thread_read` → respond per type → archive.
-3. Only after the sweep settles does the agent proceed with its main workflow task.
+2. **Campaign-scope the sweep (thread #214).** `for-{oracle}/` is shared across *all* sessions of that oracle. Under the §181 parallel-sessions-same-role pattern an oracle can have several concurrent sessions, each owning a *different* campaign — so the dir holds envelopes that belong to your **sibling** sessions, not you. Establish **your** campaign's wake key = `parent_thread` (else `thread`) of the envelope the watcher handed you (the `inbox: <fname>` you were woken with), and handle **only** envelopes whose wake key matches. Leave the rest in place — a sibling session owns them, and the watcher has delivered (or will deliver) them there. This mirrors the watcher's own routing key (§11f) and the §11l Stop-hook gate, so the two never disagree. **Exception — the orchestrator** is the multi-campaign hub: `for-orchestrator/` legitimately collects replies from *every* campaign it owns (one hub session spans many wake keys), so the orchestrator sweeps **whole-dir**, not campaign-scoped.
+3. For each **in-scope** unread envelope: read frontmatter → `arra_thread_read` → respond per type → archive.
+4. Only after the sweep settles does the agent proceed with its main workflow task.
 
 If the inbox file says `type=escalate`, treat it as **higher priority** than the original wake reason.
 
 ### 11f. Wake semantics — session-per-thread (not session-per-oracle)
 
-Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via `claude --continue`). For directed-inbox traffic this is wrong — a follow-up consult on thread #56 must continue **the thread-#56 session for that oracle**, not "whatever the oracle was doing last." But the first message in a thread should be `--fresh` so reasoning isn't biased by unrelated prior work.
+Default `maw wake <oracle>` resumes the oracle's most-recent engine session (engine-native resume, e.g. `claude --continue`). For directed-inbox traffic this is wrong — a follow-up consult on thread #56 must continue **the thread-#56 session for that oracle**, not "whatever the oracle was doing last." But the first message in a thread should be `--fresh` so reasoning isn't biased by unrelated prior work.
 
 **Decision rule (by inbox event):**
 
@@ -442,7 +443,7 @@ Default `maw wake <oracle>` resumes the oracle's most-recent Claude session (via
 | Follow-up inbox file for thread `N` to oracle `O` | `--resume <session-id>` — `O`'s thread-`N` session |
 | `type=notify` with no `thread:` field | `--fresh` — fire-and-forget, no continuity |
 | `type=notify` with `thread:` field | `--resume` if session-id exists, else `--fresh` |
-| Session-id lookup misses (cache evicted, JSONL gone, claude version migration) | Fallback `--fresh` + log warning. Correctness preserved because the thread itself carries content. |
+| Session-id lookup misses (cache evicted, JSONL gone, engine-path/version migration) | Fallback `--fresh` + log warning. Correctness preserved because the thread itself carries content. |
 
 **Wake key — campaign-scoped, not always `thread:` (§11k):** the session map is keyed by a *wake key*, not always the envelope's own `thread:`. **Any** envelope carrying a `parent_thread:` (a §11k fan-out sub-task envelope) keys on `parent_thread` — for **every** oracle, not just the orchestrator. This bounds sessions to **one per oracle per campaign**, not one per sub-thread:
 
@@ -476,7 +477,7 @@ An owned campaign's replies are serialized through the one owner session (`campa
 ```
 ~/.cache/w2-watcher/inbox-sessions/
 ├── brew-ops/
-│   ├── thread-56.session-id           ← Claude Code session UUID
+│   ├── thread-56.session-id           ← Agent session UUID
 │   └── thread-58.session-id
 └── next-architect/
     └── thread-56.session-id           ← different session from brew-ops's thread-56
@@ -546,7 +547,7 @@ The `[ESCALATE_TO_HUMAN:thread-N:reason]` marker lives in the agent's own work a
 
 ### 11i. Watcher integration + delivery verification
 
-The watcher (`scripts/inbox-watcher.sh`) closes the directed-inbox loop by firing `maw wake` in response to new envelopes and verifying that each wake actually delivered. Without verification, silent-fails (claude crashed, prompt truncated, agent stuck) accumulate invisibly.
+The watcher (`scripts/inbox-watcher.sh`) closes the directed-inbox loop by firing `maw wake` in response to new envelopes and verifying that each wake actually delivered. Without verification, silent-fails (agent CLI crashed, prompt truncated, agent stuck) accumulate invisibly.
 
 **Cadence + state directory:**
 
@@ -567,7 +568,7 @@ NEW                                      (no state file)
 
 deferred                                  (re-checked every scan)
   ├─ parent campaign idle (no fired/verified sibling for the wake key, prior
-  │  claude not active)                   → fire_wake (--resume into the
+  │  prior engine session not active)     → fire_wake (--resume into the
   │                                          campaign worktree) → fired
   └─ parent campaign still busy           → keep deferring (alert past T2,
                                             but the envelope is never dropped)
@@ -611,7 +612,7 @@ The per-envelope retire (`maybe_retire_worktree`) only fires the instant an enve
 
 1. **Late-close retire** — an envelope that reached `completed` *before* its thread closed had its retire SKIPPED (`thread-not-closed` gate) and the thread closing later triggers nothing. The sweep re-runs the retire gate on every `completed`-but-not-`retired_at` envelope.
 2. **Session-id eviction** — drops session-id cache files on retire (§11f) and via a 30-day idle TTL.
-3. **Orphan-worktree prune** — worktrees abandoned by crashes / manual `tmux` kills (no tmux window, no live claude, not referenced by any envelope state) are removed under the same git-clean + no-unpushed gate as the per-envelope retire (#116). This makes the manual 47→5 worktree purge routine.
+3. **Orphan-worktree prune** — worktrees abandoned by crashes / manual `tmux` kills (no tmux window, no live agent CLI process, not referenced by any envelope state) are removed under the same git-clean + no-unpushed gate as the per-envelope retire (#116). This makes the manual 47→5 worktree purge routine.
 
 `.agent.bak-*` directories are deliberately **not** GC'd — they can hold pre-symlink `.agent/` memory content, so auto-deletion would risk a P-001 violation (see §3a). Pruning them stays a human-ratified action.
 
@@ -697,7 +698,7 @@ Multi-recipient broadcast (one envelope to many recipients) is still **not** in 
 
 §11c–§11g describe what a recipient *must* do; §11e Step 0.5 puts it in every workflow. But a workflow step is advice — agents skip it. **Observed 2026-05-17 (thread #140):** next-impl (PR #135) and next-writer (PR #139) were dispatched `needs_response: true` on thread #132, did the work, pushed their PRs — and exited without sending a reply envelope or posting to the thread. Several inbound envelopes also sat unarchived (threads #124/#125/#128/#130/#136). Two recurring gaps: (a) no reply envelope on `needs_response: true`; (b) no §11d archive of the inbound envelope.
 
-The fix is **not** another workflow step. It is a harness-level gate: `scripts/inbox-loop-closure-hook.sh`, registered as a Claude Code `Stop` hook (installed via `scripts/install-inbox-loop-closure-hook.sh` into `~/.claude/settings.json`). A dispatched oracle's session **cannot end** while its loop is open.
+The fix is **not** another workflow step. It is a harness-level gate: `scripts/inbox-loop-closure-hook.sh`, currently registered as a **Claude Code** `Stop` hook (installed via `scripts/install-inbox-loop-closure-hook.sh` into `~/.claude/settings.json`). A dispatched oracle's session **cannot end** while its loop is open.
 
 **What the hook checks**, every time an oracle session tries to stop:
 
@@ -708,9 +709,9 @@ The fix is **not** another workflow step. It is a harness-level gate: `scripts/i
 
 **Fail-open.** Any unexpected error in the hook allows the stop — a hook must never wedge a session. The inbox-watcher T2 `failed_stuck` gate (§11i) remains the out-of-band backstop.
 
-The hook is the enforcement layer; §11c–§11g remain the source of truth for *what* correct close-out looks like. Owner: `brew-ops`. Re-run the installer after editing the hook (the repo copy is canonical; `~/.claude/hooks/` holds the deployed copy).
+The hook is the enforcement layer; §11c–§11g remain the source of truth for *what* correct close-out looks like. Owner: `brew-ops`. Re-run the installer after editing the hook (the repo copy is canonical; Claude deployment target is `~/.claude/hooks/`).
 
-**Follow-up (not yet done):** move hook injection into `maw wake` (set `ARRA_ORACLE` + a fleet `--settings`) so the gate is fleet-runtime-owned and survives multi-node, instead of relying on a node-global `~/.claude/settings.json`.
+**Follow-up (not yet done):** move hook injection into `maw wake` (set `ARRA_ORACLE` + a fleet `--settings`) so the gate is fleet-runtime-owned and survives multi-node, instead of relying on a node-global `~/.claude/settings.json`. This is also where `codex` parity should be wired (same loop-closure policy, engine-specific hook plumbing).
 
 ### 11j. Phase status (as of 2026-05-03)
 
@@ -736,3 +737,4 @@ Multi-recipient broadcast is intentionally **not** in scope. If multiple oracles
 **Updated:** 2026-05-17 (later) — added §3c (runtime-checkout deploy discipline): both primary checkouts stay on `feat/all-prs-rebased`; new code lands by merge-then-pull, never by live-editing the running checkout or parking it on a feature branch. Codified after the thread #149 fleet re-sync.
 **Updated:** 2026-05-17 (§151) — §11b gains the optional `parent_session` envelope field; §11f gains the sticky thread→session ownership routing table; §11k notes the dedup target is now the recorded campaign owner. The dispatcher stamps `parent_session` (its worktree path) on outbound dispatch envelopes; the watcher records the owner and routes every reply back to the owning session (send-keys / --resume / --fresh+transfer) instead of spawning a fresh orchestrator. Fixes the #140/#141 context-fragmentation + session-sprawl. Watcher impl: arra-oracle-v3 fork PR #75; design ratified on thread #151.
 **Updated:** 2026-05-17 (§153) — §11k: workers now also get the `deferred`/dedup logic — a 2nd dispatch to a *busy* worker for an in-flight campaign defers and serializes onto the existing session instead of `--fresh`-spawning a sibling worker session. Mirrors PR #75 onto the dispatch/worker-receiving side; reverses the 2026-05-16 "workers don't dedup" carve-out (which held only while the worker was idle). Fixes the wt-43/wt-46 sibling-spawn + §11l circuit-breaker trip observed during thread #151's own implementation. Watcher impl: arra-oracle-v3 fork PR #77; dispatched on thread #153.
+**Updated:** 2026-05-22 (§214) — §11e: the directed-inbox sweep is now **campaign-scoped** — a session handles only envelopes whose wake key (`parent_thread` else `thread`) matches the campaign it was woken for, leaving sibling same-oracle sessions' envelopes in place. The **orchestrator is the explicit whole-dir exception** (multi-campaign hub). Closes the cross-campaign-pickup rough edge of the #181 parallel-sessions-same-role pattern (observed: next-impl wt-5/campaign-208 pulled into wt-1/campaign-203). Same `wake_key` discriminator now scopes the §11l Stop hook (arra-oracle-v3 fork PR #88); role cheat-sheets sibling-synced (brew-ops, next-impl, next-architect; orchestrator marked whole-dir-exception).

@@ -12,7 +12,12 @@
 ## Step 0 — Inbox sweep (§11e)
 
 Standard. Read every file under `for-orchestrator/`, including the one
-that woke me. For each:
+that woke me — **whole-dir, NOT campaign-scoped.** The orchestrator is the
+multi-campaign hub: `for-orchestrator/` collects replies from *every* campaign
+I own, so I sweep all of them. (This is the explicit exception to the §11e /
+thread #214 campaign-scoping rule that worker oracles follow — do not "fix" this
+Step 0 to filter by a single wake key; that would blind me to my other
+campaigns' loops.) For each:
 
 1. Parse YAML frontmatter (`from`, `type`, `thread`, `parent_thread`, `priority`).
 
@@ -318,7 +323,7 @@ each assistant message to the user's chat. Therefore:
 
 | Symptom | Cause | Recovery |
 |---|---|---|
-| Sub-thread `failed_stuck` (per §11i watcher) | Agent woke but didn't archive within T2 | Read agent's JSONL via `~/.claude/projects/<encoded>/`. If they're still working, post a "still working" note to parent. If genuinely stuck, retry once via a fresh consult envelope; if that fails too, escalate. |
+| Sub-thread `failed_stuck` (per §11i watcher) | Agent woke but didn't archive within T2 | Read agent-session JSONL from the role's engine path (`~/.claude/projects/<encoded>/` for `claude`; `$CODEX_HOME/sessions` / `~/.codex/sessions` for `codex`). If they're still working, post a "still working" note to parent. If genuinely stuck, retry once via a fresh consult envelope; if that fails too, escalate. |
 | Sub-thread `failed_no_prompt` | Wake mechanism regression (silent-fail returned, prompt truncated) | Don't retry blindly — post `[ESCALATE_TO_HUMAN:thread-N:wake-mechanism-failure]` and ping brew-ops via direct consult envelope. |
 | Conflicting agent replies | Writer says X, tester says Y | Don't paper over. Cite both, surface the conflict in the aggregate, and if memory shows the user wants me to pick one — pick. Otherwise escalate the disagreement. |
 | User redirects mid-stream while subs are running | `/redirect <new direction>` envelope lands | Mark subs `cancel` envelope or simply ignore their replies; replan; new fan-out. Record both directions in the parent thread for trace clarity. |

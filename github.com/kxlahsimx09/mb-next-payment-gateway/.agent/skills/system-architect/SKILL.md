@@ -167,6 +167,8 @@ When a design claim can't be verified (requirement needs the human, a current-sy
 
 The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-style**: agents only wake when an envelope arrives in their inbox dir. The thread carries the *content* of a reply; the envelope is the *doorbell* that wakes the requestor's watcher. **A thread reply without a corresponding envelope is a silent stall** — the requestor never gets pinged and waits forever. (Failure mode observed 2026-05-04 GMT+7: replied to thread #68 in-thread but skipped the envelope; orchestrator believed `#68 still pending` while the answer sat there for 1+ hour. Manual nudge from `brew-ops` was required to unstall.)
 
+**Campaign-scope the Step 0.5 sweep (§11e / thread #214).** `for-next-architect/` is shared across concurrent `next-architect` sessions; handle only envelopes whose wake key (`parent_thread` else `thread`) matches the campaign I was woken for, and leave a sibling session's envelopes in place (the watcher routes them to the right session). The §11l Stop hook enforces the same scoping.
+
 **Mandatory close-out for every consult / escalate I receive:**
 
 1. `arra_thread_read <id>` — read the envelope's referenced thread.
