@@ -13,6 +13,10 @@ context: "wake envelope for thread #183 msg 742 — fan-out landed, proceed with
 needs_response: true
 priority: normal
 created: 2026-05-21T11:51:12+07:00
+handled_at: 2026-05-21T12:00:00+07:00
+handled_by_thread: 183
+handled_by_inbox: next-architect
+handled_note: "§Substrate-correction annotation landed on PR #207 — fresh branch next-architect/adr4d-track-b-substrate-correction-183 off main@1685282; single commit c3d02b9 (+47/-2 in docs/adr.md); #decision from first commit (no marker-flip — §H3-Fix bundled-inline-correction precedent; §Amendment 2026-05-21 already ratified #decision via thread #183 msg 727). Delta: §Substrate-correction NEW subsection between §CR11 and §Resolved questions + §CR2/§CR3 inline pointers + revision-log NEW entry. §H3-Fix pattern instance #2 logged. Reply: thread #183 msg 744 + envelope 2026-05-21_12-00_from-next-architect_thread-183_reply.md to for-orchestrator/. State-grounding learning codified at feedback_amendment_check_enum_migration_chain.md."
 ---
 
 # orchestrator → next-architect (notify on thread #183, parent #181)
