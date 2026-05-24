@@ -10,6 +10,12 @@ project: github.com/soul-brews-studio/arra-oracle-v3
 
 loop-closure Stop-hook policy must be installed on both runtimes (`claude` + `codex`) to keep §11d/§11l enforcement symmetric.
 
+## Superseded record note
+Canonical indexed slug for this fact is:
+`2026-05-24_loop-closure-stop-hook-policy-must-be-installed-on.md`
+
+This file is retained for append-only history (P-001) and PR traceability.
+
 #repo:arra-oracle-v3 #fleet #hooks #loop-closure #engine-parity
 
 **Observed shape (pre-fix):** `scripts/inbox-loop-closure-hook.sh` enforces the right policy, but installer deployment was Claude-only:

@@ -10,6 +10,12 @@ project: github.com/soul-brews-studio/maw-js
 
 maw wake codex path is not claude-compatible — resume/prompt must be engine-specific.
 
+## Superseded record note
+Canonical indexed slug for this fact is:
+`2026-05-24_maw-wake-codex-path-is-not-claude-compatible-res.md`
+
+This file is retained for append-only history (P-001) and PR traceability.
+
 #repo:maw-js #fleet #wake #codex #engine-parity #gotcha
 
 **Observed shape (pre-fix):** fleet role could pin `engine=codex`, but `buildCommand()` still reused Claude assumptions in key places:

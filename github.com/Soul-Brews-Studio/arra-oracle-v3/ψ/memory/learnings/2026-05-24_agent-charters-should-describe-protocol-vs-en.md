@@ -10,6 +10,12 @@ project: github.com/soul-brews-studio/arra-oracle-v3
 
 agent charters should describe protocol separately from engine-specific plumbing.
 
+## Superseded record note
+Canonical indexed slug for this fact is:
+`2026-05-24_agent-charters-should-describe-protocol-separately.md`
+
+This file is retained for append-only history (P-001) and PR traceability.
+
 #repo:arra-oracle-v3 #fleet #charter #skills #engine-parity
 
 **Observed shape (pre-fix):** `.agent/AGENTS.md` + role `SKILL.md` mixed two layers:
