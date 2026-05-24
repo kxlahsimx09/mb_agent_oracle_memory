@@ -323,7 +323,7 @@ each assistant message to the user's chat. Therefore:
 
 | Symptom | Cause | Recovery |
 |---|---|---|
-| Sub-thread `failed_stuck` (per §11i watcher) | Agent woke but didn't archive within T2 | Read agent's JSONL via `~/.claude/projects/<encoded>/`. If they're still working, post a "still working" note to parent. If genuinely stuck, retry once via a fresh consult envelope; if that fails too, escalate. |
+| Sub-thread `failed_stuck` (per §11i watcher) | Agent woke but didn't archive within T2 | Read agent-session JSONL from the role's engine path (`~/.claude/projects/<encoded>/` for `claude`; `$CODEX_HOME/sessions` / `~/.codex/sessions` for `codex`). If they're still working, post a "still working" note to parent. If genuinely stuck, retry once via a fresh consult envelope; if that fails too, escalate. |
 | Sub-thread `failed_no_prompt` | Wake mechanism regression (silent-fail returned, prompt truncated) | Don't retry blindly — post `[ESCALATE_TO_HUMAN:thread-N:wake-mechanism-failure]` and ping brew-ops via direct consult envelope. |
 | Conflicting agent replies | Writer says X, tester says Y | Don't paper over. Cite both, surface the conflict in the aggregate, and if memory shows the user wants me to pick one — pick. Otherwise escalate the disagreement. |
 | User redirects mid-stream while subs are running | `/redirect <new direction>` envelope lands | Mark subs `cancel` envelope or simply ignore their replies; replan; new fan-out. Record both directions in the parent thread for trace clarity. |
