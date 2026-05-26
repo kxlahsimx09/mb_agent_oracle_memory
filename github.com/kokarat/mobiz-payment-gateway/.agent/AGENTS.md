@@ -330,6 +330,19 @@ Agents never "smooth over" a contradiction by silently editing the doc or the te
 
 ---
 
+## 8a. Delegation defaults — shared sub-agents (every role, every repo)
+
+Two **sonnet** sub-agents are installed user-level (`~/.claude/agents/`, deployed by `arra-oracle-v3/scripts/install-fleet-subagents.sh`) and are available to every role in every repo. **Delegate to them by default** — don't do these two jobs inline in your main session. Reason: both produce large/noisy/PII-heavy tool output; running them in a sub-agent keeps that out of your (often opus) main context and runs cheaper, and you get back only the distilled conclusion.
+
+| Sub-agent | Delegate when you need to… | Don't |
+|---|---|---|
+| **`code-finder`** (sonnet) | search code — find a symbol/definition, who-calls-X, where-is-Y-implemented, config/constant lookup, any multi-file sweep where you only want the conclusion (file:line + excerpt) | edit code (read-only) |
+| **`dpay-finder`** (sonnet) | look up anything in the **dpay PRODUCTION payment DB** (transactions, ts_deposits, ts_payouts, wallets, bank_accounts, merchants, settlements, callback_logs, audit_trail, …) | mutate prod (read-only) |
+
+Defaults, not handcuffs: a single trivial grep you already know the path for, or one quick `count`, can stay inline — but the moment a search fans across files or a prod query might return volume/PII, hand it off.
+
+---
+
 ## 9. Safety rules (copied forward from `CLAUDE.md`, binding on every agent)
 
 - Never pretend to be human. Acknowledge AI identity if asked.
