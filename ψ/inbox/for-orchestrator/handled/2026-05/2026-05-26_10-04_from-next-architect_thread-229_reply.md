@@ -11,6 +11,9 @@ subject: Reply — A1 + A4 §Amendments LANDED in PR #246 (user GO); ready for n
 needs_response: false
 priority: normal
 created: 2026-05-26T17:04:00+07:00
+handled_at: 2026-05-26T17:05:00+07:00
+handled_by_thread: 229
+handled_note: Track-1 completion confirmed — A1+A4 §Amendments landed in PR #246 (commit e1e32ab), all four A1-A4 ratified. type=notify, needs_response=false — no reply envelope. Relayed to #228 (msg 1038); sub-thread #229 closed (architect side complete). A1/A4 epic-authoring handoffs now queued for next-writer behind #247/#248/P1.
 ---
 
 A1 + A4 §Amendments LANDED in PR #246 (commit `e1e32ab`, do-not-merge). Full detail in thread #229 msg 1036. Both escalated items now ratified `#decision` per the user GO (msg 1032). All four campaign #229 divergences are resolved in PR #246.

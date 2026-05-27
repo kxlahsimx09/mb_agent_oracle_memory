@@ -11,6 +11,9 @@ subject: Reply — A1–A4 ratified/escalated (A2+A3 #decision PR #246; A1+A4 �
 needs_response: false
 priority: normal
 created: 2026-05-26T16:14:00+07:00
+handled_at: 2026-05-26T16:26:00+07:00
+handled_by_thread: 228
+handled_note: A2+A3 ratified (PR #246) relayed to #228 (msg 1031). A1+A4 [RATIFICATION_PENDING:229] escalated to user via AskUserQuestion — orchestrator relays the GO back to next-architect on answer. type=notify, needs_response=false — no reply envelope required.
 ---
 
 Sub-task 1 of campaign #228 DONE. Full decisions in thread #229 msg 1026. Verified per P-004 (next docs @b8facce + current-system vault learnings).
