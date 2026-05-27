@@ -1,0 +1,20 @@
+---
+title: Inbox false-block incident (thread #247/#238, 2026-05-27): two distinct fleet-pr
+tags: [brew-ops, repo:arra-oracle-v3, fleet, inbox-watcher, loop-closure-hook, gotcha, deploy-discipline, session-sprawl, parent_thread, circuit-breaker]
+created: 2026-05-27
+source: thread #247 (orchestrator consult) + #238 redeploy; inbox-loop-closure-hook.sh L148-153/203-213/235-239 @ 60c31d4; watcher state state/orchestrator/*thread-232* + inbox-watcher.log 2026-05-27 15:13-15:41
+project: github.com/soul-brews-studio/arra-oracle-v3
+---
+
+# Inbox false-block incident (thread #247/#238, 2026-05-27): two distinct fleet-pr
+
+Inbox false-block incident (thread #247/#238, 2026-05-27): two distinct fleet-protocol gotchas surfaced from one symptom (next-architect #232 reply envelopes "accumulating unarchived" in for-orchestrator/, false-blocking sibling orchestrator sessions' §11l Stop hook).
+
+ROOT CAUSE 1 — "committed ≠ deployed" for the node-global Stop hook. The §238 owner-scoping fix (#108, commit 60c31d4 "scope orchestrator §11l gate by §151 owner") was committed 09:50 to fork/feat/all-prs-rebased, but the RUNNING hook at ~/.claude/hooks/inbox-loop-closure-hook.sh stayed STALE (dated 22 May, still the old whole-dir orchestrator gate) until it was re-deployed at 15:41. During that ~6h gap the live hook kept false-blocking sibling orchestrator sessions on foreign-owned envelopes even though the fix was "merged." LESSON: inbox-loop-closure-hook.sh is deployed node-global to BOTH ~/.claude/hooks/ AND ~/.codex/hooks/ via scripts/install-inbox-loop-closure-hook.sh. After any hook fix merges, you MUST run the installer and verify `diff ~/.claude/hooks/inbox-loop-closure-hook.sh <repo>/scripts/inbox-loop-closure-hook.sh` is empty (and the codex copy too). The repo commit is necessary but NOT sufficient — the hook is a copied artifact, not a re-read-on-each-run daemon. Verify deploy with: stat -f '%Sm' the deployed copy vs the fix's commit date.
+
+ROOT CAUSE 2 — circuit-breaker escalation envelope omits parent_thread → ghost orchestrator session spawn. When the (stale) hook's circuit breaker gives up (>MAX_BLOCKS), it writes a priority:high notify to for-orchestrator/ via lines ~235-239: it extracts only `thread=NNN` from the unhandled/reply_gap listing (which never carries parent_thread — see Check-1 L148-153 and Check-2 L203-213, both emit `thread=` only) and emits `thread: <sub-thread>` with NO `parent_thread:`. The inbox-watcher then keys the envelope on wake_key=<sub-thread> (§11f: parent_thread else thread), finds no owner for the sub-thread, and --fresh-spawns a NEW orchestrator session that becomes a ghost owner of the sub-thread (observed: thread-232 notify spawned wt-29 owning sessions/orchestrator/thread-232.owner, while the real campaign was keyed thread-231→wt-22). This is exactly the session-sprawl §11f is meant to prevent. FIX (defense-in-depth, still open): carry `pt=$(fm_field "$f" parent_thread)` into both listings, and in the breaker prefer parent_thread for the notify filename token + emit `parent_thread:` in the envelope, so the escalation routes to the campaign OWNER instead of fresh-spawning a ghost. The §238 owner-scoping deploy prevents the breaker firing on FOREIGN campaigns (so no new ghosts there), but the mis-key still bites a genuinely-stuck OWN campaign.
+
+NON-BUGS confirmed (don't chase these): (a) the watcher routes fan-out reply envelopes correctly — wake_key=parent_thread, route=owner_send_keys into the owner worktree, defers (defer_reason=owner-busy, never drops) while the owner is mid-turn, delivers on JSONL-idle, marks completed on archive, and retire-SKIPs foreign worktrees it didn't spawn. (b) A busy owner session archiving its inbox envelopes with multi-minute lag (deferred ~8 min then archived age ≈207s) is expected back-pressure, not a wedge — the owner serializes inbox handling behind its active thread work. An "accumulation" snapshot can be stale: envelopes seen in root may already be completed seconds later.
+
+---
+*Added via Oracle Learn*
