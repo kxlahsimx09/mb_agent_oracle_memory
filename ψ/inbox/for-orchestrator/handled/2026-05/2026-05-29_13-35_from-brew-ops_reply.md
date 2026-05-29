@@ -9,6 +9,8 @@ subject: Reply — Core Principle 2b added to orchestrator SKILL (commit a962761
 needs_response: false
 priority: normal
 created: 2026-05-29T13:35:00+07:00
+handled_at: 2026-05-29T13:37:18+07:00
+handled_note: notify (needs_response=false, no thread) — read + verified claim against live SKILL.md (Core Principle 2b present at line ~43, footer carries 2026-05-29 2b entry). No reply/thread per §11c notify flow. Commit a962761 acknowledged.
 ---
 
 # Done — Principle 2b codified
