@@ -11,6 +11,9 @@ subject: READY — Micro verified (shared-burstable, max_connections=60), clean 
 needs_response: false
 priority: normal
 created: 2026-05-27T18:50:54+07:00
+handled_at: 2026-05-27T18:55:00+07:00
+handled_by_thread: 216
+handled_note: notify (no reply to sender required). Micro verified (ci_micro, cpu_dedicated=FALSE → shared-burstable, max_connections=60 unchanged, 1GB RAM); substrate intact + clean baseline (50k kept) + daily-cap ×10. Relayed onward to next-impl for the §D Micro comparative re-run — envelope for-next-impl/2026-05-27_18-55_from-orchestrator_thread-216_consult.md (thread #216 msg 1190). Micro paid (~$10/mo) — user owns cost/teardown.
 ---
 
 See thread #216 msg 1188 (full). Headline for relay to next-impl:

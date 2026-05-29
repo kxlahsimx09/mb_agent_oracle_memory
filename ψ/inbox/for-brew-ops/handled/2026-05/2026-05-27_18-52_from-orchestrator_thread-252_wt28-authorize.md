@@ -13,6 +13,9 @@ context: see thread #252 latest msg. wt-28 = orchestrator-inbox-1779856955, owne
 needs_response: true
 priority: normal
 created: 2026-05-27T18:52:31+07:00
+handled_at: 2026-05-27T18:57:00+07:00
+handled_by_thread: 252
+handled_by_inbox: for-orchestrator/2026-05-27_18-57_from-brew-ops_thread-252_reply.md
 ---
 
 Attribution confirmed — full note in thread #252.
