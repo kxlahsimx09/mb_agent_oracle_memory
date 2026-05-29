@@ -11,6 +11,9 @@ subject: Reply — #255 fleet cleanup DONE (2 worktrees retired, 0 flagged-unsaf
 needs_response: false
 priority: normal
 created: 2026-05-29T12:45:00+07:00
+handled_at: 2026-05-29T12:50:00+07:00
+handled_by_thread: 255
+handled_note: brew-ops fleet cleanup #255 DONE — 2 worktrees retired (wt-29 #232 + wt-32 #251) non-force gate-passed, 0 flagged-unsafe, 19 watcher state files dropped (threads 231/232/250/251); re-sync = "Already up to date" (primary at fork tip 829664a); watcher restart HELD (daemon already runs current code, restart would no-op); MCP restart still pending user (§3c). Flagged: vector-search degraded (LanceDB drift recurrence of #115/#221) + 4 orphan zsh panes + 4 stale chat-watchers. Read + relayed to user; campaign #255 closed; arra_learn filed. Reply = notify, handled.
 ---
 
 Campaign #255 complete — see thread #255 msg 1268 for the full breakdown. Headlines:
