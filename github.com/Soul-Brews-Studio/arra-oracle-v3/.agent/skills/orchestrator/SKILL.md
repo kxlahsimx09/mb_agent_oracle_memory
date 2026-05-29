@@ -125,22 +125,31 @@ The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-st
 
 This discipline is the dispatch-side complement to the watcher's campaign-scoped wake keys: the watcher stops *sub-threads* from sprawling sessions; this stops *parent threads* from doing the same.
 
-## How I work — Workflow 1: dispatch
+## How I work — two dispatch paths
 
-See `references/workflow-1-dispatch.md` for the full step-by-step. Summary:
+**Default for every orchestrator-driven request → workflow-2 (team dispatch).** I spawn teammates with `maw team` directly into tmux panes next to mine; they reach me via the native agent-teams `--parent-session-id` channel; cleanup is explicit. This is what I use whenever the user `/new orchestrator <slug>` + `/chat orchestrator/<slug>` me from Telegram.
+
+**Workflow-1 (envelope + watcher) is legacy for orchestrator dispatch** — reserved for the cron-triggered watcher path only (W1/W2/W9 daily baselines). It cost campaign #254 ~12 hours of silent drift via the `delivered_to_owner` failure mode (learning `2026-05-29_inbox-watcher-deliveredtoowner-delivered`). I do not initiate it for orchestrator-driven campaigns.
+
+### Workflow-2 — team dispatch (default)
+
+See `references/workflow-2-team-dispatch.md` for full step-by-step. Summary:
 
 ```
-Step 0   Inbox sweep (§11e) + state-grounding refresh (§state-grounding)
-Step 0.5 Read active-thread state for this chat
-Step 1   Memory refresh — arra_search (similar requests + decision authority + fleet)
-Step 2   Classify: trivial-direct | fan-out | escalate-immediately | escalate-before-dispatch
-Step 3   Open parent thread (if non-trivial), register in known-threads.<chat>
-Step 4   Fan-out: open sub-threads, write envelopes with parent_thread field
-Step 5   Mid-stream: each wake on sub reply → progress note in parent → Telegram
-Step 6   Aggregate when all subs close (or stuck)
-Step 7   Final message in parent + Telegram
-Step 8   Close parent + arra_learn the outcome (feeds Step 1 of future runs)
+Step 1   Memory refresh — arra_search (same as workflow-1 Step 1)
+Step 2   Classify: 2a trivial-direct | 2b fan-out | 2c escalate-now | 2d escalate-before
+Step 3   Spawn each teammate via scripts/team-dispatch-helper.sh
+         (creates/reuses <repo>.wt-c-<slug> + injects symlinks + splits pane)
+Step 4   Mid-stream: agent-teams channel + `maw team send`; narrate with `↪ role@slug:` prefix
+Step 5   Multi-campaign discipline — always cite slug; one orch instance per campaign by default
+Step 6   Mailbox scoping — findings filename = `<role>_<slug>_findings.md`
+Step 7   Aggregate + final to user; scripts/team-dispatch-finish.sh (shutdown --merge + wt remove + zombie sweep)
+Step 8   arra_learn with `team-dispatch` tag (new pattern-library axis)
 ```
+
+### Workflow-1 — envelope + watcher (legacy, cron path)
+
+See `references/workflow-1-dispatch.md` for the original step-by-step. Same memory-refresh + classification as workflow-2; the legacy parts are §11d archive/handled, parent+sub-thread machinery, and the watcher send-keys gate that workflow-2 sidesteps.
 
 ## State-grounding (binding) — refresh from API on every wake
 
@@ -254,5 +263,5 @@ If `arra_search query="orchestrator" type=learning limit=1` returns zero results
 ---
 
 **Created:** 2026-05-03 (GMT+7)
-**Updated:** 2026-05-26 — added §Scope guard + Core principle 2a (relay, don't render verdicts), backed by the `orchestrator-guard` PreToolUse hook. brew-ops scope-creep review (wt-9 edited code/docs directly). Prior: 2026-05-16 — "Thread discipline (binding) — fewer, coarser threads" (batch related sub-tasks into one campaign), thread #139.
+**Updated:** 2026-05-29 — workflow-2 (team dispatch via `maw team`) promoted to default; workflow-1 (envelope + watcher) demoted to cron-only after campaign #254's `delivered_to_owner` ≠ delivered silent-fail (12h drift). Added §How I work — two dispatch paths, `references/workflow-2-team-dispatch.md`, `scripts/team-dispatch-helper.sh`, `scripts/team-dispatch-finish.sh`. Worktree granularity locked to per (campaign × repo) at `<repo>.wt-c-<slug>` on branch `campaign/<slug>`. Prior: 2026-05-26 — §Scope guard + Core principle 2a (`orchestrator-guard` PreToolUse hook); 2026-05-16 — Thread discipline (fewer, coarser threads).
 **Owner:** this skill is maintained by the `orchestrator` agent itself + brew-ops; changes require a PR reviewed by the human.
