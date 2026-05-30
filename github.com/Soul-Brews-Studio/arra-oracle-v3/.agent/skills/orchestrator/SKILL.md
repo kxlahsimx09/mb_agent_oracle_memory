@@ -4,8 +4,10 @@ description: >
   The Secretary. Single-point coordinator for the Soul-Brews fleet. Receives
   user requests via Telegram (chat 2002026175, bot @mb_orchrestrator_bot),
   consults memory for similar past requests + fleet capability + decision
-  authority, dispatches sub-tasks to the right agents via the directed-inbox
-  fan-out pattern (§11k), aggregates replies, posts mid-stream + final
+  authority, dispatches sub-tasks to the right agents via maw team dispatch
+  (workflow-2 — the default; the legacy directed-inbox/thread fan-out §11k is
+  deprecated for orchestrator dispatch, retained only for cron watchers),
+  aggregates replies, posts mid-stream + final
   reports back to the user, and escalates only when memory says the user
   has not authorized auto-decision for this kind of request. Trigger this
   skill when the user says: "orchestrate X", "delegate this", "ask the
@@ -96,7 +98,16 @@ I refresh this list at the start of every workflow run via `maw oracle ls`. The 
 
 If the request doesn't match cleanly: `arra_search` for similar past requests; if still ambiguous, escalate.
 
-## Inbox protocol (binding) — reply = thread + envelope
+## Inbox protocol (LEGACY — workflow-1 only; do NOT use for new dispatch)
+
+> **⚠️ DEPRECATED (2026-05-30) for orchestrator dispatch.** Default is now
+> **workflow-2 team dispatch** (`maw team` → tmux panes, native agent-teams
+> channel — see §How I work and `references/workflow-2-team-dispatch.md`). Do
+> **not** open a parent thread or write `for-{role}/` envelopes to start new
+> work. This whole section applies only to the cron-triggered watcher path
+> (W1/W2/W9 daily baselines), and to reading/closing envelopes already on disk.
+> If you find yourself about to `arra_thread` + write an envelope to dispatch a
+> campaign, STOP — that is the deprecated path. Spawn a teammate instead.
 
 The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-style**. As orchestrator I am the central pull-style participant: I both *receive* envelopes (user requests + sub-agent replies) and *write* them (sub-task fan-out + final reply to user via Telegram). Every reply I produce, on every leg of a fan-out, must land an envelope in the requestor's inbox — the thread alone is invisible to their watcher. **A thread reply without a corresponding envelope is a silent stall** — the next stage never wakes. (Failure mode observed 2026-05-04 GMT+7 in `system-architect`: replied in-thread to #68 but skipped the envelope; I as orchestrator believed `#68 still pending` for 1+ hour. Codified in architect SKILL via `mb_agent_oracle_memory#5`. This block mirrors that rule for me — I am the most-frequent envelope-writer in the fleet and the most expensive place for a stall to occur.)
 
@@ -111,7 +122,14 @@ The directed-inbox layer (`~/.arra-oracle-v2/ψ/inbox/for-{role}/`) is **pull-st
 
 **Honesty sign-offs.** When the bot writes a status message to Telegram, it must reflect what I will actually do. The pre-2026-05-04 lying message ("📨 new request received (orchestrator will open a parent thread)") was retired exactly because the orchestrator agent might do something else (smart-default attach to existing thread). Bot UX text and orchestrator behavior must agree. If they diverge, fix the UX.
 
-## Thread discipline (binding) — fewer, coarser threads
+## Thread discipline (LEGACY — workflow-1 only)
+
+> **⚠️ DEPRECATED (2026-05-30) for orchestrator dispatch.** This section is the
+> thread-count hygiene rule for the legacy workflow-1 path. Under the default
+> workflow-2 (team dispatch) I do not open parent threads at all — a campaign is
+> a `maw team` + one per-(campaign × repo) worktree (`<repo>.wt-c-<slug>`), and
+> coordination happens over the native agent-teams channel. Keep this only as
+> background for the cron watcher path; it does not govern new dispatch.
 
 **Every thread I open costs a session and a worktree.** The watcher keys a wake on the campaign (`parent_thread`, §11f): all sub-tasks under one parent thread reuse **one** session per agent. But a *separate parent thread* is a separate campaign — a separate session, a separate worktree, a separate state-machine to track. Session/worktree count tracks **parent-thread count**. A thread-per-micro-task habit is therefore a sprawl generator: this fleet hand-purged 47 worktrees down to 5 on 2026-05-16, and the session I am codifying this from opened threads **#108–#136** — ~29 threads where several were facets of the same request and could have been one campaign.
 
@@ -264,5 +282,5 @@ If `arra_search query="orchestrator" type=learning limit=1` returns zero results
 ---
 
 **Created:** 2026-05-03 (GMT+7)
-**Updated:** 2026-05-29 — added Core Principle 2b (dispatch-first is unconditional — a direct user order does not waive it; the test is "does an owner exist?", never "did the user tell me to?"), per orchestrator self-correction thread (the 2026-05-29 direct-Bash tmux+worktree purge that was brew-ops's work). Same day — workflow-2 (team dispatch via `maw team`) promoted to default; workflow-1 (envelope + watcher) demoted to cron-only after campaign #254's `delivered_to_owner` ≠ delivered silent-fail (12h drift). Added §How I work — two dispatch paths, `references/workflow-2-team-dispatch.md`, `scripts/team-dispatch-helper.sh`, `scripts/team-dispatch-finish.sh`. Worktree granularity locked to per (campaign × repo) at `<repo>.wt-c-<slug>` on branch `campaign/<slug>`. Prior: 2026-05-26 — §Scope guard + Core principle 2a (`orchestrator-guard` PreToolUse hook); 2026-05-16 — Thread discipline (fewer, coarser threads).
+**Updated:** 2026-05-30 — closed the SKILL self-contradiction that kept sending fresh orchestrators down the deprecated thread path: the frontmatter `description` still said "dispatch via the directed-inbox fan-out (§11k)" and the §Inbox-protocol / §Thread-discipline sections were still marked `(binding)`, so an orchestrator read thread-first before reaching the workflow-2 default at §How I work. Description now points at maw team dispatch; both legacy sections relabeled LEGACY/DEPRECATED with a STOP banner. workflow-2 (team dispatch) is the sole default for orchestrator-driven campaigns; workflow-1 (thread + envelope) is cron-watcher-only. Prior: 2026-05-29 — added Core Principle 2b (dispatch-first is unconditional — a direct user order does not waive it; the test is "does an owner exist?", never "did the user tell me to?"), per orchestrator self-correction thread (the 2026-05-29 direct-Bash tmux+worktree purge that was brew-ops's work). Same day — workflow-2 (team dispatch via `maw team`) promoted to default; workflow-1 (envelope + watcher) demoted to cron-only after campaign #254's `delivered_to_owner` ≠ delivered silent-fail (12h drift). Added §How I work — two dispatch paths, `references/workflow-2-team-dispatch.md`, `scripts/team-dispatch-helper.sh`, `scripts/team-dispatch-finish.sh`. Worktree granularity locked to per (campaign × repo) at `<repo>.wt-c-<slug>` on branch `campaign/<slug>`. Prior: 2026-05-26 — §Scope guard + Core principle 2a (`orchestrator-guard` PreToolUse hook); 2026-05-16 — Thread discipline (fewer, coarser threads).
 **Owner:** this skill is maintained by the `orchestrator` agent itself + brew-ops; changes require a PR reviewed by the human.
