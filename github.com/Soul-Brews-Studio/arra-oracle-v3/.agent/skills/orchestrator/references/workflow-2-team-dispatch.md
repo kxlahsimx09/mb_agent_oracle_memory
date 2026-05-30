@@ -64,8 +64,9 @@ For each teammate I want to dispatch (one call per role × repo):
 The helper:
 
 - Creates or reuses `<repo>.wt-c-<slug>` (branch `campaign/<slug>`) and injects `.agent` + `.secrets` symlinks.
-- Runs `maw team create <slug>` (idempotent) and `maw team spawn <slug> <role> --model sonnet --prompt …` to register the teammate in the team manifest at `ψ/memory/mailbox/teams/<slug>/`.
-- Splits a tmux pane in **my current window** with `tmux split-window -c <wt>` so the teammate's claude starts cwd-correct in its own worktree.
+- Runs `maw team create <slug>` (idempotent) and `maw team spawn <slug> <role> --model opus --prompt …` to register the teammate in the team manifest at `ψ/memory/mailbox/teams/<slug>/`. Default model is **opus** (opus 4.8); pass `--model sonnet` only when a teammate explicitly wants the cheaper tier.
+- Opens a **separate tmux window** named `<role>-<campaign>` with `tmux new-window -c <wt>` (NOT a split-pane in my window — that would inherit my `orchestrator-*` window_name and trip the guard, blocking the teammate's edits) so the teammate's claude starts cwd-correct in its own worktree.
+- Spawns the teammate on **opus** (resolves to opus 4.8) by default — the helper's `--model` default is `opus`.
 - Prints the pane id + worktree path for me to record.
 
 **The prompt body is the entire dispatch contract.** No reply envelope, no thread, no `parent_session`. Required content:
