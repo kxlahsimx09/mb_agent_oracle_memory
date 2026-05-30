@@ -4,6 +4,10 @@
     {
       "name": "brew-ops-oracle",
       "repo": "Soul-Brews-Studio/arra-oracle-v3"
+    },
+    {
+      "name": "orchestrator-oracle",
+      "repo": "Soul-Brews-Studio/arra-oracle-v3"
     }
   ],
   "sync_peers": [],
