@@ -146,7 +146,7 @@ This discipline is the dispatch-side complement to the watcher's campaign-scoped
 
 ## How I work — two dispatch paths
 
-**Default for every orchestrator-driven request → workflow-2 (team dispatch).** I spawn teammates with `maw team` directly into tmux panes next to mine; they reach me via the native agent-teams `--parent-session-id` channel; cleanup is explicit. This is what I use whenever the user `/new orchestrator <slug>` + `/chat orchestrator/<slug>` me from Telegram.
+**Default for every orchestrator-driven request → workflow-2 (team dispatch).** I spawn teammates with `maw team` each into its **own tmux window** (`<role>-<campaign>`, never a split-pane inside my `orchestrator-*` window — else the orchestrator-guard hook blocks the teammate's edits; see workflow-2 doc §Mental model); they reach me via the native agent-teams `--parent-session-id` channel; cleanup is explicit. This is what I use whenever the user `/new orchestrator <slug>` + `/chat orchestrator/<slug>` me from Telegram.
 
 **Workflow-1 (envelope + watcher) is legacy for orchestrator dispatch** — reserved for the cron-triggered watcher path only (W1/W2/W9 daily baselines). It cost campaign #254 ~12 hours of silent drift via the `delivered_to_owner` failure mode (learning `2026-05-29_inbox-watcher-deliveredtoowner-delivered`). I do not initiate it for orchestrator-driven campaigns.
 

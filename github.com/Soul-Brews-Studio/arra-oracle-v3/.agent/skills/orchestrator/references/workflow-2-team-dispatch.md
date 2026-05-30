@@ -16,7 +16,7 @@
 
 - A **campaign** = one Telegram chat target the user opens via `/new orchestrator <slug>` and reaches via `/chat orchestrator/<slug>`. The orchestrator instance behind that chat owns the campaign.
 - A **team** in maw-team terms = the set of agents I spawn for this campaign. Team name = the campaign slug.
-- A **teammate** = one agent (e.g. `next-impl`, `brew-ops`, `pg-writer`) I spawn into a tmux pane next to mine. Teammate runs claude with `--parent-session-id` pointing back at me — this is the native agent-teams channel.
+- A **teammate** = one agent (e.g. `next-impl`, `brew-ops`, `pg-writer`) I spawn into its **own tmux window** named `<role>-<campaign>` — **not** a split-pane inside my window. This is load-bearing: the `orchestrator-guard` PreToolUse hook self-gates on `window_name` matching `orchestrator-*`, so a teammate split-paned into my `orchestrator-*` window would inherit that name and have its Edit/Write **blocked** — it could not do the work I dispatched. A dedicated window keeps the guard a no-op for the teammate. (`scripts/team-dispatch-helper.sh` uses `tmux new-window`; confirmed 2026-05-30.) Teammate runs claude with `--parent-session-id` pointing back at me — this is the native agent-teams channel.
 - A **worktree** = `<repo>.wt-c-<slug>`. **Granularity is per (campaign × repo), shared across roles in that repo.** Two teammates working in the same repo for the same campaign share one worktree (locked decision 2026-05-29; replaces the per-envelope worktree pattern that caused the sprawl behind the 47-worktree purge).
 
 ## What I own vs delegate (unchanged)
