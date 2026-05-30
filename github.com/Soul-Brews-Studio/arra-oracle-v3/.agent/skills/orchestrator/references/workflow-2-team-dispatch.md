@@ -69,7 +69,7 @@ The helper:
 - Spawns the teammate on **opus** (resolves to opus 4.8) by default — the helper's `--model` default is `opus`.
 - Prints the pane id + worktree path for me to record.
 
-**The prompt body is the entire dispatch contract.** No reply envelope, no thread, no `parent_session`. Required content:
+**The prompt body is the entire dispatch contract — and the helper delivers it as the teammate's first user turn** (via `tmux send-keys` once the TUI is ready; bracketed-paste-safe: literal text, sleep, Enter as a separate key event). This kickoff turn is what actually starts the agent working — the system prompt only frames its role identity. No reply envelope, no thread, no `parent_session`. Required content:
 
 - **GOAL**: one sentence, what done looks like to the user.
 - **DONE-WHEN**: the gate that ends this teammate's work (e.g. "PR opened against `feat/all-prs-rebased` with the load-harness change + evidence/SUMMARY.md").
