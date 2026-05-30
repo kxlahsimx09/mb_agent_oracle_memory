@@ -181,7 +181,7 @@ Every agent must:
    - `arra_search query="technical_writer handoff" type=all limit=10` (for `pg-writer-oracle`)
    - `arra_search query="tester handoff" type=all limit=10` (for `pg-tester-oracle`)
 3. **Know who else exists.** Call `maw agents` (or read the active-team table above) before escalating or claiming work outside its remit.
-4. **Route across roles explicitly.** If the work belongs to another role, stop and say so. Don't silently step in. Use `maw hey <role>-oracle "<message>"` to hand off, or leave an `arra_inbox` item addressed to that role.
+4. **Route across roles explicitly.** If the work belongs to another role, stop and say so. Don't silently step in. Hand off via `maw team` dispatch (the directed-inbox lane is deprecated as of 2026-05-30 — see arra-oracle-v3 §11).
 5. **Respect ownership.** A `code_reviewer` does not author features. A `technical_writer` does not change code behavior. A `tester` surfaces regression candidates via `arra_learn` tagged `#regression-candidate` and hands off; it does not patch production code, and it does not rewrite tests without user sign-off. A `security_auditor` flags; it does not silently patch.
 
 A disagreement between two agents is resolved by writing a short `arra_learn` document tagged `#decision` — then the human or `system_architect` rules.

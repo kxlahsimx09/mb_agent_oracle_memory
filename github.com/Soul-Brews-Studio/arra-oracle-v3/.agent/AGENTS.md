@@ -325,6 +325,13 @@ Defaults, not handcuffs: a single trivial grep you already know the path for, or
 
 ## 11. Cross-agent communication (directed inbox)
 
+> **⚠️ DEPRECATED (2026-05-30).** The directed-inbox dispatch lane is being
+> retired in favour of **`maw team`**. The inbox-watcher daemon and its
+> Stop-hook loop-closure gate have been turned off on the fleet host. Do **not**
+> start new work via directed-inbox envelopes — use `maw team` dispatch instead.
+> This section is kept for reference and to read/close any in-flight envelopes
+> already on disk. New campaigns, single-task or multi-role, go through team.
+
 Threads (`arra_thread`) carry the **content** of agent-to-agent conversations. They are durable and searchable, but they are message boards — they do not wake the recipient. The directed inbox is the **notification** layer that pairs with threads to make agent-to-agent communication actually flow.
 
 **Three-layer separation** (do not collapse):

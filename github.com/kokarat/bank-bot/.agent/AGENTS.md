@@ -118,7 +118,7 @@ Every agent must:
 1. **On startup**, read this file (`.agent/AGENTS.md`) and `CLAUDE.md` + `README.md` in the repo root.
 2. **Call `arra_search`** for its own role name plus the current task before generating a plan. For `bot-writer-oracle`: `arra_search query="technical_writer bank-bot" type=all limit=10`.
 3. **Know who else exists.** Call `maw agents` (or read the active-team table above) before escalating or claiming work outside its remit.
-4. **Route across roles explicitly.** Hand off via `maw hey <role>-oracle "<message>"` or `arra_inbox`.
+4. **Route across roles explicitly.** Hand off via `maw team` dispatch (the directed-inbox / `arra_inbox` lane is deprecated as of 2026-05-30 — see arra-oracle-v3 §11).
 5. **Respect ownership.** A `technical_writer` does not change bot behavior. Edits to bot code require a human / `code_reviewer` sign-off — same discipline as financial code in mobiz.
 
 ---
