@@ -49,6 +49,14 @@ Look for prior `arra_learn` entries tagged `[orchestrator, team-dispatch]` from 
 | **2c. escalate-immediately** | matches `tag:rejected` patterns / safety rules | don't spawn; ask user |
 | **2d. escalate-before-dispatch** | ambiguous decomposition / no matching pattern | propose plan to user, wait for confirm |
 
+### Step 2.5 — Verify the premise against live HEAD (mandatory before spawn)
+
+Gap-finders, deferred-task backlogs, and my own campaign brief are all **snapshots**. Between when a gap was recorded and when I dispatch, the owning agent may already have shipped it, or it may turn out to be a smaller class of work than the brief claims (a writer-only edit on existing substrate, not a new ADR). Spawning a teammate against a stale premise burns a whole teammate cycle and risks a wrong artifact landing.
+
+**Before I write each dispatch contract, I re-read the live file at HEAD** — `git -C <repo> show HEAD:<path>` (or read it in the campaign worktree once it tracks the right branch) — and confirm the gap still exists, the premise still holds, and the work is the class I think it is.
+
+Precedent (campaign mb-next gap-sweep, 2026-05-31): the 13-domain fan-out that opened the campaign found 31 gaps from `#current` snapshots and several were already closed at HEAD — BOT-001 and PULLOUT-002 were shipped; the key-lifecycle item was a writer-only edit on existing §ADR-2 substrate, not a new ADR; and my own PROV-001 brief-premise was factually wrong. All three were caught only by re-reading the live file before dispatch. **Verify each against HEAD; don't dispatch the snapshot.**
+
 ### Step 3 — Spawn each teammate
 
 For each teammate I want to dispatch (one call per role × repo):
@@ -79,6 +87,8 @@ The helper:
 
 If a teammate is supposed to coordinate with another teammate's output (e.g. next-tester needs next-impl's harness), spawn the producer first and tell the consumer to `maw team send` or read the consumer's `*_findings.md` directly.
 
+**Never reuse a slug from a finished campaign.** The helper "creates **or reuses**" `<repo>.wt-c-<slug>` — reuse is intended only for a *second role joining the same live campaign*, sharing that worktree. Re-dispatching under a slug whose campaign already ran `team-dispatch-finish.sh` re-creates a worktree against a half-removed branch and tangles git state. For a follow-on or a re-run, pick a fresh slug (e.g. `<slug>-2`) or pre-create the worktree on the intended branch first. Precedent (gap-sweep 2026-05-31): re-dispatched to a finished campaign slug and tangled worktrees.
+
 ### Step 4 — Mid-stream
 
 Two ways teammates reach me:
@@ -87,6 +97,8 @@ Two ways teammates reach me:
 - **`maw team send`**: I can poll or initiate. To send a teammate a follow-up: `maw team send <slug> <role> "<text>"`.
 
 For every teammate reply I narrate to the user, **prefix with the teammate id** (`↪ next-impl@perfcf:`). This is the Principle 2a "attribute the answer to the agent who gave it" rule made concrete for the multi-teammate case.
+
+**Watching for a teammate's PR push — arm Monitor against HEAD-at-arm-time, never a hard-coded base commit.** When I poll for a teammate's branch to push or open a PR, I read the current head at the moment I arm the watch (`git -C <wt> rev-parse HEAD`) and compare against *that* — not a commit hash I typed earlier. A hard-coded base goes stale the instant any commit lands, firing false "PUSHED" signals. Arm one watch per teammate; don't double-arm. Precedent (gap-sweep 2026-05-31): a hard-coded base caused ≥3 false PUSHED signals and one double-armed Monitor; reading head at arm-time removes the whole class.
 
 ### Step 5 — Multi-campaign discipline
 
@@ -113,6 +125,8 @@ When every teammate's `DONE-WHEN` is met (PRs merged, findings written), summari
 
 The finish script: `maw team shutdown --merge --force` (preserves findings + standing orders to `ψ/memory/mailbox/<role>/`), removes every `<repo>.wt-c-<slug>` worktree, runs `maw cleanup --zombie-agents --yes`.
 
+**Capture every teammate's output BEFORE running the finish script.** `shutdown --merge --force` kills the teammates' panes; any report still living only in a pane (not yet written to `*_findings.md`) dies with it. `--merge` preserves `*_findings.md` — it does **not** preserve un-persisted pane scrollback. So before I run finish I (a) read each teammate's final reply / `<role>_<slug>_findings.md`, and (b) for any teammate whose output exists only in its pane (e.g. a dpay-finder dump), `tmux capture-pane` it into the worktree first. Precedent (gap-sweep 2026-05-31): cleaned up before reading the teammate report and lost the dpay-finder output to a dead pane — twice.
+
 ### Step 8 — Learn
 
 ```
@@ -136,8 +150,13 @@ Note the `team-dispatch` tag — that is the new pattern-library axis, distinct 
 | Two teammates in same repo+campaign want to git-commit on the same branch | shared-worktree contention | serialise via the prompt ("teammate-B: wait for teammate-A's commit notification before starting your edit phase") or override granularity (split into two campaigns) |
 | `team-dispatch-finish.sh` reports "failed to remove worktree" | uncommitted changes in the wt | inspect manually (`git -C <wt> status`); decide whether to commit/discard, then `git worktree remove --force` by hand |
 | User says "you used the old fan-out instead of team dispatch" | I followed workflow-1 by reflex | apologise, file `arra_learn` `tag:procedure-violation`, re-do via this workflow |
+| Dispatched a teammate against a gap that was already closed | premise was a stale snapshot, not re-checked | Step 2.5 — re-read the live file at HEAD before writing each dispatch contract |
+| Lost a teammate's output after cleanup | ran `team-dispatch-finish.sh` before reading the pane | Step 7 — read `*_findings.md` + `tmux capture-pane` BEFORE finish; if already lost, re-spawn the teammate to regenerate |
+| Repeated false "PUSHED" signals / double-armed watch | Monitor armed against a hard-coded base commit | Step 4 — re-arm reading `git rev-parse HEAD` at arm-time; one watch per teammate, never type the base hash |
+| Re-dispatch tangles worktree/branch | reused a slug from a finished campaign | Step 3 — use a fresh slug (`<slug>-2`) or pre-create the worktree on the right branch |
 
 ---
 
 **Created:** 2026-05-29 (GMT+7)
+**Updated:** 2026-05-31 — added four disciplines from the mb-next gap-sweep campaign retro (9 PRs, orchestrator session): Step 2.5 verify-each-premise-against-live-HEAD before spawn (stale gap snapshots dispatched 3 already-shipped/mis-classed items); Step 3 never-reuse-a-finished-slug (worktree tangle); Step 4 arm-Monitor-against-HEAD-at-arm-time (≥3 false PUSHED from a hard-coded base); Step 7 capture-teammate-output-before-finish (`shutdown --merge` kills panes — lost dpay-finder output twice). Failure-modes table gained the matching four rows.
 **Owner:** brew-ops + orchestrator. Changes require a PR (per SKILL footer).
