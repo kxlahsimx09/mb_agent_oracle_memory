@@ -12,6 +12,38 @@
     {
       "name": "next-writer-oracle",
       "repo": "kxlahsimx09/mb-next-payment-gateway"
+    },
+    {
+      "name": "next-dev-1-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude"
+    },
+    {
+      "name": "next-dev-2-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude"
+    },
+    {
+      "name": "next-tester-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude"
+    },
+    {
+      "name": "next-code-reviewer-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude",
+      "engine_swap_todo": "[ENGINE_SWAP:codex] swap claude->codex/gpt later (campaign nextteam, claude-first locked decision; charter unchanged on swap)"
+    },
+    {
+      "name": "next-investigator-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude",
+      "engine_swap_todo": "[ENGINE_SWAP:codex] swap claude->codex/gpt later (campaign nextteam, claude-first locked decision; charter unchanged on swap)"
+    },
+    {
+      "name": "next-pm-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude"
     }
   ],
   "sync_peers": [],
