@@ -44,6 +44,12 @@
       "name": "next-pm-oracle",
       "repo": "kxlahsimx09/mb-next-payment-gateway",
       "engine": "claude"
+    },
+    {
+      "name": "next-ui-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude",
+      "tool": "impeccable"
     }
   ],
   "sync_peers": [],
