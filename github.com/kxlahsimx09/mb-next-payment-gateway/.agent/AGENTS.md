@@ -211,13 +211,23 @@ Defaults, not handcuffs: a single trivial grep you already know the path for, or
 ## 9. Safety rules (binding on every agent)
 
 - Never pretend to be human.
-- Never merge PRs without explicit user approval. Never `gh pr merge`.
+- Never merge PRs without explicit user approval. Never `gh pr merge`. **(SCOPED CARVE-OUT — see §9a: build-workflow code PRs merge self-service.)**
 - Never use `-f`/`--force`, `git push --force`, `rm -rf`, `git clean -f`, `git checkout -f`.
 - Never commit directly to `main` in product repos. Always branch → PR → review. (`mb_agent_oracle_memory` follows the central-vault exception — see its charter.)
 - Never delete files from the Oracle vault (P-001).
 - Never modify database schemas outside the target repo's ORM/migration layer (convention TBD — `system-architect` will ratify during design).
 - Never add AI attribution (`Co-Authored-By: Claude …`, "Generated with …") to payment-gateway commits.
 - Design decisions that materially affect cost, compliance, or security require human ratification via `arra_thread` before becoming a binding `#decision`.
+
+### 9a. Build-workflow self-merge carve-out (scoped; owner decision 2026-06-03)
+
+A **scoped** exception to the §9 "never merge without explicit user approval" rule, granted by the owner on 2026-06-03 for the revised bias-minimized build workflow (`arra_search query="revised build workflow bias-minimized" type=learning`):
+
+- **Build-workflow code PRs** — a `next-dev` code PR that has been **reviewed and `--approve`d by `next-code-reviewer`** (the 3-dimension REVIEW gate) — **merge SELF-SERVICE, without owner/user PR approval.** The team runs PR → review → merge on its own (owner: *"pr → review → merge กันเอง ไม่ต้องผ่านผม"*).
+- **Scope (narrow).** This carve-out applies **only** to build-workflow CODE PRs in `kxlahsimx09/mb-next-payment-gateway`. It does **NOT** extend to destructive ops: no `git push --force` / `-f`, no deleting Oracle vault data (P-001), no mass-merge, no schema/infra changes outside the build flow. Those still require the §9 rules and human ratification.
+- **Marking stays evidence-gated.** Self-merge unblocks delivery; it does **not** mark anything `done`. **Only `next-pm` marks**, and only on concrete per-step evidence (merged PR + reviewer approve + tester-green-confirmed-from-ground-truth + investigator confirmation + seal/LIVE). **The orchestrator NEVER marks anything.**
+- **Orchestrator autonomy.** The owner granted **standing autonomy** 2026-06-03: the orchestrator dispatches + coordinates, proceeds autonomously when unblocked, consults the owning role for domain questions, and **pings the owner ONLY for a genuine decision** (ambiguous requirement, scope change, real risk) — not for routine merges.
+- **This carve-out itself is not self-merging.** Charter/meta changes (this file, the role SKILLs, `docs/build-workflow.md`) are NOT build-workflow code PRs — they go through the normal owner glance. The carve-out covers build CODE only.
 
 ---
 
@@ -298,3 +308,4 @@ Append-friendly. New rules go at the bottom with a dated header. Old rules are n
 - 2026-05-04 — `implementation-architect` (`next-impl-oracle`) added per orchestrator thread #69. Owns `poc/<adr-id>/` PoC + spec tests; sibling to next-architect (upstream) and the future next-dev (downstream).
 - 2026-05-07 — `next-product-writer` (`next-writer-oracle`) added per brew-ops session 2026-05-07. Owns `docs/requirements/` — human-facing vision + epics + stories with Sources blocks + trust labels. Distinct from pg-writer/bot-writer (technical writers for `#current`); product-writer translates ratified `#next` artifacts for stakeholders + downstream agents. Scope spans the next-* fleet (this repo today; bankbot v2 + future next-* repos as they spawn).
 - 2026-05-17 — added §11a: worktree `.secrets` is a symlink to the central fleet store (`~/.arra-oracle-v2/fleet-secrets/<repo>/`), injected by `maw` like the `.agent` symlink; never reconstruct it by hand. Per orchestrator thread #147 (brew-ops).
+- 2026-06-03 — added §9a: scoped self-merge carve-out for the bias-minimized build workflow. `next-dev` code PRs approved by `next-code-reviewer` merge self-service (no owner PR gate); narrow scope — does NOT extend to destructive ops; marking stays `next-pm`-only on evidence; orchestrator never marks; standing orchestrator autonomy. Encodes the owner decision 2026-06-03 + the four role SKILL de-bias rules (next-dev SPEC-FIRST, next-tester never-reads-code, next-investigator falsify-PASS-against-truth-DB, next-pm mark-on-evidence). Canonical reference: `docs/build-workflow.md` (product repo). Per campaign `nextteam` (brew-ops).
