@@ -88,6 +88,16 @@ I refresh this list at the start of every workflow run via `maw oracle ls`. The 
 | `bot-writer` | technical-writer (#current, bank-bot) | `docs/current-system.md` updates + flow tracking on `kokarat/bank-bot`, cross-repo `#cross-repo-sync` notes | mobiz-side code or design |
 | `pg-tester` | tester (#current, mobiz) | integration test analysis (W1 full-sweep), mock-bank drift checks, test-pattern enforcement | non-test code changes |
 
+**Build-team oracles (`mb-next-payment-gateway` build campaigns).** When I drive an mb-next build campaign these are the teammates; the run-order they follow lives in `docs/build-workflow.md` (see §How I work → Build-team campaigns):
+
+| Oracle | Role | Dispatches well for | Avoid when |
+|---|---|---|---|
+| `next-dev-1`, `next-dev-2` | next-dev (builder) | implementing a ratified story's AC as production code on its `dev-N` stack; **deploys migrations + EFs to the tester/seal stacks as part of the BUILD handoff** | authoring ADRs/stories/tests, issuing seals |
+| `next-tester` | next-tester (evidence) | building probes/fixtures from the SPEC (never reads dev code) + running VERIFY probes on a **deployed** tester stack | writing production code, marking done |
+| `next-code-reviewer` | next-code-reviewer (gate) | 3-dimension PR review (requirement / clean-code / perf) → `--approve` unlocks self-merge (§9a) | design decisions, marking done |
+| `next-investigator` | next-investigator (skeptic) | falsifying every tester-PASS against the truth DB on its own seal env; issuing the epic seal | building code or probes |
+| `next-pm` | next-pm (marker) | marking step/story/epic `done` on concrete per-step evidence only | any work that produces the evidence it marks |
+
 **Routing heuristics (informed by memory, not absolute):**
 
 - "audit / debug / fleet / oracle / vault" → `brew-ops`
@@ -167,6 +177,14 @@ Step 6   Mailbox scoping — findings filename = `<role>_<slug>_findings.md`
 Step 7   Capture every teammate's output FIRST, then aggregate + finish (finish.sh kills panes: shutdown --merge + wt remove + zombie sweep)
 Step 8   arra_learn with `team-dispatch` tag (new pattern-library axis)
 ```
+
+### Build-team campaigns (mb-next-payment-gateway) — follow the build-workflow run-order
+
+Workflow-2 above is the *generic* dispatch mechanism (spawn / fan-out / finish). When the campaign is an **`mb-next-payment-gateway` build campaign**, the *run-order* of the teammates is not something I re-derive from the brief — it is canonical in **`docs/build-workflow.md`** (single source of truth; do not duplicate it here). Pointer:
+
+- **Roles + run-order (Step 0–4):** Step 0 `next-dev` emits the SPEC-first contract → Step 1 `next-dev` builds **in PARALLEL with** `next-tester` off that shared SPEC (tester never reads dev code) → Step 2 VERIFY: `next-tester` probes, then `next-investigator` falsifies every PASS against the truth DB on its own seal env → Step 3 `next-code-reviewer` `--approve` → team self-merges (§9a carve-out) → Step 4 `next-pm` marks done on concrete per-step evidence only. **I dispatch + coordinate; I never mark anything done** (see `docs/build-workflow.md` §The orchestrator's lane).
+- **STACK-READINESS gate is a PRECONDITION I must confirm green BEFORE dispatching the VERIFY/probe-run step.** The tester substrate stack must be **deployed** — app tables not 404, the create EF responds, reset + §ADR-20 clock RPCs present — not merely provisioned. `next-dev` owns deploying migrations + EFs to the tester/seal stacks as part of the BUILD handoff; `brew-ops`/owner provision the project/keys/slot. A bare/undeployed stack is a **BLOCKER to surface, never a silent idle** — I do not dispatch `next-tester` to probe a bare stack, and a bare stack is never counted green. Full gate text: `docs/build-workflow.md` §Stack-readiness gate.
+- See `references/workflow-2-team-dispatch.md` §Build-team campaigns for the dispatch-side detail.
 
 ### Workflow-1 — envelope + watcher (legacy, cron path)
 

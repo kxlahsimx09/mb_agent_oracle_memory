@@ -141,6 +141,25 @@ arra_learn(
 
 Note the `team-dispatch` tag — that is the new pattern-library axis, distinct from `directed-inbox`.
 
+## Build-team campaigns (mb-next-payment-gateway)
+
+The step-by-step above is the **generic** dispatch mechanism. When the campaign is an `mb-next-payment-gateway` **build campaign**, the *run-order of the teammates* is canonical in the product repo's **`docs/build-workflow.md`** — I follow that, I do not re-derive the sequence from the campaign brief each time. This section is a **pointer**, not a copy; the single source of truth is `docs/build-workflow.md`.
+
+**Run-order (Step 0–4) and the teammates each step dispatches:**
+
+| Step | Who | What I dispatch / coordinate |
+|---|---|---|
+| 0 SPEC-first | `next-dev` | emits the test-facing SPEC (the contract that decouples the tester from the code) |
+| 1 PARALLEL build | `next-dev` ∥ `next-tester` | dev builds code + **deploys to its `dev-N` and the tester/seal stacks**; tester builds probes from the SPEC only (never reads dev code) — spawn both off the shared SPEC, not sequentially |
+| — STACK-READINESS gate | (precondition) | **confirm green BEFORE dispatching Step 2** — see below |
+| 2 VERIFY | `next-tester` → `next-investigator` | tester probes; then investigator falsifies every PASS against the truth DB on its own seal env |
+| 3 review/merge | `next-code-reviewer` | `--approve` → team self-merges (§9a carve-out; build CODE only) |
+| 4 mark done | `next-pm` | marks step/story/epic `done` on concrete per-step evidence only |
+
+**I dispatch + coordinate; I NEVER mark anything done** (`docs/build-workflow.md` §The orchestrator's lane). Only `next-pm` marks.
+
+**STACK-READINESS gate — a precondition I confirm green before dispatching VERIFY (Step 2).** Before I send `next-tester` to run probes, the tester substrate stack must be **deployed**, not merely provisioned: app/deposit tables exist (not `404`), the create EF (`deposits-create`) responds (not `404`, GW4 gate live), and the reset RPCs + §ADR-20 clock RPCs respond. A *bare* stack (REST root `200` but app tables `404` and create EF `404`) leaves the tester blocked/idle. **Deploy ownership:** `next-dev` deploys the migrations + EFs to the tester/seal stacks as part of the BUILD handoff (merging the PR ≠ a deployed stack); `brew-ops`/owner provision the project, keys, slot. **A bare/undeployed stack is a BLOCKER to surface — never a silent idle, never counted green.** I do not dispatch the probe-run against a bare stack; I route the deploy to `next-dev` (or `brew-ops` if infra) first. Full gate text + checklist: `docs/build-workflow.md` §Stack-readiness gate. (Precedent: DEPOSIT slice 2026-06-03 — the orchestrator had to manually have brew-ops verify the tester stack `yupsevcrubgprsbujbpu` was deployed before dispatching next-tester; this gate replaces that manual pre-check.)
+
 ## Failure modes
 
 | Symptom | Likely cause | Recovery |
