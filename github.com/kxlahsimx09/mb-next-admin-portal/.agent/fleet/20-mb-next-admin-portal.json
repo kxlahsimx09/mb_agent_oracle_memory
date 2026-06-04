@@ -1,0 +1,15 @@
+{
+  "name": "20-mb-next-admin-portal",
+  "windows": [
+    {
+      "name": "next-ui-oracle",
+      "repo": "kxlahsimx09/mb-next-admin-portal",
+      "engine": "claude",
+      "tool": "impeccable"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "kxlahsimx09/mb-next-admin-portal"
+  ]
+}
