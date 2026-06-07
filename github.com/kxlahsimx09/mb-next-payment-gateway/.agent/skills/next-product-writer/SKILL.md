@@ -63,12 +63,16 @@ Role-specific disciplines layered on top:
    - `[S2 ratified]` — backed by a ratified ADR (`#decision`) AND/OR a `#poc-ready` PoC AND/OR a current-system flow doc that pg-writer/bot-writer has marked ratified.
    - `[S3 provisional]` — drawn from a `#provisional` ADR or a draft design doc; not yet validated by PoC or human.
    - `[S4 reverse-engineered]` — drawn from current-system code, Mongo schema, or unratified flow doc; useful for shape but the next system may intentionally depart.
-4. **Human-readable first.** I write like a product manager, not an engineer. Plain English. Lead with the WHY. Diagrams in mermaid when they save words. ADR ids and code paths live in the Sources block, not in the body — readers who want to drill down click the link.
-5. **One epic, many small files.** Project rule: ≤ 250 lines per file. Each epic is its own file under `docs/requirements/epic-<slug>.md`; if a file approaches the limit I split by story cluster.
-6. **User journey when shape matters.** For any flow that crosses multiple actors (merchant → gateway → bot → bank → callback), I write a numbered user-journey paragraph + a mermaid sequence diagram. For single-actor stories, prose alone is fine.
-7. **Acceptance criteria in Given/When/Then.** Testers lift these verbatim. I write criteria so a tester does not need to read the ADR — the criterion stands alone.
-8. **Append, don't overwrite.** When a requirement evolves (because an ADR was amended or a PoC produced drift), I write a new version and `arra_supersede` the old one. Old text stays per P-001.
-9. **Mandatory 3-layer tagging on every memory write** (role + repo scope + system-lifecycle). Same tag-discipline as architect / impl-architect.
+4. **Story Kind tag (UI vs substrate).** Orthogonal to the trust label, every story also carries a **Kind** marker so a reader — and the next-ui / next-dev teams — can tell at a glance what kind of work it is:
+   - 🖥️ **UI** — an operator/admin- or client-facing **console surface**: a directory / list / search, a dashboard, an action form + its states (confirm / loading / success / error), or an audit-trail / read screen. These typically originate from the next-ui review lens.
+   - ⚙️ **substrate** — a backend money/data contract: the data shape, the mutation / atomic semantics, invariants, the MDR fan-out / clawback shape, or a read *figure-contract* (the field/response contract a read exposes, as distinct from the screen that renders it).
+   The Kind rides in the story heading next to the trust label — e.g. `[S2 ratified · ⚙️ substrate]`, `[S2 · 🖥️ UI]` — and appears as a **Kind** column in the epic's "Story shape at a glance" table, with a one-line legend under the table intro. **Default a story to ⚙️ substrate;** tag 🖥️ UI only when the deliverable is a screen / console surface. (First applied: epic-wallet-ledger WALLET-007/008/010/011 = UI; campaign walletfix, 2026-06-07.)
+5. **Human-readable first.** I write like a product manager, not an engineer. Plain English. Lead with the WHY. Diagrams in mermaid when they save words. ADR ids and code paths live in the Sources block, not in the body — readers who want to drill down click the link.
+6. **One epic, many small files.** Project rule: ≤ 250 lines per file. Each epic is its own file under `docs/requirements/epic-<slug>.md`; if a file approaches the limit I split by story cluster.
+7. **User journey when shape matters.** For any flow that crosses multiple actors (merchant → gateway → bot → bank → callback), I write a numbered user-journey paragraph + a mermaid sequence diagram. For single-actor stories, prose alone is fine.
+8. **Acceptance criteria in Given/When/Then.** Testers lift these verbatim. I write criteria so a tester does not need to read the ADR — the criterion stands alone.
+9. **Append, don't overwrite.** When a requirement evolves (because an ADR was amended or a PoC produced drift), I write a new version and `arra_supersede` the old one. Old text stays per P-001.
+10. **Mandatory 3-layer tagging on every memory write** (role + repo scope + system-lifecycle). Same tag-discipline as architect / impl-architect.
 
 ---
 

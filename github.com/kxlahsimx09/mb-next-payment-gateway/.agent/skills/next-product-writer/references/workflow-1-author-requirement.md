@@ -43,21 +43,33 @@ Output the list in your scratchpad. Do **not** start writing until the list is c
 The outline lists the stories you intend to write before you write any of them. Each line:
 
 ```
-EPIC-<slug>-<NNN>  <one-line summary>  [trust-projection]  → <primary source>
+EPIC-<slug>-<NNN>  <one-line summary>  [trust-projection]  [kind-projection]  → <primary source>
 ```
 
-Trust projection is your best guess of the final trust label, so you notice if half the stories in an epic are S4 (you have a sourcing problem to fix before authoring).
+Trust projection is your best guess of the final trust label, so you notice if half the stories in an epic are S4 (you have a sourcing problem to fix before authoring). Kind projection (`🖥️ UI` / `⚙️ substrate`) is the same call you'll commit to in the heading — default ⚙️ substrate, tag 🖥️ UI only for console/screen deliverables.
 
 The outline is checked against the source list from Step 1: every story must have ≥ 1 source from that list. If not, either drop the story or open a thread to fill the gap.
+
+**Story shape at a glance table.** The epic file opens with a one-row-per-story summary table so a reader sees the whole epic before drilling in. It carries a **Kind** column alongside the trust column:
+
+```
+| Story | Summary | Trust | Kind |
+|---|---|---|---|
+| WALLET-007 | Operator wallet directory | S2 ratified | 🖥️ UI |
+| WALLET-009 | Atomic balance mutation contract | S2 ratified | ⚙️ substrate |
+```
+
+Put a one-line legend under the table intro: **Kind:** 🖥️ UI = operator/admin-console surface (next-ui lens); ⚙️ substrate = backend money/data contract.
 
 ### Step 3 — Author each story (the load-bearing step)
 
 Per story, in this order:
 
-1. **Heading** with story id + one-line summary + trust label:
+1. **Heading** with story id + one-line summary + combined `[<trust> · <kind>]` tag (trust label + Story Kind marker):
    ```
-   ### DEPOSIT-003 — Merchant requests a deposit and gets a bank account to pay to  [S2 ratified]
+   ### DEPOSIT-003 — Merchant requests a deposit and gets a bank account to pay to  [S2 ratified · ⚙️ substrate]
    ```
+   The Kind axis is additive — it does not replace the trust label. Pick the trust label per the SKILL.md "Trust labels" guidance, then append the Kind marker (`🖥️ UI` or `⚙️ substrate`). **How to classify:** default to ⚙️ substrate (backend money/data contract: data shape, mutation/atomic semantics, invariants, MDR fan-out / clawback, or a read figure-contract); tag 🖥️ **UI** only when the deliverable is a console/screen surface (operator/admin- or client-facing directory, list/search, dashboard, action form + states, or an audit/read screen — the next-ui lens). E.g. `[S2 · 🖥️ UI]` for an operator console story.
 2. **As-a / I-want / So-that** — one paragraph, plain English, no ADR ids in the body.
 3. **User journey** (if multi-actor) — numbered steps + a mermaid sequence diagram. Skip for single-actor stories; prose alone is fine.
 4. **Acceptance criteria** in Given/When/Then. One criterion per real concern; testers should be able to lift them verbatim. The criterion must stand alone without reading the ADR.
@@ -230,7 +242,7 @@ Close the session with `rrr` (per AGENTS.md §10). The retro lives at `ψ/memory
 
 ## Stories
 
-### DEPOSIT-001 — Merchant client requests a deposit  [S2 ratified]
+### DEPOSIT-001 — Merchant client requests a deposit  [S2 ratified · ⚙️ substrate]
 
 **As a** merchant client, **I want** to request a deposit by amount, **so that** I receive
 a bank account number to pay to and a deadline.
