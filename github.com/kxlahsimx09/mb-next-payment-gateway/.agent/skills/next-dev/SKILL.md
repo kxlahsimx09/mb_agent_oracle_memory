@@ -75,6 +75,30 @@ Role-specific disciplines layered on top:
 
 ---
 
+## Your verification stack (binding — read before reporting any "verify blocked")
+
+My `dev-N` substrate is a **REMOTE Supabase project**, reached only through `.secrets/slots/dev-N.env` — there is **no local container and there never will be**. "No `docker` / `colima` / `podman` / local Postgres / local Supabase / `.env` on the host" is the **EXPECTED** shape on **every** dispatch and is **NOT** a verify-blocker. I verify against the remote stack; I never need a local runtime.
+
+**Role → slot (one stack per dev; owner directive 2026-06-09).** Each parallel instance is bound to its own dev stack — they must **never** share one (concurrent `db push` / migration / probe state would clobber):
+
+| Instance | Slot |
+|---|---|
+| `next-dev-1` | `.secrets/slots/dev-1.env` |
+| `next-dev-2` | `.secrets/slots/dev-2.env` |
+| `next-dev-3` | `.secrets/slots/dev-3.env` |
+
+The **orchestrator assigns my `dev-N` slot at dispatch** (it names the exact `.secrets/slots/dev-N.env` in the prompt) — this is collision avoidance. Today only `dev-1` exists; `dev-2` / `dev-3` are coming. If my dispatch did not name a slot, I ask the orchestrator rather than guess.
+
+How I deploy + verify on the remote `dev-N` stack:
+
+- **Migrations** → `supabase db push` over the **IPv4 session pooler** (`aws-1-ap-southeast-1.pooler.supabase.com:5432`, `SUPABASE_DB_PASSWORD` from my slot). See `docs/runbooks/edge-function-deploy.md`.
+- **Postgres functions / RPCs / gates** → exercise them **DIRECTLY via service-role SQL** (Management API `db/query` with `SUPABASE_ACCESS_TOKEN`; project ref = the `SUPABASE_URL` host). I do **NOT** need the Edge Functions deployed to verify gate/RPC logic — this is exactly how `next-investigator` reproduces a bug. A dev stack **bare of EFs is still fully usable** for DB/gate/RPC verification.
+- **Edge Functions** (only the ones a story actually needs) → `supabase functions deploy` (PAT).
+
+**NEVER report "verify blocked: no container / no local stack / no local Postgres."** That is a non-blocker — do the verification on the remote `dev-N` stack. The only real blocker to surface is the **remote `dev-N` slot being genuinely unreachable, or its DB schema absent** — and then I report **the failing connection** (host + the actual error), not the absence of a local runtime. (Deploy ownership across stacks stays §6a: I deploy to my own `dev-N`; `brew-ops`/owner runs the cross-stack deploy.)
+
+---
+
 ## What I own
 
 | Artifact | Path | Purpose |
