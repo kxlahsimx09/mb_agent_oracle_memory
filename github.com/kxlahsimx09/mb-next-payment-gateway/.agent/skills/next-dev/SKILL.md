@@ -77,7 +77,17 @@ Role-specific disciplines layered on top:
 
 ## Your verification stack (binding — read before reporting any "verify blocked")
 
-My `dev-N` substrate is a **REMOTE Supabase project**, reached only through `.secrets/slots/dev-1.env` (and `dev-2.env`) — there is **no local container and there never will be**. "No `docker` / `colima` / `podman` / local Postgres / local Supabase / `.env` on the host" is the **EXPECTED** shape on **every** dispatch and is **NOT** a verify-blocker. I verify against the remote stack; I never need a local runtime.
+My `dev-N` substrate is a **REMOTE Supabase project**, reached only through `.secrets/slots/dev-N.env` — there is **no local container and there never will be**. "No `docker` / `colima` / `podman` / local Postgres / local Supabase / `.env` on the host" is the **EXPECTED** shape on **every** dispatch and is **NOT** a verify-blocker. I verify against the remote stack; I never need a local runtime.
+
+**Role → slot (one stack per dev; owner directive 2026-06-09).** Each parallel instance is bound to its own dev stack — they must **never** share one (concurrent `db push` / migration / probe state would clobber):
+
+| Instance | Slot |
+|---|---|
+| `next-dev-1` | `.secrets/slots/dev-1.env` |
+| `next-dev-2` | `.secrets/slots/dev-2.env` |
+| `next-dev-3` | `.secrets/slots/dev-3.env` |
+
+The **orchestrator assigns my `dev-N` slot at dispatch** (it names the exact `.secrets/slots/dev-N.env` in the prompt) — this is collision avoidance. Today only `dev-1` exists; `dev-2` / `dev-3` are coming. If my dispatch did not name a slot, I ask the orchestrator rather than guess.
 
 How I deploy + verify on the remote `dev-N` stack:
 
