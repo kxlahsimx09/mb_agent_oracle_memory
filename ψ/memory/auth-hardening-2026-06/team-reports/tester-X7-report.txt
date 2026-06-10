@@ -1,0 +1,194 @@
+================================================================================
+ next-tester — authsec_spec X7 (tester/investigator gate) — RESULTS
+ window:  tester-X7        campaign: simlive
+ when:    2026-06-10 ~21:10 GMT+7 (14:10Z)
+ stack:   qnccph  (qnccphgykzdydebmdwdf.supabase.co)  creds: slots/investigator.env
+ source:  mb-next-payment-gateway @ main 56f5270  (PR #377 X1–X6 merged; ccd7608 + RLS 20260609000010 in)
+ migration applied: 20260610000010_authsec_ip_cidr_and_stepup_config  (ip_in_allowlist RPC + step_up_posture_config cols) — CONFIRMED on qnccph
+ CF_ZONE_SECRET: SET on EF env (header cf-zone-secret); CF edge transform rule DEFERRED on this stack
+ evidence: evidence/integration-auth-1781100037366-56f5270b.json        (37-AC bijection)
+           evidence/integration-auth-x7-1781099978755-56f5270b.json     (5 X7 negatives)
+================================================================================
+
+VERDICT: X1–X6 hardening HOLDS. No red below is an X1–X6 code regression. The 13 of 37 reds are
+attributable to (a) this stack's deferred CF transform → no resolvable client IP (fail-closed), (b)
+two EFs not deployed on qnccph (404), (c) hosted gotrue not emitting a 429 for the EF's internal
+sign-in, or (d) pre-existing harness EF-binding artifacts. Each is proven over the wire below (the
+X7 re-seal rule: no red classed ENV/SEAM without code-level/behavioural proof).
+
+--------------------------------------------------------------------------------
+ DELIVERABLE 1 — FIXTURE FIX (tests/integration/probes/auth/_authctx.ts)
+--------------------------------------------------------------------------------
+upsertProfileAllowedIps now seeds `<entity_type>_profiles` keyed on **user_id** (+ carries client_id/
+parent_client_id for NOT-NULL safety). Verified over the wire that user_id IS the PK on
+client_profiles/admin_profiles/partner_profiles (there is no `id` column — the old `{id}` body 400'd
+under .catch → no row → allowlist never enforced). After the fix a seeded client_profiles row appears
+with allowed_ips populated (confirmed). Also de-biased the harness for the X3(b) deployed contract:
+  - a5 login() now sends the cf-zone-secret header alongside an injected CF-Connecting-IP (trusted-IP
+    path); env-gated on CF_ZONE_SECRET.
+  - auth005 AC9 now writes the gate's REAL source (<entity>_profiles.allowed_ips on user_id) instead
+    of app_metadata.allowed_ips (which the X3a enforceIpAllowlist does not read).
+
+--------------------------------------------------------------------------------
+ DELIVERABLE 2 — 37-AC RE-RUN @ HEAD  →  24/37 PASS
+--------------------------------------------------------------------------------
+REQUIRED-GREEN (per dispatch: auth002 AC2 + auth004 RLS + X1/X2):
+  ✓ auth002_ac2  enrolled returning-user 2FA CHALLENGE payload .................. PASS  (the reopened defect — GREEN)
+  ✓ auth004 RLS (DB-layer, user-scoped PostgREST):
+        auth003_ac1 only-own-tenant ......... PASS    auth003_ac3 same-perm-diff-rows ... PASS
+        auth004_ac2 sub-client→parent ....... PASS    auth004_ac4 admin cross-tenant .... PASS
+      → RLS isolation is GREEN. (auth004 ac1/ac3/ac5 reds are an EF-binding artifact, NOT RLS — see below.)
+  ✓ X1  wrong-TOTP → same-counter lockout: auth005_ac4 PASS + auth002_ac5 PASS + X7(ii) PASS .... GREEN
+  ⚠ X2  gotrue-429 audited tier: auth005_ac3 RED — 429 NOT reachable over the wire (env, see Findings).
+
+PASS (24): auth001 ac1-ac4 · auth002 ac1-ac5 · jwt1 jwt2 jwt3 · auth003 ac1 ac3 ac5 · auth004 ac2 ac4 ·
+           auth005 ac4 ac5 ac8 · auth007 ac2 ac3 s4b s2c
+
+RED (13) — every one root-caused, none an X1–X6 regression:
+  [ENV: deferred CF transform ⇒ no resolvable client IP / fail-closed]
+    auth005_ac1  audit row IS written (delta=+1, correct) but metadata.ip=null — EF cannot resolve a
+                 source IP on the raw *.supabase.co origin (x-real-ip absent; CF transform deferred).
+    auth005_ac2  on/off-list not differentiable: CF strips client CF-Connecting-IP; no CF transform ⇒
+                 every allowlisted account is fail-closed (even 0.0.0.0/0 → 403). on=403 off=403.
+                 (This is X3b WORKING: the spoofable header path is now refused. No-bypass proven by X7-iv.)
+    auth005_ac9  DB-fresh enforcement DOES fire (allowlist set on the profile → next login 403, same
+                 token) but the strict error==ip_blocked check trips on a CF null-body. Substantively green.
+  [ENV: hosted gotrue does not 429 the EF's internal sign-in]
+    auth005_ac3  saw_429=false in 30+ bursts (60-parallel → {200,500}, never 429). See Findings/X2.
+  [ENV: virtual clock is a NO-OP for the auth EFs (wall-clock only)]
+    auth005_ac6  external auto-expiry via clock_advance never fires — auth EFs ignore the §ADR-20 virtual
+                 clock. Real mechanism is wall-clock (~60s gotrue ban). See X7(v) finding — this is exactly
+                 the auth-005:74 "virtual clock" spec-text error X7 was told to fix.
+  [EF NOT DEPLOYED on qnccph — 404 (matches brewops deploy list; pre-existing SPEC-PENDING binding)]
+    auth005_ac7    admin-users-unlock → 404 (unlock EF not deployed) → super-admin unlock unverifiable.
+    auth007_ac1    admin-deposit-refund → 404 (gated money-out EF not deployed) → X6 marked AC1 BLOCKED-on-consumer.
+    auth007_s4a    admin-deposit-refund → 404 → X6 marked S4-a BLOCKED-on-consumer. (Both EXPECTED red.)
+  [HARNESS EF-BINDING artifact — not RLS / not X1–X6]
+    auth004_ac1/ac3/ac5  call admin-deposit (an adminAuth EF) with a CLIENT/PARTNER token + synthetic
+                 body → 400 (bad request), not 403/empty. admin-deposit is admin-only; client-caller
+                 tenant-scope should bind the gotrueAuth `tenant-read` EF. RLS itself is GREEN (above).
+    auth003_ac2/ac4  call admin-payout-cancel → 401 malformed_token for a valid AAL2 token (that EF
+                 rejects the bearer before RBAC). EF-specific token-parse quirk; flag for follow-up.
+
+--------------------------------------------------------------------------------
+ DELIVERABLE 3 — 5 NEW NEGATIVE PROBES (de-biased; tests/integration/probes/auth/x7/negatives.ts)
+   run: bun tests/integration/run-auth-x7.ts   →  3 PASS · 1 RED(finding) · 1 INCONCLUSIVE(env)
+--------------------------------------------------------------------------------
+ (i)   x7_i_aal_less_token_parity_both_401 ............................ PASS
+       AAL1 (aal-less) token → adminAuth(admin-deposit)=401 aal2_required AND gotrueAuth(tenant-read)=
+       401 aal2_required. Parity holds; no AAL2 bypass. De-bias: pre-ccd7608 a non-AAL2 token reached EFs.
+ (ii)  x7_ii_wrong_totp_locks_account ................................. PASS
+       6× wrong TOTP against ONE temp_token → login_failure_2fa ×6 + is_locked=true (hard ban) + 2×
+       account_locked. X1 confirmed: the 2FA path now feeds the same per-account counter. De-bias:
+       pre-X1 auth-2fa-verify never touched the counter → never locked (the unbounded-TOTP-guessing hole).
+       NOTE: the lock trips on a SINGLE temp_token; re-login-with-correct-password each attempt would
+       RESET the counter (the X4 reorder) — proving X4's pre-counter-reset ordering also holds.
+ (iii) x7_iii_gotrue_429_counter_unchanged ........................... INCONCLUSIVE (env coverage gap)
+       Cannot trigger a gotrue 429 over the wire (EF→gotrue sign-in is internal, not IP-rate-limited;
+       60-parallel bursts return 500 under load, never 429). X2's isRateLimited()/login_rate_limited
+       branch is real per the dev grep but UNEXERCISABLE here. Verify via a lowered gotrue sign-in rate
+       limit (brew-ops/dashboard) or an EF-level unit test. NOT a regression.
+ (iv)  x7_iv_spoofed_source_ip_no_bypass ............................. PASS
+       allowlist=[198.51.100.42]; plain=403 ip_blocked, X-Forwarded-For:on-list=403 ip_blocked,
+       CF-Connecting-IP:on-list=403. A client-supplied source-IP header CANNOT match the allowlist →
+       no bypass. De-bias: pre-X3b X-Forwarded-For was trusted from any caller → spoof matched → bypass.
+       (Trusted-IP "proceeds" leg not reachable on this stack — CF transform deferred ⇒ fail-closed.)
+ (v)   x7_v_soft_window_autoexpiry_internal_persists ................. RED (FINDING — see below)
+       Shrank auth_lockout_config.soft_window→00:00:03; external lock did NOT auto-clear within the
+       window (still 401 after 8s); admin (hard) also stays locked. Root-caused below.
+
+--------------------------------------------------------------------------------
+ KEY FINDINGS (architect-relevant)
+--------------------------------------------------------------------------------
+F1 (X7-v / auth005 AC6) — SOFT-WINDOW MECHANISM IS INEFFECTIVE over the wire.
+   On an external (client) lock the EF sets app_user.banned_until = locked_at + soft_window (3s after
+   the shrink — the config IS read), BUT it ALSO issues an independent gotrue ban of ~60s
+   (gotrue.banned_until ≈ locked_at + 60s) that is NOT derived from auth_lockout_config.soft_window.
+   The gotrue ban dominates: after the 3s app_user window the EF re-runs the password check, gotrue
+   still rejects (banned) → invalid_credentials → re-lock. Proven decisively: waiting the FULL ~60s+
+   with NO intervening attempt DOES auto-clear (is_locked=false, login proceeds). So:
+     • Auto-expiry exists and is WALL-CLOCK (no virtual clock) — confirms the auth-005:74 spec text
+       ("virtual clock") is wrong and must be replaced with the wall-clock + shrunken-window form.
+     • BUT the sanctioned "shrink soft_window" lever does NOT shorten the effective lockout — the
+       gotrue-ban duration is the real knob and is hardcoded/independent.
+   RECOMMENDATION (→ next-architect / next-dev): tie the external-regime gotrue ban_duration to
+   auth_lockout_config.soft_window (or do not gotrue-ban soft/external accounts; gate purely on
+   app_user.banned_until). Until then the shrunken-window mechanism cannot be the sanctioned test lever.
+
+F2 (X2 / auth005 AC3) — the gotrue-429 audited tier is UNVERIFIABLE on qnccph. The EF→gotrue sign-in
+   is an internal call not subject to the per-IP sign-in rate limit; the limiter never returns 429 at
+   any achievable volume (overload → 500). Recommend a brew-ops gotrue sign-in-rate-limit lever for a
+   future run, or an EF unit test of the isRateLimited() branch + the one-row-before-429 write.
+
+F3 (X3b on qnccph) — the EF-side validation is LIVE and spoof-CLOSED (X7-iv green; auth005 AC2/AC9
+   reds are the spoofable path being correctly refused). But because the CF edge transform rule is
+   deferred, the EF resolves NO trusted client IP on the raw origin → every allowlisted account is
+   fail-closed (auth005 AC1 ip=null, AC2/AC9 403). The on-list-PROCEEDS leg is only testable once the
+   CF transform injects cf-zone-secret + the real CF-Connecting-IP (sinuw/prod). Re-run AC1/AC2/AC9
+   there to close the positive legs.
+
+F4 — EF deploy gap on qnccph: admin-users-unlock (AUTH-005 AC7) and admin-deposit-refund (AUTH-007
+   gated money-out) are NOT deployed (404). AC7 + auth007 AC1/S4-a cannot be exercised here. (The
+   refund EF is X6-acknowledged Phase-2-deferred; the unlock EF should be deployed for AC7 coverage.)
+
+--------------------------------------------------------------------------------
+ RE-SEAL ADJUDICATION (X7 investigator rule)
+--------------------------------------------------------------------------------
+Every red above carries code-level/behavioural proof (404 status, ip=null in the written audit row,
+no-429-at-volume, virtual-clock no-op confirmed by the 60s wall-clock recovery, admin-only EF 400).
+NONE is classed ENV/SEAM by assertion. X1, X3a(enforcement), X3b(spoof-closed), X3c(CIDR RPC),
+X4(ordering), X5(enroll payload — auth002 ac1/ac4 green), X6(step-up audit/posture/config — auth007
+ac2/ac3/s4b green) are all GREEN or proven-by-behaviour. The single substantive NEW finding is F1
+(soft-window lever ineffective due to the independent gotrue ban).
+
+--------------------------------------------------------------------------------
+ ARTIFACTS / CHANGES
+--------------------------------------------------------------------------------
+M tests/integration/probes/auth/_authctx.ts          (upsertProfileAllowedIps → user_id; X7 fixture fix)
+M tests/integration/probes/auth/a5/login-security.ts (cf-zone-secret trusted-IP header; AC9 → profile table)
+A tests/integration/probes/auth/x7/negatives.ts      (5 de-biased negative probes)
+A tests/integration/run-auth-x7.ts                   (X7 runner)
+Evidence JSON committed under evidence/. Spec text to fix (handed to authdocs/architect): auth-005:74
+"virtual clock" → "wall-clock + shrunken auth_lockout_config.soft_window" (and F1's gotrue-ban caveat).
+================================================================================
+
+--------------------------------------------------------------------------------
+ LANDED — PR
+--------------------------------------------------------------------------------
+PR #378: https://github.com/kxlahsimx09/mb-next-payment-gateway/pull/378
+  branch tester/authsec-x7-probes → main (pushed no-force; DO NOT MERGE — next-code-reviewer gate).
+  title: test(authsec-x7): fixture fix + 5 negative probes + 37-AC re-run evidence
+
+--------------------------------------------------------------------------------
+ F3 ADDENDUM — CF-Connecting-IP is owned by Cloudflare (verified)
+--------------------------------------------------------------------------------
+A client that sets `CF-Connecting-IP` on the raw *.supabase.co origin is rejected by CLOUDFLARE
+itself with HTTP 403 "error code: 1000" (server: cloudflare, content-type text/plain, NO
+x-served-by: supabase-edge-runtime) — the request never reaches the EF. A PLAIN request (no such
+header) reaches the EF (x-served-by: supabase-edge-runtime, JSON {"error":...}). Consequence: there
+is NO client-injectable trusted-IP path over the wire — next-dev's "send CF-Connecting-IP + cf-zone-
+secret to exercise the on-list leg" is impossible here (CF blocks the header before the EF; and the
+EF only trusts cf-connecting-ip, which CF owns). The spoof is thus blocked at TWO layers (CF error-
+1000 + EF secret-gated trust). X7-iv proves no-bypass via both CF-Connecting-IP (CF-blocked 403) and
+X-Forwarded-For (EF ignores it → 403 ip_blocked). The on-list-PROCEEDS positive leg is only testable
+once the real CF transform rule fronts the stack (sinuw/prod).
+================================================================================
+
+--------------------------------------------------------------------------------
+ UPDATE (post next-dev confirmation) — adjudication tightened
+--------------------------------------------------------------------------------
+(1) RECLASSIFY auth005 AC2 (on-list-PROCEEDS leg) + AC9 (positive DB-fresh leg) from RED → ENV-DEFERRED
+    (same class as the other BLOCKED-on-consumer legs), confirmed by next-dev as INTENDED X3b posture:
+    on the raw *.supabase.co origin there is no provable source IP, so an IP-allowlisted account is
+    fail-closed by design ("non-spoofable regardless"). No code change. These two legs are deferred to
+    the CF-fronted env (sinuw/prod once brew-ops lands the transform rule). The off-list BLOCK leg and
+    the no-bypass property (X7-iv) remain GREEN. → 37-AC effective: 24 green + 2 env-deferred + the
+    remaining reds already env/EF-404/binding-classified; ZERO X1–X6 regressions stands.
+(2) F1 ROOT CAUSE CONFIRMED & OWNED by next-dev: _shared/lockout-support.ts:103 — the soft/external
+    gotrue ban is `Math.ceil(soft_window_seconds/60)m`, so a 3s soft_window rounds UP to a 1-MINUTE
+    gotrue ban that outlives app_user.banned_until (now+3s); during 3–60s the EF pre-check passes but
+    gotrue still rejects → registerFailedAttempt re-locks. FIX (pending team-lead/architect GO, tiny
+    follow-up PR): set soft ban_duration = `${soft_window_seconds}s` so the gotrue ban tracks soft_window
+    exactly (both clear together). RE-VERIFY plan: on the fix landing, re-run X7-v + auth005 AC6 with the
+    shrunken window — expect external auto-clear within the window, admin (hard) persists. (next-dev will ping.)
+================================================================================

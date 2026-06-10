@@ -1,0 +1,49 @@
+reviewer-authsec — PR #377 review (fix(authsec): close X1–X6 auth-lane phantom/bypassable controls)
+=====================================================================================================
+Repo:    kxlahsimx09/mb-next-payment-gateway
+Branch:  fix/authsec-x1-x6-hardening @ ff72eec  →  main
+Review:  COMMENTED, body header ✅ APPROVE  (posted 2026-06-10T13:19Z, gh review state=COMMENTED)
+Authority: next-architect_authsec_spec.md (X1–X6 + Done-when 1–6). Anchors re-verified at HEAD 86eca5a.
+
+VERDICT: APPROVE — no code-level blockers. build-team self-merge per owner GO 2026-06-10.
+
+PER-X (vs ratified AC + Done-when)
+----------------------------------
+X1 ✅ 2FA-fail shares SAME per-account lockout path (registerFailedAttempt out to _shared/lockout-support.ts;
+      action_type=login_failure_2fa); success → resetFailedAttempts (auth-2fa-verify:58). Lock sets is_locked+
+      banned_until+gotrue ban → login pre-check (auth-login:55) bars re-login = hole truly closed. ⚑ no per-token budget honored.
+X2 ✅ isRateLimited() → ONE login_rate_limited row BEFORE 429, counter UNTOUCHED (auth-login:72). grep → 1 write site. ✓ Done-when 2.
+X3 ✅ (a) enforceIpAllowlist in adminAuth (admin-auth:114, after aal2 / before RBAC = correct G5-D order) + auth-2fa-verify
+         (:39, before counter mutation); refuse=403 ip_blocked + 1 audit, NO mutation.
+      (b) extractClientIp: CF-Connecting-IP trusted ONLY w/ valid zone-secret (const-time compare); invalid→X-Real-IP;
+         unset→legacy preserved.
+      (c) ip_in_allowlist() inet <<=, IMMUTABLE, fail-closed on malformed, GRANTed; ipAllowed async w/ exact-match fallback.
+X4 ✅ Order: pre-check→password→IP gate (refuse+ip_blocked, no mutation, :105)→resetFailedAttempts (:115)→2FA. Done-when 4.
+X5 ✅ verified.length===0 only: unenroll ALL unverified totp → enroll fresh → complete payload; fail→500 mfa_enroll_failed;
+      verified factor never touched. ⚑ delete-and-re-enroll honored.
+X6 ✅ spec AC1/S4-a/S2-c ⛔ BLOCKED-on-consumer + binding wiring-AC rule + named Phase-1 consumers (none invented);
+      registerStepUpFailure writes ONE step_up_lockout_tripped at crossing (prev<t && next>=t); threshold/window/grant-TTL
+      → step_up_posture_config via stepUpConfig() (constants = fallback); verify ttl_sec derived from grant.expires_at.
+
+CROSS-CUTTING
+-------------
+- Migration 20260610000010: CREATE-only (CREATE OR REPLACE FUNCTION + GRANT + ALTER ADD COLUMN IF NOT EXISTS … DEFAULT
+  back-fill). No DROP/TRUNCATE/DELETE. step_up_posture_config pre-exists (20260609000001:139 singleton). NON-DESTRUCTIVE ✓.
+- Imports clean: all moved symbols resolve to lockout-support.ts; no stale login-support imports; dropped STEP_UP_GRANT_TTL_SEC
+  has no other consumer; NO import cycle (login-support→db; lockout-support→login-support; step-up→both).
+- File-size lean: login-support 161 / lockout-support 128 / step-up 136 — all ≤250 ✓.
+- ccd7608 NOT regressed: strict-aal aal2_required intact (admin-auth:107); listFactors still GET /auth/v1/user.
+- NO exposure m-items leaked: diff = X1–X6 code + spec + migration only.
+- All 4 ⚑ pinned leans honored → no architect flag raised.
+
+NOTES / FOLLOW-UPS (non-blocking, surfaced in the review)
+---------------------------------------------------------
+⚠ X3(b) spoof-block is DORMANT until brew-ops A3 sets CF_ZONE_SECRET on the CF transform rule + EF env. Pre-A3 the
+  allowlist stays spoofable at the raw origin (acceptable per dispatched lean, but protection NOT live on merge).
+⚠ Watch-point: enforceIpAllowlist is a no-op when JWT carries no app_metadata.entity_type (admin accounts w/o entity_type
+  → IP gate skipped). Consistent w/ login's profile read; confirm admin JWTs carry intended entity_type if admin IP-pinning expected.
+→ next-tester X7: (i) apply migration 20260610000010 to staging BEFORE re-run (else CIDR silently won't match; single IPs do).
+  (ii) fix probe fixture _authctx.ts upsertProfileAllowedIps to seed <entity_type>_profiles on user_id (gates read user_id;
+  fixture seeds id) — AC2/AC9 + spoof probe need this to go green.
+
+NOT MERGED. Reviewer verdict = APPROVE. Hand-off: build-team self-merge.

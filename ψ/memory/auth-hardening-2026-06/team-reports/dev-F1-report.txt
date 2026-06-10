@@ -1,0 +1,60 @@
+next-dev — F1 fix (soft/external lockout auto-expiry) — DELIVERED
+================================================================
+PR:     https://github.com/kxlahsimx09/mb-next-payment-gateway/pull/379
+Branch: fix/f1-soft-window-gotrue-ban  (off origin/main 56f5270, pushed no-force)
+Status: code + spec. Awaiting next-code-reviewer → reviewer→merge.
+Scope:  Option A (pinned). Soft/external regime ONLY. Hard/admin UNCHANGED.
+
+CONFIRMED FINDING (current source, stated as required)
+------------------------------------------------------
+File _shared/lockout-support.ts, registerFailedAttempt() two-regime trip.
+On an EXTERNAL (client/sub-client/merchant/partner) lock the EF set:
+  • app_user.banned_until = now + soft_window      (config IS read — correct)
+  • gotrue ban_duration   = `${Math.ceil(soft_window_seconds / 60)}m`
+The gotrue ban is rounded UP to whole minutes (min "1m" = 60s) and is NOT
+derived from soft_window. So with a shrunken soft_window (e.g. 3s) the gotrue
+ban is 60s and DOMINATES: after app_user.banned_until passes (3s), the login
+pre-check clears but gotrue still rejects (banned) → registerFailedAttempt fires
+again → re-lock. Net: the ratified, configurable soft_window did NOT control the
+effective lockout; only a full ~70s wall-clock wait recovered (tester x7-v).
+=> Auto-expiry was wall-clock all along, but driven by the wrong knob.
+
+FIX — Option A (pinned; tie gotrue ban to soft_window)
+------------------------------------------------------
+  - ban_duration: internal ? FAR_FUTURE_BAN : `${Math.ceil(cfg.soft_window_seconds / 60)}m`,
+  + ban_duration: internal ? FAR_FUTURE_BAN : `${cfg.soft_window_seconds}s`,
+Soft/external gotrue ban_duration = soft_window (seconds) = the SAME value already
+written to app_user.banned_until → both clear TOGETHER at the window. gotrue stays
+the single enforcement substrate (consistent with the hard regime), so Option A
+was workable — no architect flag needed (Option B not taken).
+Hard/admin regime UNCHANGED: FAR_FUTURE_BAN (permanent until super-admin unlock, LK1).
+
+SPEC
+----
+docs/spec/auth-005-login-security-slice.md AC6 (line 74): replaced the
+"(driven via the virtual clock)" auto-expiry text with the wall-clock +
+shrunken-soft_window mechanism. §ADR-20 virtual clock is a NO-OP for the auth EFs
+(X7-v confirmed). States: shrinking auth_lockout_config.soft_window is the
+sanctioned test lever and now ACTUALLY shortens the lock; app_user.banned_until +
+gotrue ban are both sized to soft_window so they clear together.
+
+FILES
+-----
+M supabase/functions/_shared/lockout-support.ts   (1-line fix + comment)
+M docs/spec/auth-005-login-security-slice.md       (AC6 mechanism text)
+lockout-support.ts = 135 lines (<=250). No schema/contract change. No new ratification
+(reconciles to ratified two-regime LK, §ADR-2 §Amendment 2026-06-07).
+
+VERIFY AFTER MERGE (next-tester)
+--------------------------------
+brew-ops redeploys auth-login (+ shared) -> next-tester re-runs x7-v / auth005 AC6
+on qnccph with soft_window shrunk to ~3s:
+  • EXTERNAL (client) lock auto-clears within ~3s (no operator action) — expect GREEN.
+  • ADMIN (hard) lock persists (no TTL) — unchanged.
+
+BOUNDARIES HONORED
+------------------
+* Soft/external regime only. Hard/admin FAR_FUTURE_BAN untouched.
+* Did NOT touch the merged X1-X6 logic; this is a focused follow-on.
+
+NOT MERGED. reviewer (next-code-reviewer) -> reviewer→merge.

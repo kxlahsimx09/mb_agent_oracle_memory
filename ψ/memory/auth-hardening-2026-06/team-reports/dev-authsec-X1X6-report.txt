@@ -1,0 +1,92 @@
+next-dev — authsec X1-X6 (auth-lane security hardening) — DELIVERED
+====================================================================
+PR:     https://github.com/kxlahsimx09/mb-next-payment-gateway/pull/377
+Branch: fix/authsec-x1-x6-hardening  (off origin/main 86eca5a, pushed, no force)
+Status: ONE PR, all 6 X-items. Awaiting next-code-reviewer → self-merge after APPROVE.
+Anchors re-verified at HEAD 86eca5a. Did NOT redo ccd7608. No exposure m-items started.
+
+PER-X CONFIRM (Done-when 1-6; X7=7 is tester's)
+-----------------------------------------------
+X1  wrong-TOTP -> SAME per-account lockout; reset on success.
+    - registerFailedAttempt + resetFailedAttempts shared OUT of auth-login into
+      _shared/lockout-support.ts (generalized: lookup by userId OR email, parametric
+      failure action/code). auth-2fa-verify wrong/challenge-fail now calls it
+      (action_type=login_failure_2fa); success calls resetFailedAttempts.
+    - ⚑ pinned lean honored: NO per-temp_token budget; account counter is the bound.
+
+X2  gotrue 429 -> 429 + login_rate_limited BEFORE response; counter UNTOUCHED.
+    - auth-login authErr branch now branches on isRateLimited() (status 429 /
+      over_request_rate_limit / rate_limit). Writes ONE login_rate_limited row, returns
+      429, does NOT increment failed_login_attempts, does NOT write wrong_password.
+    - grep -rn login_rate_limited supabase/functions -> 1 write site (auth-login). ✓
+
+X3  IP-allowlist: authed-EF enforcement + header hardening + CIDR.
+    (a) enforceIpAllowlist() added to adminAuth (admin-auth.ts) + auth-2fa-verify,
+        chain JWT verify -> IP allowlist -> RBAC -> handler. Reads
+        <entity_type>_profiles.allowed_ips keyed on user_id (DB-fresh). Refuse =
+        403 ip_blocked + ONE login_failure_ip_blocked row, NO state mutation.
+    (b) extractClientIp trusts CF-Connecting-IP ONLY when a CF-zone secret header
+        validates EF-side (env CF_ZONE_SECRET, header CF_ZONE_SECRET_HEADER default
+        cf-zone-secret, constant-time compare). When secret env is UNSET -> legacy
+        CF trust preserved (do-NOT-block pre-provisioning). Else falls back to
+        platform peer IP (X-Real-IP), never a client-suppliable header.
+        >>> BREW-OPS A3: provision the secret VALUE on the CF transform rule + EF env.
+    (c) CIDR: new RPC ip_in_allowlist(p_ip text, p_allowed inet[]) using inet `<<=`;
+        ipAllowed() now async, calls it, falls back to exact host match if RPC absent.
+
+X4  ordering: IP gate BEFORE counter reset.
+    - auth-login reordered: lock-precheck -> password -> profile load -> IP gate
+      (refuse + ip_blocked, NO counter mutation) -> resetFailedAttempts -> 2FA.
+    - An off-allowlist attacker with the correct password can no longer silently
+      reset the victim's lockout counter.
+
+X5  retried first-login enroll payload.
+    - verified.length===0 branch: delete ALL unverified totp factors (mfa.unenroll),
+      then enroll fresh -> complete {requires_2fa_setup,temp_token,factor_id,
+      qr_code_url,secret} every time. Genuine enroll failure -> 500 mfa_enroll_failed
+      (never a half payload). NEVER touches a verified factor (guarded by branch).
+    - ⚑ pinned lean honored (deviates from 01-login-ef.md:71-73 "don't mint fresh
+      secret" -> unimplementable; delete-unverified-and-re-enroll is the safe equiv).
+
+X6  AUTH-007 step-up.
+    (1) docs/spec/auth-007-step-up-slice.md: new "1a. Wiring status" + table markers
+        AC1/S4-a/S2-c = BLOCKED-on-consumer (requireStepUp has zero call sites; anchor
+        deposit-refund is DEPOSIT-011 Phase-2-deferred). Binding RULE added: every
+        consuming slice's Step-0 spec MUST carry a named requireStepUp-wiring AC.
+        Phase-1 consumers named: pullout_config_write (S2 ext adr.md:87), settlement
+        create/approve, deposit_refund (deferred). Did NOT invent a consumer.
+    (2) step-up.ts registerStepUpFailure writes ONE step_up_lockout_tripped audit row
+        at the threshold crossing (not per-attempt).
+    (3) threshold/window/grant-TTL moved to step_up_posture_config row
+        (lock_threshold/lock_window/grant_ttl) via stepUpConfig(); constants kept as
+        fallback defaults. auth-step-up-verify ttl_sec now derived from grant.expires_at.
+
+FILES
+-----
+M docs/spec/auth-007-step-up-slice.md
+M supabase/functions/_shared/admin-auth.ts        (X3a IP gate)
+A supabase/functions/_shared/lockout-support.ts   (X1 shared LK path; split for <=250)
+M supabase/functions/_shared/login-support.ts      (X3b/c, enforceIpAllowlist; trimmed)
+M supabase/functions/_shared/step-up.ts            (X6.2/6.3)
+M supabase/functions/auth-2fa-verify/index.ts      (X1, X3a)
+M supabase/functions/auth-login/index.ts           (X2, X4, X5)
+M supabase/functions/auth-step-up-verify/index.ts  (X6.3 ttl metadata)
+A supabase/migrations/20260610000010_authsec_ip_cidr_and_stepup_config.sql (X3c, X6.3)
+
+All edited files <= 250 lines (login-support split into login-support + lockout-support).
+No deno/bun available in this env to typecheck locally; integration probes run vs
+deployed staging (X7). Manual review done; imports/refs swept clean.
+
+FLAGS / FOLLOW-UPS
+------------------
+* BREW-OPS (X3b A3): provide CF_ZONE_SECRET value + wire the CF transform rule header.
+  Until then extractClientIp keeps legacy CF-Connecting-IP trust (no breakage).
+* NEXT-TESTER (X7): (i) apply migration 20260610000010 to staging BEFORE the re-run
+  (else ip_in_allowlist RPC absent -> CIDR silently won't match; single IPs still do).
+  (ii) FIXTURE BUG: _authctx.ts upsertProfileAllowedIps seeds <entity_type>_profiles
+  with key `id`, but PK + all gates read `user_id` (already flagged _spec.ts:171).
+  AC2/AC9 + the spoofed-CF probe need the seed keyed on user_id to go green.
+* No architect flag raised: all ⚑ pinned leans followed (X1 no per-token budget, X5
+  delete-and-re-enroll, X6.3 config row, X3b env-gated secret = the dispatched lean).
+
+NOT MERGED. reviewer (next-code-reviewer) -> build-team self-merge after APPROVE.

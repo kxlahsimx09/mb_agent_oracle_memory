@@ -1,0 +1,57 @@
+================================================================================
+ next-tester — X7-v RE-VERIFY (soft-window auto-expiry, post-F1) — PASS
+ window:  tester-X7        campaign: simlive
+ when:    2026-06-10 ~23:13 GMT+7 (16:13Z)
+ stack:   qnccph  (qnccphgykzdydebmdwdf.supabase.co)   creds: slots/investigator.env
+ fix:     F1 / PR #379 (fix/f1-soft-window-gotrue-ban) deployed — auth-login + auth-2fa-verify @ 530f5c0
+ seeded:  probe-client-user@probe.local (external/client, pw Probe-Passw0rd!) id=85904846-…-3cd3eef99223
+ evidence raw: /tmp/simlive/_x7v_reverify_raw.txt   detector: /tmp/simlive/x7-f1check.ts
+================================================================================
+
+RESULT: PASS — the X7-v probe that was RED (Finding F1) is now GREEN. The external (client) soft-lock
+auto-clears within ~the soft_window (NOT the old ~60s gotrue-ban floor). F1 is fixed as specified.
+
+--------------------------------------------------------------------------------
+ PROCEDURE & MEASUREMENTS
+--------------------------------------------------------------------------------
+1. Pre-flight detector (ephemeral user): gotrue ban window = 3.069s with soft_window→3s
+   >>> "F1 FIX IS LIVE" (was 60.06s pre-fix). Confirms the redeploy is active before the re-run.
+
+2. Re-verify on the SEEDED client probe-client-user@probe.local:
+   - soft_window PATCHED → 00:00:03 (3s).
+   - pre-state: is_locked=false, failed_login_attempts=0 (clean start).
+   - trigger soft-lock: 6× wrong-password login (threshold=5).
+   - LOCKED: is_locked=true, failed=5, locked_at=2026-06-10T16:12:18.052Z
+        • app_user ban window  = 3.000s   (banned_until − locked_at)
+        • gotrue  ban window   = 3.083s   (gotrue.banned_until − locked_at)
+        → BOTH track soft_window and clear TOGETHER. Pre-F1 the gotrue window was ~60s (the
+          Math.ceil(soft_window/60)m floor) — the exact root cause of F1, now removed.
+   - enforcement check: an immediate correct-password login WHILE within the window →
+        http=401 invalid_credentials → BLOCKED (expected; pre-check refuses, no re-arm).
+   - AUTO-EXPIRY: polling a correct-password login → PROCEEDED at ~2.8s after the lock
+        (http=200, requires_2fa=true — the returning-user challenge), NO operator action.
+   - final state: is_locked=false, banned_until=null, failed_login_attempts=0 → account clean.
+   - soft_window RESTORED → 00:15:00 (http=204).
+
+--------------------------------------------------------------------------------
+ VERDICT DETAIL
+--------------------------------------------------------------------------------
+  was_locked .......................... true   (is_locked + in-window login refused 401)
+  windows_track_soft_window ........... true   (app=3.000s, gotrue=3.083s, within ~0.1s of each other)
+  auto_cleared ........................ true   @ ~2.8s  (≪ old ~60s; well within soft_window+granularity)
+  unlocked_after ...................... true   (is_locked=false, failed=0)
+  ================================================================================
+  X7-v: RED → GREEN.  Finding F1 RESOLVED by PR #379 (Option A: soft/external gotrue
+  ban_duration = `${soft_window_seconds}s`). Hard/admin FAR_FUTURE_BAN regime unaffected
+  (no auto-expiry there — verified earlier in auth005 AC5).
+
+--------------------------------------------------------------------------------
+ NOTES
+--------------------------------------------------------------------------------
+- The sanctioned wall-clock + shrunken-`auth_lockout_config.soft_window` mechanism (the X7-pinned
+  replacement for the auth-005:74 "virtual clock" text) now WORKS end-to-end over the wire. AC6 can
+  be re-classed GREEN on the same mechanism (was RED on the no-op virtual clock + the F1 60s ban).
+- Seeded client left clean (unlocked, counter 0); soft_window restored to the 15-min default.
+- Scope of this re-run: ONLY X7-v (the previously-RED probe), per dispatch. The rest of the X7 gate
+  is unchanged — see /tmp/simlive/tester-X7-report.txt + PR #378.
+================================================================================
