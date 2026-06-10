@@ -1,5 +1,5 @@
 {
-  "name": "20-mb-next-payment-gateway",
+  "name": "03-mb-next-payment-gateway",
   "windows": [
     {
       "name": "next-architect-oracle",
@@ -39,6 +39,11 @@
       "repo": "kxlahsimx09/mb-next-payment-gateway",
       "engine": "claude",
       "engine_swap_todo": "[ENGINE_SWAP:codex] swap claude->codex/gpt later (campaign nextteam, claude-first locked decision; charter unchanged on swap)"
+    },
+    {
+      "name": "next-live-tester-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude"
     },
     {
       "name": "next-pm-oracle",
