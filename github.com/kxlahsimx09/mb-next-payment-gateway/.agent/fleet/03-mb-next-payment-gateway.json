@@ -49,6 +49,12 @@
       "name": "next-pm-oracle",
       "repo": "kxlahsimx09/mb-next-payment-gateway",
       "engine": "claude"
+    },
+    {
+      "name": "finance-auditor-oracle",
+      "repo": "kxlahsimx09/mb-next-payment-gateway",
+      "engine": "claude",
+      "note": "cross-system finance audit (#current via dpay MCP + #next placeholder); read-only; owner direction 2026-06-10"
     }
   ],
   "sync_peers": [],
