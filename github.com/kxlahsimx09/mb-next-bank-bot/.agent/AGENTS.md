@@ -1,0 +1,1 @@
+../../mb-next-payment-gateway/.agent/AGENTS.md

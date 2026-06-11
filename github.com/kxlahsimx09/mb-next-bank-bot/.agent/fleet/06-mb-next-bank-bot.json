@@ -1,0 +1,14 @@
+{
+  "name": "06-mb-next-bank-bot",
+  "windows": [
+    {
+      "name": "nextbot-dev-oracle",
+      "repo": "kxlahsimx09/mb-next-bank-bot",
+      "engine": "claude"
+    }
+  ],
+  "sync_peers": [],
+  "project_repos": [
+    "kxlahsimx09/mb-next-bank-bot"
+  ]
+}
