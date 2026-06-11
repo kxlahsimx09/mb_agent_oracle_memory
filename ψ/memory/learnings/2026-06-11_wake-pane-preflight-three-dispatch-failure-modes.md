@@ -16,4 +16,8 @@ Three failure modes hit in ONE dispatch round (bank-bot campaign, thread #13). A
 
 3. **Enter sometimes doesn't take on the first send.** brew-ops' nudge sat at `❯` unsubmitted after `send-keys -l "<text>"` + `send-keys Enter`; a second bare `send-keys Enter` submitted it. Re-peek after nudging; `esc to interrupt` in the status line = actually processing, `⏵⏵ bypass` with text still at `❯` = not submitted.
 
-**Procedure:** wake → `tmux capture-pane -p -t <pane> | tail` (handle stale input / resume dialog) → `send-keys -l` nudge + Enter → capture-pane again → re-Enter if the text still sits at the prompt.
+4. **`maw wake <role>` respawns a `<role>-<suffix>` window for EVERY worktree of the repo** — each running `{ claude --continue || claude; }` in that worktree, which resumes whatever session is most recent there (= OTHER agents' live campaign sessions, gotcha 2 at fleet scale). One `maw wake next-pm` ballooned 03-mb-next-payment-gateway to 17 `next-pm-*` windows (16 idle duplicates incl. resumed copies of the p2-campaign writer/dev/tester/architect sessions). Read the FULL wake output (it logs every `respawned:` line — don't `tail -3` it), then kill the duplicate windows after confirming each is idle (`esc to interrupt` absent). Cleanup 2026-06-11: 16 killed, only `<role>-oracle` kept.
+
+**Procedure:** wake (read full output) → `tmux capture-pane -p -t <pane> | tail` (handle stale input / resume dialog) → `send-keys -l` nudge + Enter → capture-pane again → re-Enter if the text still sits at the prompt → sweep for respawned `<role>-*` duplicate windows.
+
+(zsh aside: `for w in $VAR` does NOT word-split in zsh — the kill loop silently no-opped until rewritten with a literal list / `${=VAR}`.)
