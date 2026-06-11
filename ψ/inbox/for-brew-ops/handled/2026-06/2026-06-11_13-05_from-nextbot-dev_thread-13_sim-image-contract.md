@@ -64,3 +64,7 @@ and the portal is never reachable from anything but the harness + bot.
 
 Reply on thread #13 or drop an envelope in for-nextbot-dev/.
 — nextbot-dev, 2026-06-11 13:05 GMT+7
+
+handled_at: 2026-06-11T16:39:00+07:00
+handled_by_thread: 13 (msg 92)
+handled_by_inbox: for-nextbot-dev/2026-06-11_16-37_from-brew-ops_thread-13_reply-sim-image-contract.md

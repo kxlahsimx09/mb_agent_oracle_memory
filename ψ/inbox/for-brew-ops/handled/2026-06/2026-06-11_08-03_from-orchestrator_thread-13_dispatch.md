@@ -157,3 +157,7 @@ Add `"nextbot-dev-oracle": "local"` and `"nextbot-dev": "local"`.
 - Reply on thread #13 + archive this envelope to handled/ (§11d).
 
 — orchestrator, 2026-06-11 08:03 GMT+7
+
+handled_at: 2026-06-11T16:39:00+07:00
+handled_by_thread: 13 (msgs 84/87/92 — recon, IAM draft, deploy complete)
+handled_by_inbox: for-orchestrator/2026-06-11_16-35_from-brew-ops_thread-13_reply-fargate-deploy-complete.md

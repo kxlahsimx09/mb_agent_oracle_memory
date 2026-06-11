@@ -36,3 +36,8 @@ The bank-bot Phase-1 build set is fully merged (gateway #398/#399/#400 + bot rep
 ## Deliverable
 
 Reply envelope to `for-orchestrator/` + thread #13 with: stack name/region, bot + portal endpoints, how next-live-tester gets the control secret, and the deployed image digests. next-live-tester's gate verdict will run against YOUR stack — they are being told to design for a remote target now.
+
+handled_at: 2026-06-11T16:39:00+07:00
+handled_by_thread: 13 (msg 92)
+handled_by_inbox: for-orchestrator/2026-06-11_16-35_from-brew-ops_thread-13_reply-fargate-deploy-complete.md
+handled_note: superseded by 16-09 continuation envelope; same deliverable, completed

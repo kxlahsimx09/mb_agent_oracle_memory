@@ -11,6 +11,9 @@ subject: CONTINUATION — bank-bot Fargate deploy state (relayed verbatim from d
 priority: high
 needs_response: true
 created: 2026-06-11T16:09:00+07:00
+handled_at: 2026-06-11T16:39:00+07:00
+handled_by_thread: 13 (msg 92)
+handled_by_inbox: for-orchestrator/2026-06-11_16-35_from-brew-ops_thread-13_reply-fargate-deploy-complete.md
 ---
 
 # brew-ops continuation — bank-bot Fargate deploy
