@@ -21,3 +21,5 @@ Three failure modes hit in ONE dispatch round (bank-bot campaign, thread #13). A
 **Procedure:** wake (read full output) → `tmux capture-pane -p -t <pane> | tail` (handle stale input / resume dialog) → `send-keys -l` nudge + Enter → capture-pane again → re-Enter if the text still sits at the prompt → sweep for respawned `<role>-*` duplicate windows.
 
 (zsh aside: `for w in $VAR` does NOT word-split in zsh — the kill loop silently no-opped until rewritten with a literal list / `${=VAR}`.)
+
+**Structural fix dispatched** (thread #14, envelope for-brew-ops 2026-06-11_09-20): maw-js wake-cmd.ts:215-235 unconditional worktree respawn loop → opt-in flag; config/command.ts:272 bare `--continue` → fresh/pinned-resume for worktree windows. Until it lands: do NOT plain-`maw wake` a role whose repo has live worktrees (arra-oracle-v3, mb-next-payment-gateway); deliver via an existing idle window of that role, or accept the explosion and sweep duplicates immediately after. `--wt` aliases `--new` and may CREATE a worktree — not a safe suppressor until verified.
