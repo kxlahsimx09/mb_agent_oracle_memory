@@ -35,3 +35,8 @@ A Fargate task's ENI is AWS-managed; you **cannot associate an EIP directly onto
 - Cost: an idle NLB + 1 EIP is a few USD/mo — flag it so the owner can tear down post-demo if desired.
 
 Reply → for-orchestrator/ + thread #13: the IAM delta for the owner first, then (post-apply) the stable URL + restart-survival proof.
+
+handled_at: 2026-06-11T19:57:00+07:00
+handled_by_thread: 13 (msg 114)
+handled_by_inbox: for-orchestrator/2026-06-11_19-55_from-brew-ops_thread-13_reply-iam-delta-portal-stable-ip.md
+handled_note: phase 1 (IAM delta) delivered; phase 2 (NLB+EIP build) awaits owner apply-ping — tracked
