@@ -30,7 +30,7 @@ One target stack, two repos, four+ substrates:
 | # | Substrate | Repo | Deploy verb | Change-detect signal |
 |---|---|---|---|---|
 | (a) | **DB migrations** (+ pg_cron sweeps/dispatcher + RPCs ride along) | `mb-next-payment-gateway` | `supabase db push` over IPv4 session pooler | `supabase/migrations/*.sql` filenames not present in staging `supabase_migrations.schema_migrations` ledger |
-| (b) | **Edge Functions** (~27) | `mb-next-payment-gateway` | `supabase functions deploy` | EF source (`supabase/functions/<name>/**`) changed vs last-deployed SHA |
+| (b) | **Edge Functions** (set GENERATED from `supabase/functions/` at HEAD — never a frozen count) | `mb-next-payment-gateway` | `supabase functions deploy` | EF source (`supabase/functions/<name>/**`) changed vs last-deployed SHA |
 | (c) | **CF Worker** (gateway edge) | `mb-next-payment-gateway` | `wrangler deploy -c wrangler.staging.toml` | `gateway/cf-worker/**` changed vs last-deployed SHA |
 | (d) | **Admin UI** | `mb-next-admin-portal` | `vercel deploy` (linked project) | UI source changed vs last-deployed SHA |
 
@@ -103,10 +103,18 @@ before the UI that calls it).
   ```
   Then re-query the ledger to confirm every pending version now present. pg_cron sweeps/
   dispatcher + RPCs land here (they live in migration SQL).
-- **(b) Edge Functions** (only the changed ones — or all, deploy is idempotent):
+- **(b) Edge Functions.** The EF set is **GENERATED from `supabase/functions/` at HEAD, never a
+  frozen hand-typed list** (OBS-1, thread #17 — the bbot family `bot-config`/`bot-statements`/
+  `bot-bank-statements-last`/`bot-balance`/`bot-queue-mark` was once silently excluded from an
+  "all-26-EF" sweep). The no-arg deploy-all form is the authoritative sweep — it cannot omit a
+  family; the single-function form is for targeted redeploys only:
   ```bash
+  supabase functions deploy --project-ref sinuwgsqqyqzlpaavimf            # deploy-all (the sweep)
+  # or, targeted (only a changed EF):
   supabase functions deploy <name> --project-ref sinuwgsqqyqzlpaavimf
   ```
+  Both are idempotent. `scripts/ef-deploy-list.sh --list` is the source of truth for the set;
+  Step 3 asserts deployed ⊇ source so an excluded family fails loudly.
   > **CRITICAL — DEPOSIT-008 / #358 class bug:** EF-owns-auth functions MUST keep
   > `verify_jwt = false` in `supabase/config.toml`. The platform JWT gate must **stay off** for
   > these (login/2FA/step-up + X-Client-Id auth EFs). **Never re-enable the platform gate.**
@@ -133,6 +141,9 @@ Run the readiness checklist as a post-deploy assertion, regardless of what was s
 
 - Migrations applied — app/deposit tables exist (table query ≠ `404`).
 - EFs deployed — `deposits-create` responds (≠ `404`), GW4 gate live.
+- **EF-set completeness (OBS-1) — `scripts/ef-deploy-list.sh --assert <REF>` exits `0`: every EF at
+  HEAD (incl. the bbot family) is ACTIVE on the stack. A non-zero exit = a family was excluded from
+  the sweep → blocker, not a green.**
 - RPCs present — reset RPCs **and** §ADR-20 clock RPCs respond.
 - Worker — staging worker URL healthy; UI — Vercel deployment `READY`.
 
@@ -199,6 +210,10 @@ feature branch. `git grep` the diff for token/password shapes before committing
 ---
 
 **Created:** 2026-06-09 (GMT+7)
+**Amended:** 2026-06-12 (OBS-1, thread #17) — the EF set is now explicitly GENERATED from
+`supabase/functions/` at HEAD (deploy-all form authoritative; frozen-count language removed), and
+Step 3 gains the `scripts/ef-deploy-list.sh --assert` completeness gate so an excluded EF family
+(root cause: bbot adapters missed by the "all-26-EF" sweep) fails loudly instead of sitting stale.
 **Owner:** brew-ops
 **Ground truth:** 2026-06-09 staging session — project ref `sinuwgsqqyqzlpaavimf`, 125
 migrations / 27 EFs / `wrangler.staging.toml` / Vercel-linked admin portal verified against the
