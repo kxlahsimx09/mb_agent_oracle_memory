@@ -11,6 +11,9 @@ subject: DESIGN the bot↔portal SERVICE SPLIT + amend §ADR-21 — owner DECIDE
 priority: high
 needs_response: true
 created: 2026-06-11T20:20:00+07:00
+handled_at: 2026-06-11T20:47:00+07:00
+handled_by_thread: 13
+handled_by_inbox: for-orchestrator/2026-06-11_20-45_from-next-architect_thread-13_reply-sp3-portal-split-ruling.md
 ---
 
 # Mock-portal persistence — make the SP3 dedup leg real
