@@ -147,6 +147,12 @@ Run the readiness checklist as a post-deploy assertion, regardless of what was s
 - RPCs present — reset RPCs **and** §ADR-20 clock RPCs respond.
 - Worker — staging worker URL healthy; UI — Vercel deployment `READY`.
 
+**Consolidated currency gate (the one command).** `scripts/stack-freshness.sh staging` runs the
+per-substrate currency check in one shot (migrations ledger + `ef-deploy-list.sh --assert` +
+worker/UI vs the manifest); exit `0` = every substrate current. It is the SAME read-only check the
+stack-holding roles run on their own stacks (the PULL half) — here it is the post-deploy proof.
+Run it last; a non-zero exit is a blocker, not a green.
+
 A failed assertion is a **blocker to surface**, not a silent green.
 
 ### Step 4 — Emit + commit the MANIFEST (mandatory, every run)
@@ -197,6 +203,17 @@ feature branch. `git grep` the diff for token/password shapes before committing
 - Not a secret manager — it *consumes* the staging slot; the owner creates/rotates the PAT + DB
   password (`edge-function-deploy.md` §1–§3).
 - Not a migration author — it applies what's in `supabase/migrations/`; it does not write DDL.
+- Not (yet) a bank-bot / mock-bank deployer — `mock-merchant` rides along as a gateway EF (covered
+  by the EF sweep), but the **bank-bot container + its `sim/mock-portal` (mock-bank)** live on
+  EC2/DO (`mb-next-bank-bot scripts/aws|do/*.sh`), outside this Supabase/CF/Vercel deploy. Bringing
+  those into the PUSH loop (w2-watcher + a per-substrate freshness signal) is **Phase 4** of the
+  deploy-currency design — tracked, not silently dropped.
+
+> **Manifest home (forward convention).** The living manifest stays `STAGING-DEPLOY-MANIFEST.md`
+> today; the per-stack form is `deploy-manifests/<stack>.md` (same columns). `stack-freshness.sh`
+> reads `deploy-manifests/<stack>.md` first, then falls back to `STAGING-DEPLOY-MANIFEST.md`, so the
+> worker/UI currency check activates as soon as either exists. Other stacks (tester/seal/dev) get a
+> manifest when brew-ops deploys to them via the cross-stack deploy (build-workflow.md), not here.
 
 ## Escalation
 

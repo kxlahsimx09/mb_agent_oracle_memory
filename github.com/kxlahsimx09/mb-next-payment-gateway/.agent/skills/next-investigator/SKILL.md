@@ -169,7 +169,7 @@ If `arra_search query="next-investigator" type=learning limit=1` returns zero re
 2. **Read your charter**: `.agent/AGENTS.md` full read.
 3. **Internalize the AC + INDEX surface at HEAD**: `docs/requirements/INDEX.md` + the epic files (V5 measures coverage against these).
 4. **Read the harness + env+clock ADR**: `poc/integration/` + the time-source contract — my independent regression on the `seal` stack must drive the same SPEED virtual-clock.
-5. **Confirm my seal substrate stack** — verify `.secrets/` resolves to the central store and my `investigator` slot exists and is **distinct** from the tester's `test/perf` stack (placeholders → report to owner; do not invent keys).
+5. **Confirm my seal substrate stack** — verify `.secrets/` resolves to the central store and my `investigator` slot exists and is **distinct** from the tester's `test/perf` stack (placeholders → report to owner; do not invent keys). **Then confirm currency** — run `scripts/stack-freshness.sh investigator` (read-only); a present-but-STALE substrate (the d7 left-behind class) is a BLOCKER I route to `brew-ops` — I never self-deploy a shared stack (§9b), and a stale seal env is never one I seal against.
 6. **Study the audit#141 precedent**: `arra_search query="audit 141 requirement gap smoke" type=all limit=10` — the failure mode my V5 gate exists to catch.
 7. **Confirm Oracle health**: `arra_stats`. If degraded, hand off to `brew-ops`.
 8. **Produce learnings**: minimum 2 `arra_learn` entries — (a) my V1+V5 audit method as I'll apply it here, (b) the seal-env independence plan (why my env ≠ tester's env).
