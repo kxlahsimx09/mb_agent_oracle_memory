@@ -1,0 +1,9 @@
+---
+to: next orchestrator session + owner
+from: orchestrator wt-28-dev, 2026-06-13 GMT+7
+topic: PAYOUT slice-3 COMPLETE (PAYOUT-008/010 cancel sweeps) — #457/#458 merged, marks #464 + test-index #462 open; THREE slices done in ~24h
+---
+State: slice-3 through all gates: SPEC v1 (arg lists baked in — zero param-pendings) → build (DRIFT-D8 closed: 008 sweep wall-clock→app_now+grant; MISSING-D10 built: payout maintenance sweep, always-ON, keys on withdrawal_queue.required_bank_account_id, unrouted=SKIP, _bank_in_maintenance reused not forked) → VERIFY 39/39 yupsev → falsify GREEN qnccph (27+sentinel) → APPROVE x2 (2 LOW nits) → #457+#458 MERGED → PM marks PR #464 + tester test-index PR #462 open (owner/reviewer gate). Stacks at parity incl. 000160/000170 (flag payout_auto_cancel_enabled=false ships-OFF verified). All payb3* campaigns closed; findings in role mailboxes + /tmp/payb3-captures.
+PAYOUT epic: 001..005+008+010 slice-DoD-GREEN · remaining slice-4 = 007 (resend callback) + 009 (statement auto-reconcile + success-confirmation audit/P2.16) · slice-5 = 012/013 correction toolkit · then epic-seal → LIVE.
+Cross-lane watch: #463 (wt-26 secres) REVOKEs public EXECUTE on 6 payout fns our slices created — their SV8 re-close pattern; verify service_role grants survive when it merges (their gates). #460 renumbered an unrelated v_deposits migration around ours. #459/#461 authfull continue.
+Carries: DRIFT-V view-family wall-clock (architect-owned view-clock hardening — now recorded in the epic revision log too) + claimed_at T1 residue + mark_review assert nit + 2 LOW #457 nits + MDR config-migration story (option d) + config-write validation + NB-437-1 seed-fee bump at live deploy + finish-script --merge/zombie bug. Rate-limit note: one transient API rate-limit killed a PM turn mid-flight — nudge-continue recovered it cleanly.

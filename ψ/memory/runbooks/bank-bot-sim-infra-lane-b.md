@@ -35,6 +35,8 @@ bot ──push──> gateway staging EFs (sinuwgsqqyqzlpaavimf)  [separate stac
 | SSM role | role+instance-profile `mb-next-bankbot-proxy-ssm` (AmazonSSMManagedInstanceCore) | the EC2 instance profile |
 | Build script | `~/.arra-oracle-v2/fleet-secrets/mb-next-bank-bot/bin/ec2proxy-build.sh` | rebuilds the proxy idempotent-ish |
 | Helpers | same dir: `bankbot-ip.sh` (echoes URL), `bankbot-logs.sh` (bot CloudWatch), `bankbot-restart.sh` (bot-only SP3) | |
+| **Callback receiver (cbrecv)** | `/opt/cbrecv/receiver.py`, systemd `cbrecv.service` (loopback `:8088`, `Restart=always`, enabled) | **secres thread #16, 2026-06-12.** Stable public callback sink for §ADR-21 DEPOSIT+AUTH live runs (replaces the dead/rate-limited trycloudflare quick-tunnel). Routes: `POST /webhook`→200+log · `POST /flaky`→500-once-then-200 per txnId (dedup ignores the WC8 per-attempt `timestamp`) · `POST /fail`→500 · `GET /events`/`/healthz`. Caddy `handle @cbrecv` block at the TOP of the sslip.io site (ABOVE `/sim/*` gate + portal catch-all) → `127.0.0.1:8088`. Patch marker `secres callback-receiver`; Caddyfile backups at `/etc/caddy/Caddyfile.bak.cbrecv.*`. Artifacts staged at `/tmp/cbrecv/` on the fleet host. |
+| Caddy reload | `caddy.service` has **no ExecReload** | use `caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile` (admin API, zero-downtime); `systemctl reload caddy` is a no-op ("Job type reload is not applicable"). `systemctl restart caddy` works but blips :443. |
 
 ## Operate
 
@@ -43,6 +45,7 @@ bot ──push──> gateway staging EFs (sinuwgsqqyqzlpaavimf)  [separate stac
 - **Bot logs:** `bash bankbot-logs.sh` (uses `aws logs get-log-events` on `bot/bot/<task>` — the deploy user lacks `logs:FilterLogEvents`, so `aws logs tail` won't work).
 - **Portal logs (on the box):** `journalctl -u portal -u caddy` via SSM Session Manager (the instance is SSM-managed; the deploy user lacks `ssm:StartSession`, so connect from a console/role that has it).
 - **Inject a test row:** `POST /sim/inject` `{"amount":N,"type":"in"}` with the control secret.
+- **Callback receiver (cbrecv):** `curl https://18-136-227-108.sslip.io/healthz` → 200; `GET /events` → received-callback log. Deployed via SSM `AWS-RunShellScript` (base64-embedded artifacts) — needs an SSM-capable profile (the deploy user lacks `ssm:SendCommand`; thread #16 used a temp owner-granted root profile, **revoked after**). Re-deploy snippet + artifacts: `/tmp/cbrecv/` (receiver.py, cbrecv.service, caddy_patch.py). To repatch Caddy idempotently: the patch is a no-op if marker `secres callback-receiver` already present.
 
 ## SP3 restart semantics (load-bearing)
 
@@ -80,6 +83,8 @@ aws ecr delete-repository --repository-name mb-next-bank-bot --force --region $R
 #    remove role from instance-profile + delete role mb-next-bankbot-proxy-ssm + the profile.
 # 8. ECS cluster mb-next-bankbot — delete if empty. DO NOT touch mb-next-keep (§ADR-15 keep stack).
 ```
+**Callback receiver (cbrecv)** lives entirely on the EC2 box → it is removed when the instance is terminated (step 2); no separate AWS resource. To revert ONLY cbrecv while keeping the box (needs an SSM-capable profile): `systemctl disable --now cbrecv && rm -f /etc/systemd/system/cbrecv.service /opt/cbrecv/receiver.py`, then restore the Caddyfile from `/etc/caddy/Caddyfile.bak.cbrecv.*` (or delete the `# >>> secres callback-receiver` … `# <<<` block) and `caddy reload --config /etc/caddy/Caddyfile`.
+
 Gateway-side (migrations 100/110/200, the 5 bot EFs, `BOT_CRED_ENC_KEY`, GW4 keys, the staging Supabase project `sinuwgsqqyqzlpaavimf`) is a SEPARATE stack owned by the gateway team — NOT part of this teardown.
 
 ## Known follow-ups

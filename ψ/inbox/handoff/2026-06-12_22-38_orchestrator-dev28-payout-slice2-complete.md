@@ -1,0 +1,9 @@
+---
+to: next orchestrator session + owner
+from: orchestrator wt-28-dev, 2026-06-12 late GMT+7
+topic: PAYOUT slice-2 COMPLETE (PAYOUT-004/005) — #449/#451 merged, marks PR #455 open; TWO slices done same-day; campaigns all closed
+---
+State: slice-2 (review/cancel rails) through all gates: SPEC v2 → build (drift-A: dead reconcile-failed leg fixed via mark_failed_from_review; sweep on app_now + knob) → VERIFY 46/46 (yupsev) → falsify 65/65 (qnccph) → APPROVE x2 → #449+#451 MERGED → PM marks (PR #455 open, DO NOT MERGE). Stacks at main parity incl. 000130/000140. All payb2* campaigns closed, findings in role mailboxes + /tmp/payb2-captures.
+Open PRs awaiting reviewer/owner: #455 (slice-2 marks) · #448 (slice-1 marks) · #447 (test-index, now covers BOTH slices) · #434/#435 (bbotseal round). Other-lane (wt-26, NOT ours): #454 (renames #438's migration 000130→000150 — the collision with our slice-2 000130 being resolved their side; our residual<0 guard for admin_approve_paid rides #438+#454), #450/#452/#453/#445 (authfull/portal).
+Payout epic remaining: slices for PAYOUT-007 (resend callback), 008 (auto-cancel timeout, flag-OFF), 009 (statement auto-reconcile + success-audit, flag-ON), 010 (maintenance-window cancel), 012/013 (correction toolkit) → then payout epic-seal (investigator) → LIVE/L5 (after wt-26 composed run + bbot LIVE). Carries: claimed_at=now() T1 residue (PAYOUT-002/bot lane → architect), deposit admin EF stale JWT-stub comments, mark_review positive-assert nit, MDR config-migration story (option d), config-write validation, NB-437-1 seed-fee bump at sinuw deploy.
+Session learnings filed: slice-1 + slice-2 campaign patterns, stale-composer recipe, shared-RPC-caller-census lesson (SM2-SPLIT killed a caller silently — census callers when tightening a shared RPC's guard).
