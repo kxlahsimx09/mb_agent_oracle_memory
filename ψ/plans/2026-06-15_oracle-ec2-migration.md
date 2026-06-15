@@ -79,15 +79,19 @@ Mac untouched until EC2 validated → revert = keep using the Mac. EBS snapshot 
 
 **Resize to 64 GB when quota approves:** `aws ec2 stop-instances` → `modify-instance-attribute --instance-type r7i.2xlarge` → `start-instances`. Same EBS + EIP + setup; ~5 min downtime.
 
-**Progress:**
-- [x] Provision + EIP + SSH verified (30 GiB RAM, no swap pressure — the Mac's core problem solved).
-- [~] Toolchain bootstrap: apt base + Node 22 + bun (in flight).
-- [ ] CLIs: gh, aws-cli v2, supabase, vercel, wrangler, playwright + chromium deps.
-- [ ] claude-code + maw install.
-- [ ] **Auth/creds** (sensitive): `gh auth`, AWS creds (prefer an **instance-profile IAM role**, NOT root on the box), claude-code login, vercel/supabase tokens.
-- [ ] **Data:** re-clone `~/Code` repos; `scp` `~/.arra-oracle-v2` (fleet-secrets, 600) + `~/.config/maw`; rsync `~/.claude` memory/plans.
-- [ ] **Fleet wiring:** maw config + `~/.config/maw/fleet` symlinks + per-repo `.agent` vaults + maw.config agents.
-- [ ] **Smoke:** spawn 1-2 agents + a build + one staging-deploy assert.
-- [ ] **Cutover:** parallel-run, validate, then shift the fleet; Mac → operator terminal. EBS snapshot pre-cutover.
+**Progress (2026-06-15 — Oracle ecosystem LIVE on EC2, core proven):**
+- [x] Provision + EIP + SSH (30 GiB RAM, no swap — the Mac's core problem solved).
+- [x] Toolchain: apt base + Node 22 + bun 1.3.14 + gh 2.94 + aws-cli 2.35 + vercel + wrangler + **claude 2.1.177** (native installer) + **ghq 1.10** (go install) + **Ollama + bge-m3** (1.2 GB, systemd unit).
+- [x] **Auth/creds:** `scp` gh hosts.yml (authed kxlahsimx09) + `~/.claude.json` (path-fixed → /home/ubuntu) + fleet-secrets (28 .env, 700/600) + bot envs. AWS = still TODO (IAM instance-profile role, NOT root). vercel auth not found on Mac (handle later).
+- [x] **Repos:** `ghq get` 7 repos. **Gotcha:** the runtime branch `feat/all-prs-rebased` lives on the **`fork` (kxlahsimx09)** remote, not `origin` (Soul-Brews) — had to `git remote add fork …` + checkout. maw self-links via `bun link`/`bun add -g` → `~/.bun/bin/maw` (v26.5.7).
+- [x] **Vault learnings pushed** (owner reminder): 176 pending Mac files → origin/main → EC2 pulled → **195 central + 1013 per-repo learnings** on the box.
+- [x] **Data:** `sqlite3 .backup` snapshot of oracle.db (safe, live) + lancedb tarball. db:push ✓ (on the runtime branch — failed first on `main`).
+- [x] **Symlinks:** ψ vault + 4 repo `.agent` wired.
+- [x] **Smoke PASSED:** Oracle HTTP `:47778` `status:ok, oracle:connected`; **5216 docs, learning=1250** (reindex-trap NOT bitten), search "soul-brews-core" → 10 results, LanceDB connected, bge-m3 vectors=9696. `maw oracle ls` runs.
+- [ ] **maw fleet config:** peers + `10-soul-brews` fleet + `~/.config/maw/fleet` symlinks ([[maw-wake-needs-fleet-dir-symlink]]) so `maw wake`/`maw fleet boot` works.
+- [ ] **systemd daemons** (→ 08): replace the nohup Oracle HTTP + add inbox-watcher (now Linux-OK via #126) + w2-watcher + brew-ops-bot + orchestrator-bot, `--user` + enable-linger.
+- [ ] oracle-studio build (dashboard, :3000) — optional.
+- [ ] **Cutover:** parallel-run, EBS snapshot, then shift fleet; Mac → operator terminal.
+- [ ] **Resize → 64 GB** when the vCPU quota case clears.
 
 **Security reminder:** do NOT copy `root-bootstrap` (account-root) creds onto the EC2 — attach a scoped instance-profile role for the deploys it runs. Secrets via `scp` only, chmod 600, never to git.
