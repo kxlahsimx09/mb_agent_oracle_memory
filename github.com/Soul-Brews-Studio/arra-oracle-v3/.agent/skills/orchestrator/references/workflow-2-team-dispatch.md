@@ -57,6 +57,8 @@ Gap-finders, deferred-task backlogs, and my own campaign brief are all **snapsho
 
 Precedent (campaign mb-next gap-sweep, 2026-05-31): the 13-domain fan-out that opened the campaign found 31 gaps from `#current` snapshots and several were already closed at HEAD — BOT-001 and PULLOUT-002 were shipped; the key-lifecycle item was a writer-only edit on existing §ADR-2 substrate, not a new ADR; and my own PROV-001 brief-premise was factually wrong. All three were caught only by re-reading the live file before dispatch. **Verify each against HEAD; don't dispatch the snapshot.**
 
+> **Mechanism note.** A bounded, read-only premise-sweep like this 13-domain fan-out is the **canonical `/workflows` fit** — ephemeral parallel readers, structured output + dedup, no mid-run steering — *not* N persistent teammates (which is what produced the 47-worktree sprawl + `maw wake` explosion). Run the sweep as a workflow, then dispatch teammates only for the gaps that survive. Boundary + worked example: SKILL.md §When to reach for `/workflows` + `references/workflows-vs-team-dispatch.md`.
+
 ### Step 3 — Spawn each teammate
 
 For each teammate I want to dispatch (one call per role × repo):
