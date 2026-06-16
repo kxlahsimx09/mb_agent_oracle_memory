@@ -125,7 +125,11 @@ When every teammate's `DONE-WHEN` is met (PRs merged, findings written), summari
   --campaign <slug>
 ```
 
-The finish script: `maw team shutdown --merge --force` (preserves findings + standing orders to `ψ/memory/mailbox/<role>/`), removes every `<repo>.wt-c-<slug>` worktree, runs `maw cleanup --zombie-agents --yes`.
+The finish script: `maw team shutdown --merge --force` (preserves findings + standing orders to `ψ/memory/mailbox/<role>/`), **kills each teammate's helper-launched window `<role>-<campaign>` and asserts no `claude --agent-id …@<slug>` process survives**, removes every `<repo>.wt-c-<slug>` worktree, runs `maw cleanup --zombie-agents --yes`.
+
+**Closing a teammate = finish-script AND a dead process — verify both (binding).** `maw team shutdown` alone only knows the panes IT spawned; the helper spawns each teammate in its OWN `tmux new-window` (to set cwd), so a plain shutdown leaves the teammate's claude **alive and idle**, answering keepalive pings and **burning shared account quota**. On 2026-06-15 three finished-but-idle agents left overnight are the suspected cause of `next-investigator` hitting its **session limit mid-L3**. The fixed `team-dispatch-finish.sh` now kills the window + asserts the process is gone before printing "closed" — if it warns one is still alive, free it (`tmux kill-pane` / `kill <pid>`) before treating the campaign as closed.
+
+**Keep-the-worktree nuance.** Killing the idle PROCESS is independent of removing the worktree FILES. When another live agent still needs a teammate's tree (e.g. `next-investigator` reading `<repo>.wt-c-<slug>/poc/integration/evidence/live/…`), close with `team-dispatch-finish.sh --campaign <slug> --keep-worktrees` — kills the process (frees quota) but keeps the tree; run the worktree-removing finish only **after** the consumer is done.
 
 **Capture every teammate's output BEFORE running the finish script.** `shutdown --merge --force` kills the teammates' panes; any report still living only in a pane (not yet written to `*_findings.md`) dies with it. `--merge` preserves `*_findings.md` — it does **not** preserve un-persisted pane scrollback. So before I run finish I (a) read each teammate's final reply / `<role>_<slug>_findings.md`, and (b) for any teammate whose output exists only in its pane (e.g. a dpay-finder dump), `tmux capture-pane` it into the worktree first. Precedent (gap-sweep 2026-05-31): cleaned up before reading the teammate report and lost the dpay-finder output to a dead pane — twice.
 
