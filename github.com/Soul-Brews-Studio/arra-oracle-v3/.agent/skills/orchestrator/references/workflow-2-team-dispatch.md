@@ -93,14 +93,17 @@ If a teammate is supposed to coordinate with another teammate's output (e.g. nex
 
 ### Step 4 — Mid-stream
 
-Two ways teammates reach me:
+Three ways teammates reach me:
 
+- **Stop-hook doorbell — PRIMARY completion signal.** A finished teammate now PUSHES to me instead of me polling: its `Stop` hook (`scripts/team-stop-doorbell-hook.sh`, deployed to `~/.claude/hooks` via `install-team-stop-doorbell-hook.sh`) resolves the orchestrator that spawned it (its `--system-prompt-file` embeds my worktree → my tmux pane at that cwd) and `send-keys` "✅ `<role>@<campaign>` finished a turn — review/route" straight into my pane. So a finished teammate no longer sits idle-unnoticed (the liverun quota-leak): the ping lands in my conversation. It self-gates to team teammates, filters keepalive (`idle_notification`) turns, is cooldown-deduped, and is **non-blocking + fail-open**. It CANNOT fire when a teammate crashed or API-errored mid-turn (no clean stop) — the two backstops below catch those.
 - **Native agent-teams channel** (because the spawn used `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` + `--parent-session-id <my-session>`): teammate's messages tagged with `team-name` + `agent-id` (`role@campaign`) arrive in my session.
 - **`maw team send`**: I can poll or initiate. To send a teammate a follow-up: `maw team send <slug> <role> "<text>"`.
 
 For every teammate reply I narrate to the user, **prefix with the teammate id** (`↪ next-impl@perfcf:`). This is the Principle 2a "attribute the answer to the agent who gave it" rule made concrete for the multi-teammate case.
 
-**Watching for a teammate's PR push — arm Monitor against HEAD-at-arm-time, never a hard-coded base commit.** When I poll for a teammate's branch to push or open a PR, I read the current head at the moment I arm the watch (`git -C <wt> rev-parse HEAD`) and compare against *that* — not a commit hash I typed earlier. A hard-coded base goes stale the instant any commit lands, firing false "PUSHED" signals. Arm one watch per teammate; don't double-arm. Precedent (gap-sweep 2026-05-31): a hard-coded base caused ≥3 false PUSHED signals and one double-armed Monitor; reading head at arm-time removes the whole class.
+**Two backstops to the doorbell (it's primary, not sole).** (1) The **armed Monitor** below — my own watch on the teammate branch, the safety net if a doorbell ping is missed. (2) The **chat-watcher liveness classifier** (`scripts/brew-ops-bot/pane-classify.sh` → `working|menu|api_error|crashed|idle_done`): it reads the teammate pane on JSONL-quiet and edge-alerts me on `api_error`/`crashed` — exactly the cases a Stop hook can't signal — plus writes a per-teammate `team-status.<chat>.json` board I can read instead of capture-pane-polling each pane.
+
+**Watching for a teammate's PR push — arm Monitor against HEAD-at-arm-time, never a hard-coded base commit.** This Monitor is backstop #1 above. When I poll for a teammate's branch to push or open a PR, I read the current head at the moment I arm the watch (`git -C <wt> rev-parse HEAD`) and compare against *that* — not a commit hash I typed earlier. A hard-coded base goes stale the instant any commit lands, firing false "PUSHED" signals. Arm one watch per teammate; don't double-arm. Precedent (gap-sweep 2026-05-31): a hard-coded base caused ≥3 false PUSHED signals and one double-armed Monitor; reading head at arm-time removes the whole class.
 
 ### Step 5 — Multi-campaign discipline
 
