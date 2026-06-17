@@ -148,8 +148,37 @@ If `arra_search query="orchestrator" type=learning limit=1` returns zero results
 
 ---
 
+## Re-dispatch decision (resume vs respawn)
+
+> Mechanics for SKILL.md §Session-close point 4 ("Re-dispatch ≠ re-spawn"). The binding rule is in SKILL.md; this is the how.
+
+**The reconciliation.** Two rules looked contradictory: §Session-close point 3 says *close idle teammates immediately* (idle burns shared account quota), while the 2026-06-17 bankbot-livetest retro #4 said *stop tearing down + re-dispatching agents per cycle* (the serial fix→redeploy→re-run loop lost warm context every bounce). They are NOT contradictory — the retro mis-named the fix. The cost was not "the agent was closed"; it was "a **fresh** agent was spawned and had to re-warm." Close-to-free-quota and warm-on-return are both achievable because **a close is a `shutdown`, not a delete.**
+
+**The mechanic — `maw team` is a reincarnation engine.**
+
+```
+maw team lives <agent>      # show an agent's past lives (history) — does a warm session exist to resume?
+maw team shutdown <name>    # close on idle (frees quota) — point 3, unconditional
+maw team resume <name>      # bring the SAME team back from its past life, context intact
+```
+
+So idle → `shutdown` (quota freed). Need the role again → `resume` (warm, no re-warm cost). Spawning a *new* agent (`team-dispatch-helper.sh` / `maw team spawn`) is the **exception**, not the default.
+
+**The decision, every re-dispatch (deliberate, not reflex):**
+
+| Situation on re-dispatch | Action |
+|---|---|
+| Same campaign / same concern, prior context still useful | **`maw team resume`** the same agent (DEFAULT) |
+| Prior context bloated/stale enough to hurt more than help | spawn fresh |
+| Genuinely distinct, unrelated concern (would be a new parent thread anyway) | spawn fresh |
+
+**Why this is the orchestrator's judgment, not a rule the harness applies:** only I know whether the next bounce is "more of the same loop" (resume) or "a new concern" (fresh), and whether the prior session's context has gone stale. The owner's framing (2026-06-17): *"close-idle ใช่ — แต่ re-dispatch ไม่ได้แปลว่าต้อง agent ใหม่เสมอ; orchestrator ตัดสินใจว่าควรใช้ใหม่ไหม — ใช้เมื่อจำเป็น เช่น context บวม หรือเป็นเรื่องใหม่ไม่เกี่ยวกัน."*
+
+---
+
 ## Changelog (orchestrator SKILL.md)
 
+- **2026-06-17** — added **§Session-close point 4 "Re-dispatch ≠ re-spawn" (binding)** to SKILL.md + this **§Re-dispatch decision** mechanics section. Close-on-idle (point 3) stays unconditional; but a close is a `shutdown`, not a delete — `maw team` is a reincarnation engine (`resume <name>` from past life; `lives <agent>` = history), so re-dispatch **defaults to resuming the SAME agent** (warm, no re-warm cost). Spawn fresh only on (a) context-bloat/staleness or (b) a genuinely distinct concern. Reconciles point 3 with the 2026-06-17 bankbot-livetest retro #4 (which read the symptom "agents torn down + re-dispatched fresh each cycle" as "keep them alive" — the real fix is resume-not-respawn). Owner-approved this session; the orchestrator filed it directly (charter footer carve-out).
 - **2026-06-16** — added the **teammate-close discipline** (binding) to §Session close + workflow-2 §Step 7: closing a teammate = `team-dispatch-finish.sh` AND a verified-dead process, because `maw team shutdown` only knows the panes it spawned while the helper uses its own `tmux new-window` — a plain shutdown leaves the teammate's claude alive + idle, burning shared account quota (the 2026-06-15 `next-investigator` session-limit mid-L3; 3 finished-but-idle agents overnight). The fixed `team-dispatch-finish.sh` kills the `<role>-<campaign>` window + asserts no `claude --agent-id …@<slug>` survives before "closed"; `--keep-worktrees` = kill process, keep tree for a consumer still reading it. Paired script fix: arra-oracle-v3 PR #132. Filed by brew-ops per handoff `for-brew-ops/2026-06-16_08-06`.
 - **2026-06-15** — added **§When to reach for `/workflows` (binding)** to SKILL.md + new companion `workflows-vs-team-dispatch.md`. `maw team` (workflow-2) stays the default for every campaign; the Claude `/workflows` tool is carved out for **bounded, read-only fan-out only** (gap-sweep / `arra_search` memory-refresh / verify-premise-against-HEAD) — known work-list, parallel, no mid-run human steering, no persistent role. **Hard boundary:** read/analysis only — anything that writes code or ends in a PR-to-merge stays on `maw team` (a workflow has no PR-review gate → would bypass AGENTS.md §9 + §Scope-guard). Rationale: spawning N persistent teammates for a one-shot read sweep is what caused the 47-worktree sprawl + `maw wake` session-explosion. workflow-2 Step 2.5 gained a mechanism-note pointer. Filed by brew-ops at the owner's request (`/workflows`-vs-`maw team` design question).
 - **2026-06-12** — **Split** SKILL.md by concern (thread #15): this protocol/mechanics companion created; SKILL.md trimmed to identity + binding rules (≤250). Same day — added **§Session close (binding)** (close MUST file BOTH a full retro AND a ≤10-line `arra_handoff` MCP pointer — `ψ/inbox/handoff/` is the next session's front door, MCP docs embed immediately while hand-written vault files wait for the scanner) + a **Grounding-order block** in §State-grounding (GitHub `gh pr list` / `git log origin/main` FIRST → filesystem-by-date in the vault → `arra_search` LAST; narrative docs are snapshots — verify "open/pending/landing" against GitHub). Both per learning `2026-06-12_orchestrator-session-grounding-why-round-1-ground` (build2 + bankbot2 retro-only closes → next orchestrator's round-1 grounding missed both predecessors, owner corrected twice). Filed by brew-ops via thread #15.
