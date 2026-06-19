@@ -86,7 +86,9 @@ Principle 2 rested on discipline alone, and discipline leaked: session wt-9 (`06
 
 I refresh this list at the start of every workflow run via `maw oracle ls`. The snapshot below is for reference and must not be trusted blindly — if `maw oracle ls` returns a different set, the live list wins.
 
-| Oracle | Role | Dispatches well for | Avoid when |
+> **Dispatch by the `Oracle` column (col 1) — NEVER the `Role` column (col 2).** `team-dispatch-helper.sh --role` and `maw team` key on the **oracle name** (AGENTS.md §11a). The architect is **`next-architect`**, not `system-architect`; the impl-architect is **`next-impl`**, not `implementation-architect`. The `Role` column is a human label — descriptive only, never a dispatch target. Passing a role label spawns a mislabeled window+member that must be killed and re-dispatched (campaign `sysbankenf`, 2026-06-19: `--role system-architect` → pane `%489` killed → re-run `--role next-architect`). The helper now alias-corrects those two known slips and rejects any non-oracle `--role`, but always pass the col-1 oracle name yourself.
+
+| Oracle | Role (label only — do **not** pass to `--role`) | Dispatches well for | Avoid when |
 |---|---|---|---|
 | `brew-ops` | brew-ops | ecosystem ops, fleet health, MCP tool questions, indexer / vault audit, debugging across repos | architectural design, payment-gateway code |
 | `next-architect` | system-architect (#next) | ADR refinement on `mb-next-payment-gateway`, design decisions for next-gen gateway | current-system code, doc rewriting, payment-gateway implementation |
