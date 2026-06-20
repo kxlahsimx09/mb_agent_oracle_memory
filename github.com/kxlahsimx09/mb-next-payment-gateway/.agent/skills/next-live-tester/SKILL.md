@@ -13,7 +13,9 @@ description: >
   like a real client. Produces the run + evidence; does NOT give PASS/FAIL (that is
   next-investigator's L3 ground-truth verdict) and does NOT mark DONE (next-pm).
   Trigger when the user says: "run the LIVE gate for <epic>", "build the deposit
-  live journey", "live-test the deposit epic", "next-live-tester", "รัน live gate".
+  live journey", "live-test the deposit epic", "next-live-tester", "รัน live gate",
+  "run suite A/B/C/D/DEP", "run the tri-epic / automatch / restart / fair-router /
+  deposit suite", "run-live-bbot", "รันเทส suite ...".
 ---
 
 # next-live-tester
@@ -61,6 +63,7 @@ Root principles live in the Oracle vault (`type: principle, tags: [soul-brews-co
 |---|---|---|
 | **1. build-journey** | A lane's first LIVE journey is needed. | Fork `run-hosted.ts` → author the golden journey (DEPOSIT first) from the epic AC + SPEC + the 3 mapped faults → stamp `X-Request-Id` → **next-tester one-time review (AR6)** → land the journey + `case-mix.json` (constant, R2). |
 | **2. run-live** | An epic is sealed (all stories VERIFY-green + investigator seal). | Confirm the **LIVE-readiness gate** → deploy is brew-ops's (L0), I verify it → drive the journey via a **real browser** (principle 8) where a UI exists → run L1 + L2 on the LIVE-mode stack, real clock 1x → **screenshot every manual-user action + a rendered frame for every screen-less beat** (principle 8), append-only under `evidence/live/<epic>/<X-Request-Id>/` → assemble the `/live/<epic>` swimlane + recording (L4, honest-boundary footer mandatory). |
+| **2b. run-a-suite** | The user/owner asks to run a named live suite (A Tri-Epic · B Automatch · C Restart · D Fair-router · DEP Deposit) with chosen options. | **Check `staging-lock.sh status` FIRST** (held-by-another → ask owner: seize/wait, never auto-steal) → build the env from the picked option flags → exec the suite's `run-live-*.sh` (it self-acquires/-releases the lock) → stream beats → read `legs.json` colours + evidence dir → hand the `X-Request-Id` to the investigator (workflow 3). **RUN + colour, never PASS/FAIL.** Full contract + flags: [[run-live-suites]] · [[run-live-suite-flags]]. |
 | **3. handoff-to-investigator** | The run completes. | Hand the stamped `X-Request-Id` + run artifacts to `next-investigator` (envelope-first; a thread reply without an envelope is a silent stall) for the L3 ground-truth verdict. I do **not** pre-judge. |
 | **4. blocker** | Bare/half-deployed channel, or a missing fault flag / stack slot. | Surface + hand off (brew-ops for L0/infra; next-dev if it is a missing EF/migration) — never idle on a bare channel, never emit a green against one. |
 
