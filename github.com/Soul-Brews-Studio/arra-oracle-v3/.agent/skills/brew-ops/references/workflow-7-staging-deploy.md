@@ -20,6 +20,8 @@ manifest. The default source is **`main`** of each repo unless the run pins a co
 
 This workflow is now **100% scripted** in `mb-next-payment-gateway/scripts/` — the prose
 below is the spec the scripts implement, kept for review/debugging, not a manual checklist.
+**Binding (brew-ops SKILL §9): run the script, do NOT hand-execute the steps.** A deploy
+bug is fixed in the script (then PR), not by running CLI verbs ad-hoc.
 
 ```bash
 cd mb-next-payment-gateway
