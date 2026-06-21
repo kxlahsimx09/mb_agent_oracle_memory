@@ -16,6 +16,27 @@ Every substrate of the stack is in scope, but a substrate is only redeployed **i
 actually changed**. Re-running on an unchanged tree deploys nothing and still refreshes the
 manifest. The default source is **`main`** of each repo unless the run pins a commit/branch.
 
+## Scripted execution (run this; don't hand-execute the steps)
+
+This workflow is now **100% scripted** in `mb-next-payment-gateway/scripts/` — the prose
+below is the spec the scripts implement, kept for review/debugging, not a manual checklist.
+
+```bash
+cd mb-next-payment-gateway
+scripts/deploy-staging.sh --dry-run     # plan + git-less stage, ZERO mutation, no manifest write
+scripts/deploy-staging.sh --deploy      # full live deploy — GATED on the deployed-shape green gate
+scripts/verify-staging.sh staging       # Step-3 readiness gate alone (read-only; safe for any role)
+```
+
+- `deploy-staging.sh` — orchestrator: Step -1 gate → Step 0 slot+resolve → Step 1 plan →
+  Step 2 deploy (migrations→EF→worker→UI) → Step 3 verify → Step 4 manifest. Helpers:
+  `deploy-staging-migrations.sh` (Mgmt-API SQL apply + ledger reconcile — **not** `db push`,
+  see Step 2a), `deploy-staging-ui.sh` (git-less Vercel), `deploy-staging-manifest.sh` (Step 4).
+- **Binding precondition baked in:** `--deploy` runs `mb-next-bank-bot dmirror/gate.sh` first and
+  **refuses to mutate if it is RED** (brew-ops SKILL §8). `--dry-run` runs it informationally.
+- cf-worker auto-detects: no `[env.staging]` in `wrangler.toml` ⇒ `skipped-no-target` (current state).
+- Timestamps are generated in-script (`date`, GMT+7 first); no caller need supply them.
+
 ## Scope — the staging stack
 
 One target stack, two repos, four+ substrates:
