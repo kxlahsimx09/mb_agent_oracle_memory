@@ -1,0 +1,15 @@
+---
+title: orchestrator team-dispatch — admin-portal wiring campaign (uiwire30, team 30-ui-
+tags: []
+created: 2026-06-19
+source: Oracle Learn
+project: github.com/soul-brews-studio/arra-oracle-v3
+---
+
+# orchestrator team-dispatch — admin-portal wiring campaign (uiwire30, team 30-ui-
+
+orchestrator team-dispatch — admin-portal wiring campaign (uiwire30, team 30-ui-team, 2026-06-19). User: "find which admin-portal pages/menus aren't wired to backend vs the DONE backend epics, wire them all; ping only for decisions/ADR/requirement/blocker." Method that worked: (1) orchestrator-grounded the premise with 4 read-only Explore subagents (page inventory + API-client conventions + backend epic/EF inventory + per-page read-surface readiness) — NOT persistent teammates — before dispatching anything. (2) Classified the ~10 mock pages into READY-TO-WIRE (backend read surface DONE+CORS+granted → frontend-only) vs BACKEND-BLOCKED (needs new read view/RPC) vs net-new (no backend → escalate). The make-or-break premise check = for each page, does a portal-readable READ path exist? (an EF list-action with withCors + seeded :view perm, OR a view GRANTed to authenticated gated by has_read_perm). (3) Auto-dispatched next-ui for the 4 ready pages → PR #69 (topup/settlement/pull-out/subclients). (4) For backend-blocked login-log + revenue/reports, ran the full chain under my own team slug: next-architect specs (§ADR-27 v_login_log over public.audit_log NOT the SV10-locked auth.*; §ADR-28 revenue/report RPCs grounded on mobiz-current Go source) → owner ratified with lean defaults → next-dev built migrations (PR #626) → brew-ops TARGETED staging deploy (Mgmt-API, not push-all) → next-ui wired (PR #70). All owner-gated PRs. Decision-authority: user pre-authorized auto-dispatch for wiring + escalate-only for ADR/requirement/security-posture — held exactly (AskUserQuestion for the 3 genuine decisions; everything else auto). Reusable gotchas reconfirmed: (a) migration-timestamp collision — bankdel merged 20260619000300 after dev branched, clashing with dev's v_login_log 000300 → would be SILENTLY SKIPPED by staging schema_migrations ledger → renumber to 000320 (the recurring …000300 dup trap). (b) /subclients reads v_users filtered user_type='sub-client', NOT v_clients (v_clients is the client-entity table, no parent_client_id/tier). (c) the high-risk mdr owner/partner split is NOT in mdr_shared (deposit-only, partner-only) — it's in wallets_change_logs op-tags (mdr_distribute=partner, mdr_residual=owner). (d) fleet-wide 529 overload kills short startup turns; long single turns ride it out — re-nudge stuck agents, keep monitors re-warnable.</pattern>
+<parameter name="concepts">["orchestrator", "team-dispatch", "2b", "accepted", "admin-portal-wiring", "ready-to-wire-vs-backend-blocked", "read-surface-premise-check", "architect-spec-then-build", "owner-gated-adr", "migration-timestamp-collision", "subclients-v_users-not-v_clients", "mdr-split-wallets-change-logs", "next-ui", "mb-next-admin-portal", "decision-authority", "repo:arra-oracle-v3", "fleet"]
+
+---
+*Added via Oracle Learn*
