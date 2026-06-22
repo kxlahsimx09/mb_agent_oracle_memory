@@ -1,0 +1,58 @@
+{"story":"CLIREAD-001","ac":"200 public poll (no client auth)","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"txnId = native ts_deposits.id","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"amount = gross","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"status field present (paid)","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"paidAmount = amount when paid","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"exact parity field set","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"paidAmount null when !paid","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"0-lag: poll reads expired while physical stays pending (no write-on-read)","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"unknown id -> 404 deposit_not_found","result":"PASS","detail":""}
+{"story":"CLIREAD-001","ac":"non-GET -> 405","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"200 public poll","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"txnId = native ts_payouts.id","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"status (failed)","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"amount","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"failureReason <- failure_message","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"exact parity field set","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"success: bankTxnId set, failureReason null","result":"PASS","detail":""}
+{"story":"CLIREAD-002","ac":"unknown -> 404 payout_not_found","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"own deposit 200","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"deposit txnId","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"deposit status (effective)","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"deposit detail fields (fee/netAmount/requestId)","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"own payout 200 + detail","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"cross-tenant deposit -> 404 (RLS-unreachable)","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"cross-tenant payout -> 404","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"unknown deposit -> 404 (== cross-tenant shape)","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"missing X-Client-Id -> 401","result":"PASS","detail":""}
+{"story":"CLIREAD-003","ac":"invalid key -> 401","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"list returns exactly own deposit set","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"cursor: 2 pages cover set, no overlap/no gap","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"nextCursor null on last (non-full) page","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"filter status=paid ⊆ own & matches effective_status","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"filter amountMin/Max narrows","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"filter transactionId exact","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"another tenant merchantId -> [] (cannot widen)","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"own merchantId -> own rows","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"bad cursor -> 400 invalid_cursor","result":"PASS","detail":""}
+{"story":"CLIREAD-004","ac":"payouts list = own set","result":"PASS","detail":""}
+{"story":"CLIREAD-005","ac":"200 wallet","result":"PASS","detail":""}
+{"story":"CLIREAD-005","ac":"balance/frozen/available (available = balance - frozen)","result":"PASS","detail":""}
+{"story":"CLIREAD-005","ac":"name = client.name","result":"PASS","detail":""}
+{"story":"CLIREAD-005","ac":"updatedAt = latest change-log created_at","result":"PASS","detail":""}
+{"story":"CLIREAD-005","ac":"no wallet -> 404 wallet_not_found","result":"PASS","detail":""}
+{"story":"CLIREAD-006","ac":"200 bank codes","result":"PASS","detail":""}
+{"story":"CLIREAD-006","ac":"codes = bank.bank_code set, ordered by code","result":"PASS","detail":""}
+{"story":"CLIREAD-006","ac":"name = bank.bank_name","result":"PASS","detail":""}
+{"story":"CLIREAD-006","ac":"decoration fields absent (only code,name)","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"fresh cancel -> 200 cancelled","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"DB: terminal = cancelled (≠ expired)","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"exactly 1 new audit_log row on fresh cancel (deposit/cancel/client)","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"last_admin_action_* NOT set for client actor","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"idempotent re-cancel -> 200, no new audit row","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"paid deposit -> 409 NOT_PENDING","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"slip-present (pending+slip) -> 409 SLIP_PRESENT","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"cross-tenant cancel -> 403 forbidden (≠ read 404)","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"unknown cancel -> 404 deposit_not_found","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"missing deposit_id -> 400","result":"PASS","detail":""}
+{"story":"CLIREAD-007","ac":"missing X-Client-Id -> 401","result":"PASS","detail":""}
